@@ -1,0 +1,12 @@
+{
+  "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": true,
+  "cd": true,
+  "scripts": {
+    "pre": [],
+    "post": [
+      "bun install"
+    ]
+  }
+}
