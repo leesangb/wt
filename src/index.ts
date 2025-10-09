@@ -36,6 +36,7 @@ program
   .command("remove <id>")
   .alias("rm")
   .description("Remove a worktree by ID")
+  .option("--keep-branch", "Keep the branch after removing worktree")
   .action(removeCommand);
 
 program.parse();

@@ -71,3 +71,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
 export async function removeWorktree(path: string): Promise<void> {
   await $`git worktree remove ${path} --force`;
 }
+
+export async function deleteBranch(branch: string): Promise<void> {
+  await $`git branch -D ${branch}`;
+}

@@ -1,7 +1,11 @@
 import chalk from "chalk";
-import { isGitRepository, listWorktrees, removeWorktree } from "../utils/git.js";
+import { isGitRepository, listWorktrees, removeWorktree, deleteBranch } from "../utils/git.js";
 
-export async function removeCommand(id: string): Promise<void> {
+interface RemoveCommandOptions {
+  keepBranch?: boolean;
+}
+
+export async function removeCommand(id: string, options: RemoveCommandOptions): Promise<void> {
   if (!(await isGitRepository())) {
     console.error(chalk.red("Error: Not a git repository"));
     process.exit(1);
@@ -18,7 +22,15 @@ export async function removeCommand(id: string): Promise<void> {
   try {
     console.log(chalk.blue(`Removing worktree: ${worktree.branch} (${worktree.id})...`));
     await removeWorktree(worktree.path);
-    console.log(chalk.green(`✓ Worktree removed successfully`));
+    console.log(chalk.green(`✓ Worktree removed`));
+
+    if (!options.keepBranch) {
+      console.log(chalk.blue(`Deleting branch: ${worktree.branch}...`));
+      await deleteBranch(worktree.branch);
+      console.log(chalk.green(`✓ Branch deleted`));
+    } else {
+      console.log(chalk.yellow(`Branch ${worktree.branch} kept`));
+    }
   } catch (error) {
     console.error(chalk.red(`Error removing worktree: ${error}`));
     process.exit(1);
