@@ -21,6 +21,10 @@ export async function getRepoName(): Promise<string> {
   return basename(root);
 }
 
+export async function fetchRemote(): Promise<void> {
+  await execa("git", ["fetch"]);
+}
+
 export async function createWorktree(path: string, branch: string, base: string, pushRemote: boolean = true): Promise<void> {
   await execa("git", ["worktree", "add", "-b", branch, path, base]);
 

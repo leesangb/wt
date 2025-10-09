@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { isGitRepository, getGitRoot, getRepoName, createWorktree } from "../utils/git.js";
+import { isGitRepository, getGitRoot, getRepoName, createWorktree, fetchRemote } from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
 import { generateShortId } from "../utils/id.js";
 import { executeScripts } from "../utils/script.js";
@@ -34,6 +34,9 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   }
 
   try {
+    console.log(chalk.blue("Fetching latest changes..."));
+    await fetchRemote();
+    
     if (settings.scripts?.pre && settings.scripts.pre.length > 0) {
       console.log(chalk.blue("Running pre scripts..."));
       await executeScripts(settings.scripts.pre, repoRoot, {
