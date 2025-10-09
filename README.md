@@ -1,5 +1,7 @@
 # wt - Git Worktree Manager
 
+English | [한국어](./README.ko.md)
+
 A CLI tool to manage git worktrees with pre/post script support.
 
 ## Features
