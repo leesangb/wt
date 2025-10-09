@@ -12,8 +12,18 @@ NC='\033[0m' # No Color
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="wt"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+SHELL_DIR="${HOME}/.wt/shell"
 
 echo -e "${BLUE}=== wt Uninstallation Script ===${NC}\n"
+
+# Remove shell directory
+if [ -d "$SHELL_DIR" ]; then
+  echo -e "${BLUE}Removing shell scripts from ${SHELL_DIR}...${NC}"
+  rm -rf "$SHELL_DIR"
+  echo -e "${GREEN}✓ Shell scripts removed${NC}\n"
+else
+  echo -e "${YELLOW}Shell directory not found at ${SHELL_DIR}${NC}\n"
+fi
 
 # Remove binary
 if [ -f "$BINARY_PATH" ]; then
@@ -24,8 +34,8 @@ else
   echo -e "${YELLOW}Binary not found at ${BINARY_PATH}${NC}\n"
 fi
 
-# Function to remove wrapper from shell config
-remove_wrapper_from_config() {
+# Function to remove source line from shell config
+remove_source_from_config() {
   local shell_type=$1
   local config_file=$2
   
@@ -34,8 +44,8 @@ remove_wrapper_from_config() {
     return
   fi
   
-  # Check if wrapper exists
-  if ! grep -q "# wt shell wrapper" "$config_file"; then
+  # Check if source line exists
+  if ! grep -q "source.*\.wt/shell/wt\.${shell_type}" "$config_file"; then
     echo -e "${YELLOW}✓ ${shell_type} wrapper not found in ${config_file}${NC}"
     return
   fi
@@ -45,13 +55,8 @@ remove_wrapper_from_config() {
   # Create a backup
   cp "$config_file" "${config_file}.bak"
   
-  # Remove the wrapper function (from "# wt shell wrapper" to the closing brace)
-  # This is a bit tricky, so we use awk
-  awk '
-    /# wt shell wrapper/ { skip=1; next }
-    skip && /^}$/ { skip=0; next }
-    !skip
-  ' "${config_file}.bak" > "$config_file"
+  # Remove the source line
+  grep -v "source.*\.wt/shell/wt\.${shell_type}" "${config_file}.bak" > "$config_file"
   
   # Remove the backup if successful
   rm "${config_file}.bak"
@@ -65,19 +70,19 @@ SHELLS_UPDATED=0
 
 # Check for zsh
 if [ -f "${HOME}/.zshrc" ]; then
-  remove_wrapper_from_config "zsh" "${HOME}/.zshrc"
+  remove_source_from_config "zsh" "${HOME}/.zshrc"
   SHELLS_UPDATED=1
 fi
 
 # Check for bash
 if [ -f "${HOME}/.bashrc" ]; then
-  remove_wrapper_from_config "bash" "${HOME}/.bashrc"
+  remove_source_from_config "bash" "${HOME}/.bashrc"
   SHELLS_UPDATED=1
 fi
 
 # Check for fish
 if [ -f "${HOME}/.config/fish/config.fish" ]; then
-  remove_wrapper_from_config "fish" "${HOME}/.config/fish/config.fish"
+  remove_source_from_config "fish" "${HOME}/.config/fish/config.fish"
   SHELLS_UPDATED=1
 fi
 

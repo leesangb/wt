@@ -12,6 +12,7 @@ NC='\033[0m' # No Color
 INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="wt"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+SHELL_DIR="${HOME}/.wt/shell"
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,6 +70,21 @@ if [ ! -d "$INSTALL_DIR" ]; then
   mkdir -p "$INSTALL_DIR"
 fi
 
+# Create shell script directory
+echo -e "${BLUE}Creating shell script directory at ${SHELL_DIR}...${NC}"
+mkdir -p "$SHELL_DIR"
+
+# Copy shell wrapper scripts
+echo -e "${BLUE}Copying shell wrapper scripts...${NC}"
+for shell_file in "${SCRIPT_DIR}/shell/"*.{zsh,bash,fish}; do
+  if [ -f "$shell_file" ]; then
+    # Replace /path/to/wt with actual binary path and copy
+    filename=$(basename "$shell_file")
+    sed "s|/path/to/wt|${BINARY_PATH}|g" "$shell_file" > "${SHELL_DIR}/${filename}"
+    echo -e "${GREEN}✓ Copied ${filename}${NC}"
+  fi
+done
+
 # Install binary
 echo -e "${BLUE}Installing wt binary to ${BINARY_PATH}...${NC}"
 cp "${SCRIPT_DIR}/wt" "$BINARY_PATH"
@@ -82,62 +98,57 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
   echo -e "${YELLOW}  export PATH=\"\$PATH:${INSTALL_DIR}\"${NC}\n"
 fi
 
-# Function to add wrapper to shell config
-add_wrapper_to_config() {
+# Function to add source line to shell config
+add_source_to_config() {
   local shell_type=$1
   local config_file=$2
-  local wrapper_file=$3
+  local wrapper_path=$3
   
   if [ ! -f "$config_file" ]; then
     echo -e "${YELLOW}Creating ${config_file}...${NC}"
     touch "$config_file"
   fi
   
-  # Check if wrapper already exists
-  if grep -q "# wt shell wrapper" "$config_file" && [ $FORCE_INSTALL -eq 0 ]; then
-    echo -e "${YELLOW}✓ ${shell_type} wrapper already exists in ${config_file}${NC}"
+  local source_line="source ${wrapper_path}"
+  
+  # Check if source line already exists
+  if grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file" && [ $FORCE_INSTALL -eq 0 ]; then
+    echo -e "${YELLOW}✓ ${shell_type} wrapper already configured in ${config_file}${NC}"
     return
   fi
   
-  # Remove existing wrapper if force installing
-  if [ $FORCE_INSTALL -eq 1 ] && grep -q "# wt shell wrapper" "$config_file"; then
-    echo -e "${YELLOW}Removing existing ${shell_type} wrapper...${NC}"
-    # Use awk to remove the wrapper block
-    awk '
-      /# wt shell wrapper/ { skip=1 }
-      !skip { print }
-      /^}$/ && skip { skip=0; next }
-    ' "$config_file" > "${config_file}.tmp"
+  # Remove existing source line if force installing
+  if [ $FORCE_INSTALL -eq 1 ] && grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file"; then
+    echo -e "${YELLOW}Removing existing ${shell_type} wrapper configuration...${NC}"
+    grep -v "source.*wt/shell/wt\.${shell_type}" "$config_file" > "${config_file}.tmp"
     mv "${config_file}.tmp" "$config_file"
   fi
   
   echo -e "${BLUE}Adding ${shell_type} wrapper to ${config_file}...${NC}"
   
-  # Add newline before appending
+  # Add newline and source line
   echo "" >> "$config_file"
+  echo "$source_line" >> "$config_file"
   
-  # Read and modify the wrapper file
-  sed "s|/path/to/wt|${BINARY_PATH}|g" "$wrapper_file" >> "$config_file"
-  
-  echo -e "${GREEN}✓ ${shell_type} wrapper added${NC}"
+  echo -e "${GREEN}✓ ${shell_type} wrapper configured${NC}"
 }
 
-# Detect shells and add wrappers
+# Detect shells and add source lines
 echo ""
 SHELLS_CONFIGURED=0
 
 # Check for zsh
 if [ -n "$ZSH_VERSION" ] || [ -f "${HOME}/.zshrc" ]; then
-  if [ -f "${SCRIPT_DIR}/shell/wt.zsh" ]; then
-    add_wrapper_to_config "zsh" "${HOME}/.zshrc" "${SCRIPT_DIR}/shell/wt.zsh"
+  if [ -f "${SHELL_DIR}/wt.zsh" ]; then
+    add_source_to_config "zsh" "${HOME}/.zshrc" "${SHELL_DIR}/wt.zsh"
     SHELLS_CONFIGURED=1
   fi
 fi
 
 # Check for bash
 if [ -f "${HOME}/.bashrc" ]; then
-  if [ -f "${SCRIPT_DIR}/shell/wt.bash" ]; then
-    add_wrapper_to_config "bash" "${HOME}/.bashrc" "${SCRIPT_DIR}/shell/wt.bash"
+  if [ -f "${SHELL_DIR}/wt.bash" ]; then
+    add_source_to_config "bash" "${HOME}/.bashrc" "${SHELL_DIR}/wt.bash"
     SHELLS_CONFIGURED=1
   fi
 fi
@@ -145,8 +156,8 @@ fi
 # Check for fish
 if [ -d "${HOME}/.config/fish" ]; then
   FISH_CONFIG="${HOME}/.config/fish/config.fish"
-  if [ -f "${SCRIPT_DIR}/shell/wt.fish" ]; then
-    add_wrapper_to_config "fish" "$FISH_CONFIG" "${SCRIPT_DIR}/shell/wt.fish"
+  if [ -f "${SHELL_DIR}/wt.fish" ]; then
+    add_source_to_config "fish" "$FISH_CONFIG" "${SHELL_DIR}/wt.fish"
     SHELLS_CONFIGURED=1
   fi
 fi

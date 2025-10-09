@@ -33,7 +33,8 @@ The installation script will:
 - Check if Bun is installed
 - Run `bun install` and `bun run build` automatically
 - Install the `wt` binary to `~/.local/bin/wt`
-- Automatically add shell wrapper functions to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
+- Copy shell wrapper scripts to `~/.wt/shell/`
+- Automatically add shell wrapper source lines to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
 - Set up auto-cd functionality
 
 After installation, restart your shell or run:
@@ -43,81 +44,27 @@ source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
 
 ### Manual Shell Integration (Optional)
 
-If you prefer manual setup, add a shell wrapper function for auto-cd functionality:
+If you prefer manual setup or if the installation script didn't automatically configure your shell, you can manually source the wrapper scripts that are installed at `~/.wt/shell/`:
 
 #### Zsh (~/.zshrc)
 
 ```bash
-# Source the wt wrapper
-source /path/to/wt/shell/wt.zsh
-
-# Or copy this function:
-wt() {
-  if [ "$1" = "new" ]; then
-    local output
-    output=$(/path/to/wt "$@")
-    local exit_code=$?
-    
-    if [ $exit_code -eq 0 ]; then
-      local cd_cmd=$(echo "$output" | tail -n 1)
-      echo "$output" | head -n -1
-      
-      if [[ "$cd_cmd" == cd\ * ]]; then
-        eval "$cd_cmd"
-      else
-        echo "$cd_cmd"
-      fi
-    else
-      echo "$output"
-      return $exit_code
-    fi
-  else
-    /path/to/wt "$@"
-  fi
-}
+source ~/.wt/shell/wt.zsh
 ```
 
 #### Bash (~/.bashrc)
 
 ```bash
-# Source the wt wrapper
-source /path/to/wt/shell/wt.bash
-
-# Or use the same function as zsh
+source ~/.wt/shell/wt.bash
 ```
 
 #### Fish (~/.config/fish/config.fish)
 
 ```fish
-# Source the wt wrapper
-source /path/to/wt/shell/wt.fish
-
-# Or copy this function:
-function wt
-    if test "$argv[1]" = "new"
-        set -l output (/path/to/wt $argv)
-        set -l exit_code $status
-        
-        if test $exit_code -eq 0
-            set -l cd_cmd (echo "$output" | tail -n 1)
-            echo "$output" | head -n -1
-            
-            if string match -q "cd *" -- $cd_cmd
-                eval $cd_cmd
-            else
-                echo $cd_cmd
-            end
-        else
-            echo "$output"
-            return $exit_code
-        end
-    else
-        /path/to/wt $argv
-    end
-end
+source ~/.wt/shell/wt.fish
 ```
 
-**Note:** Replace `/path/to/wt` with the actual path to the binary.
+**Note:** The shell wrapper scripts are automatically installed to `~/.wt/shell/` during installation.
 
 ### Uninstallation
 
@@ -125,9 +72,15 @@ end
 # Run the uninstallation script
 ./uninstall.sh
 
-# Or manually remove:
-rm ~/.local/bin/wt
-# Then remove the wrapper function from your shell config files
+# This will:
+# - Remove the wt binary from ~/.local/bin/
+# - Remove shell wrapper scripts from ~/.wt/shell/
+# - Remove source lines from shell config files
+```
+
+**Note:** The uninstallation script does not remove worktrees or repository-specific `.wt/settings.json` files. To fully clean up, manually run:
+```bash
+rm -rf ~/.wt/  # Remove all worktrees and shell scripts
 ```
 
 ### Without Shell Integration
