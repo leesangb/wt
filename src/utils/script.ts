@@ -1,11 +1,5 @@
-import { execa } from "execa";
-
 export async function executeScript(script: string, cwd: string, env?: Record<string, string>): Promise<void> {
-  await execa("sh", ["-c", script], {
-    cwd,
-    env: { ...process.env, ...env },
-    stdio: "inherit",
-  });
+  await Bun.$`sh -c ${script}`.env({ ...process.env, ...env }).cwd(cwd);
 }
 
 export async function executeScripts(scripts: string[], cwd: string, env?: Record<string, string>): Promise<void> {
