@@ -1,0 +1,48 @@
+{
+  "name": "@leesangb/wt",
+  "version": "0.1.0",
+  "description": "Git worktree manager CLI",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "wt": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "build:binary": "bun build src/index.ts --compile --outfile wt",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "git",
+    "worktree",
+    "cli"
+  ],
+  "author": {
+    "name": "Sangbin Lee",
+    "email": "leesangbin@outlook.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/leesangb/wt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leesangb/wt/issues"
+  },
+  "homepage": "https://github.com/leesangb/wt#readme",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "execa": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
