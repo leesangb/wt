@@ -23,6 +23,7 @@ program
   .description("Create a new worktree")
   .option("-b, --base <base-branch>", "Base branch to create from")
   .option("--no-push-remote", "Skip pushing the new branch to remote")
+  .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .action(newCommand);
 
 program

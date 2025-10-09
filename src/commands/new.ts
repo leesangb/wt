@@ -9,6 +9,7 @@ import { executeScripts } from "../utils/script.js";
 interface NewCommandOptions {
   base?: string;
   pushRemote?: boolean;
+  cd?: boolean;
 }
 
 export async function newCommand(branchName: string, options: NewCommandOptions): Promise<void> {
@@ -63,8 +64,14 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
     console.log(chalk.dim(`  WT_ID: ${shortId}`));
     console.log(chalk.dim(`  WT_PATH: ${worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${branchName}`));
-    console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
-    console.log(chalk.cyan(`  cd ${worktreePath}`));
+    
+    // Output cd command for shell wrapper function
+    if (options.cd !== false) {
+      console.log(`cd ${worktreePath}`);
+    } else {
+      console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
+      console.log(chalk.cyan(`  cd ${worktreePath}`));
+    }
 
   } catch (error) {
     console.error(chalk.red(`Error creating worktree: ${error}`));
