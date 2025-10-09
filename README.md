@@ -22,18 +22,16 @@ A CLI tool to manage git worktrees with pre/post script support.
 git clone https://github.com/leesangb/wt.git
 cd wt
 
-# Build the binary
-bun install
-bun run build
-
-# Run the installation script
+# Run the installation script (handles build automatically)
 ./install.sh
 
 # To update to a newer version, use --force
 ./install.sh --force
 ```
 
-This will:
+The installation script will:
+- Check if Bun is installed
+- Run `bun install` and `bun run build` automatically
 - Install the `wt` binary to `~/.local/bin/wt`
 - Automatically add shell wrapper functions to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
 - Set up auto-cd functionality

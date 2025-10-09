@@ -34,6 +34,24 @@ done
 
 echo -e "${BLUE}=== wt Installation Script ===${NC}\n"
 
+# Check if Bun is installed
+if ! command -v bun &> /dev/null; then
+  echo -e "${RED}Error: Bun is not installed${NC}"
+  echo -e "${YELLOW}Install Bun from: https://bun.sh${NC}"
+  exit 1
+fi
+
+# Build the binary if it doesn't exist or if force installing
+if [ ! -f "${SCRIPT_DIR}/wt" ] || [ $FORCE_INSTALL -eq 1 ]; then
+  echo -e "${BLUE}Installing dependencies...${NC}"
+  cd "$SCRIPT_DIR"
+  bun install
+  
+  echo -e "${BLUE}Building binary...${NC}"
+  bun run build
+  echo -e "${GREEN}✓ Build complete${NC}\n"
+fi
+
 # Check if already installed
 if [ -f "$BINARY_PATH" ] && [ $FORCE_INSTALL -eq 0 ]; then
   echo -e "${YELLOW}wt is already installed at ${BINARY_PATH}${NC}"
@@ -49,13 +67,6 @@ fi
 if [ ! -d "$INSTALL_DIR" ]; then
   echo -e "${YELLOW}Creating ${INSTALL_DIR}...${NC}"
   mkdir -p "$INSTALL_DIR"
-fi
-
-# Check if binary exists in current directory
-if [ ! -f "${SCRIPT_DIR}/wt" ]; then
-  echo -e "${RED}Error: wt binary not found in ${SCRIPT_DIR}${NC}"
-  echo -e "${YELLOW}Please build the binary first with: bun run build${NC}"
-  exit 1
 fi
 
 # Install binary
