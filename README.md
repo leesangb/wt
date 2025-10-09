@@ -5,7 +5,9 @@ A CLI tool to manage git worktrees with pre/post script support.
 ## Features
 
 - 🚀 Create worktrees with short IDs and repo-based naming
-- ⚙️ Configure worktree base directory and scripts per repository
+- ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
+- 🔄 Auto-fetch latest changes before creating worktree
+- 📤 Auto-push new branch to remote (configurable)
 - 🎯 Pre/post script execution for automation with environment variables
 - 📦 Fast and lightweight (works with both Node.js and Bun)
 - 🎨 Colored CLI output for better UX
@@ -45,6 +47,8 @@ This creates `.wt/settings.json` in your repository:
 ```json
 {
   "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": []
@@ -55,17 +59,27 @@ This creates `.wt/settings.json` in your repository:
 ### Create a new worktree
 
 ```bash
-wt new feature-branch --base main
+# Use default base branch (from settings or "main")
+wt new feature-branch
+
+# Specify base branch
+wt new feature-branch --base develop
+
+# Skip pushing to remote
+wt new feature-branch --no-push-remote
 ```
 
 This will:
-1. Run the pre scripts (if configured)
-2. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
-3. Run the post scripts in the new worktree (if configured)
-4. Display the worktree path
+1. Fetch the latest changes from remote (`git fetch`)
+2. Run the pre scripts (if configured)
+3. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
+4. Push the new branch to remote (if enabled)
+5. Run the post scripts in the new worktree (if configured)
+6. Display the worktree path
 
 **Options:**
-- `--base <branch>` - Base branch to create from (default: current branch)
+- `--base <branch>` - Base branch to create from (default: from settings or `main`)
+- `--no-push-remote` - Skip pushing the new branch to remote
 
 ### List all worktrees
 
@@ -90,7 +104,9 @@ The ID is the short ID shown when creating the worktree (e.g., `x7k2m9n4`).
 Edit `.wt/settings.json` in your repository:
 
 - **worktreeDir**: Base directory for worktrees (default: `~/.wt`)
-- **scripts.pre**: Array of commands to run before creating worktree
+- **baseBranch**: Default base branch for new worktrees (default: `main`)
+- **pushRemote**: Auto-push new branch to remote (default: `true`)
+- **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 
 ### Environment Variables
@@ -103,10 +119,25 @@ Scripts have access to these environment variables:
 
 ### Example configurations
 
+**Basic setup with develop as base:**
+```json
+{
+  "worktreeDir": "~/.wt",
+  "baseBranch": "develop",
+  "pushRemote": true,
+  "scripts": {
+    "pre": [],
+    "post": []
+  }
+}
+```
+
 **Install dependencies after creating worktree:**
 ```json
 {
   "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": ["npm install"]
@@ -114,12 +145,14 @@ Scripts have access to these environment variables:
 }
 ```
 
-**Fetch latest, install dependencies, and open in VS Code:**
+**Skip auto-push, install dependencies, and open in VS Code:**
 ```json
 {
   "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": false,
   "scripts": {
-    "pre": ["git fetch"],
+    "pre": [],
     "post": ["npm install", "code $WT_PATH"]
   }
 }
@@ -129,9 +162,10 @@ Scripts have access to these environment variables:
 ```json
 {
   "worktreeDir": "~/projects/worktrees",
+  "baseBranch": "develop",
+  "pushRemote": true,
   "scripts": {
     "pre": [
-      "git fetch origin",
       "echo Creating worktree for branch: $WT_BRANCH"
     ],
     "post": [
