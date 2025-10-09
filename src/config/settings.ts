@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { WtSettings } from "../types/index.js";
 
@@ -23,8 +23,7 @@ export async function loadSettings(repoRoot: string): Promise<WtSettings> {
     return DEFAULT_SETTINGS;
   }
   
-  const file = Bun.file(settingsPath);
-  const content = await file.json();
+  const content = JSON.parse(await Bun.file(settingsPath).text());
   
   return { ...DEFAULT_SETTINGS, ...content };
 }
@@ -34,11 +33,10 @@ export async function saveSettings(repoRoot: string, settings: WtSettings): Prom
   const settingsDir = join(repoRoot, ".wt");
   
   if (!existsSync(settingsDir)) {
-    await Bun.write(settingsDir, "");
-    await Bun.$`mkdir -p ${settingsDir}`;
+    mkdirSync(settingsDir, { recursive: true });
   }
   
-  await Bun.write(settingsPath, JSON.stringify(settings, null, 2));
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
 export function expandPath(path: string): string {

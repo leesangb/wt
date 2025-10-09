@@ -1,10 +1,10 @@
-import { execa } from "execa";
 import { basename } from "path";
 import type { WorktreeInfo } from "../types/index.js";
+import { $ } from "bun";
 
 export async function isGitRepository(): Promise<boolean> {
   try {
-    await execa("git", ["rev-parse", "--git-dir"]);
+    await $`git rev-parse --git-dir`.quiet();
     return true;
   } catch {
     return false;
@@ -12,8 +12,8 @@ export async function isGitRepository(): Promise<boolean> {
 }
 
 export async function getGitRoot(): Promise<string> {
-  const result = await execa("git", ["rev-parse", "--show-toplevel"]);
-  return result.stdout.trim();
+  const result = await $`git rev-parse --show-toplevel`.text();
+  return result.trim();
 }
 
 export async function getRepoName(): Promise<string> {
@@ -22,22 +22,22 @@ export async function getRepoName(): Promise<string> {
 }
 
 export async function fetchRemote(): Promise<void> {
-  await execa("git", ["fetch"]);
+  await $`git fetch`;
 }
 
 export async function createWorktree(path: string, branch: string, base: string, pushRemote: boolean = true): Promise<void> {
-  await execa("git", ["worktree", "add", "-b", branch, path, base]);
+  await $`git worktree add -b ${branch} ${path} ${base}`;
 
   if (pushRemote) {
-    await execa("git", ["push", "-u", "origin", branch], { cwd: path });
+    await $`cd ${path} && git push -u origin ${branch}`;
   }
 }
 
 export async function listWorktrees(): Promise<WorktreeInfo[]> {
-  const result = await execa("git", ["worktree", "list", "--porcelain"]);
+  const result = await $`git worktree list --porcelain`.text();
   const worktrees: WorktreeInfo[] = [];
   
-  const entries = result.stdout.trim().split('\n\n');
+  const entries = result.trim().split('\n\n');
   
   for (const entry of entries) {
     const lines = entry.split('\n');
@@ -69,5 +69,5 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
 }
 
 export async function removeWorktree(path: string): Promise<void> {
-  await execa("git", ["worktree", "remove", path, "--force"]);
+  await $`git worktree remove ${path} --force`;
 }
