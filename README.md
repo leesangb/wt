@@ -8,7 +8,7 @@ A CLI tool to manage git worktrees with pre/post script support.
 - 🎯 Auto-cd to new worktree (with shell wrapper integration)
 - ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
 - 🔄 Auto-fetch latest changes before creating worktree
-- 📤 Auto-push new branch to remote (configurable)
+- 📤 Optional push to remote with `--push` flag
 - 🎯 Pre/post script execution for automation with environment variables
 - 📦 Fast and lightweight Bun-based binary
 - 🎨 Colored CLI output for better UX
@@ -106,7 +106,7 @@ This creates `.wt/settings.json` in your repository:
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
-  "pushRemote": true,
+  "pushRemote": false,
   "scripts": {
     "pre": [],
     "post": []
@@ -123,8 +123,8 @@ wt new feature-branch
 # Specify base branch
 wt new feature-branch --base develop
 
-# Skip pushing to remote
-wt new feature-branch --no-push-remote
+# Push to remote immediately
+wt new feature-branch --push
 
 # Direct binary usage without auto-cd
 wt new feature-branch --no-cd
@@ -134,13 +134,13 @@ This will:
 1. Fetch the latest changes from remote (`git fetch`)
 2. Run the pre scripts (if configured)
 3. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
-4. Push the new branch to remote (if enabled)
+4. Set up upstream tracking for the branch
 5. Run the post scripts in the new worktree (if configured)
 6. Automatically change to the new worktree directory (with shell wrapper)
 
 **Options:**
 - `--base <branch>` - Base branch to create from (default: from settings or `main`)
-- `--no-push-remote` - Skip pushing the new branch to remote
+- `--push` - Push the new branch to remote immediately
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
 
 ### List all worktrees
@@ -167,7 +167,7 @@ Edit `.wt/settings.json` in your repository:
 
 - **worktreeDir**: Base directory for worktrees (default: `~/.wt`)
 - **baseBranch**: Default base branch for new worktrees (default: `main`)
-- **pushRemote**: Auto-push new branch to remote (default: `true`)
+- **pushRemote**: Auto-push new branch to remote (default: `false`)
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 
@@ -186,7 +186,7 @@ Scripts have access to these environment variables:
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "develop",
-  "pushRemote": true,
+  "pushRemote": false,
   "scripts": {
     "pre": [],
     "post": []
@@ -199,7 +199,7 @@ Scripts have access to these environment variables:
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
-  "pushRemote": true,
+  "pushRemote": false,
   "scripts": {
     "pre": [],
     "post": ["npm install"]
@@ -207,12 +207,12 @@ Scripts have access to these environment variables:
 }
 ```
 
-**Skip auto-push, install dependencies, and open in VS Code:**
+**Auto-push to remote and install dependencies:**
 ```json
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
-  "pushRemote": false,
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": ["npm install", "code $WT_PATH"]
@@ -225,7 +225,7 @@ Scripts have access to these environment variables:
 {
   "worktreeDir": "~/projects/worktrees",
   "baseBranch": "develop",
-  "pushRemote": true,
+  "pushRemote": false,
   "scripts": {
     "pre": [
       "echo Creating worktree for branch: $WT_BRANCH"

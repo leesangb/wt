@@ -30,6 +30,8 @@ export async function createWorktree(path: string, branch: string, base: string,
 
   if (pushRemote) {
     await $`cd ${path} && git push -u origin ${branch}`;
+  } else {
+    await $`cd ${path} && git branch --set-upstream-to=origin/${branch}`;
   }
 }
 

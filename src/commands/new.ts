@@ -8,7 +8,7 @@ import { executeScripts } from "../utils/script.js";
 
 interface NewCommandOptions {
   base?: string;
-  pushRemote?: boolean;
+  push?: boolean;
   cd?: boolean;
 }
 
@@ -23,7 +23,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   const settings = await loadSettings(repoRoot);
   
   const baseBranch = options.base ?? settings.baseBranch ?? "main";
-  const pushRemote = options.pushRemote ?? settings.pushRemote ?? true;
+  const pushRemote = options.push ?? settings.pushRemote ?? false;
   
   const shortId = generateShortId();
   const dirName = `${repoName}-${shortId}`;
