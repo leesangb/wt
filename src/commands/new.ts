@@ -60,9 +60,9 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
     }
 
     console.log(chalk.green(`\n✓ Worktree created successfully!`));
-    console.log(chalk.dim(`  ID: ${shortId}`));
-    console.log(chalk.dim(`  Path: ${worktreePath}`));
-    console.log(chalk.dim(`  Branch: ${branchName}`));
+    console.log(chalk.dim(`  WT_ID: ${shortId}`));
+    console.log(chalk.dim(`  WT_PATH: ${worktreePath}`));
+    console.log(chalk.dim(`  WT_BRANCH: ${branchName}`));
     console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
     console.log(chalk.cyan(`  cd ${worktreePath}`));
 
