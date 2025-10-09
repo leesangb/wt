@@ -16,7 +16,34 @@ BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Parse command line arguments
+FORCE_INSTALL=0
+for arg in "$@"; do
+  case $arg in
+    --force|-f)
+      FORCE_INSTALL=1
+      shift
+      ;;
+    *)
+      echo -e "${RED}Unknown option: $arg${NC}"
+      echo -e "Usage: $0 [--force|-f]"
+      exit 1
+      ;;
+  esac
+done
+
 echo -e "${BLUE}=== wt Installation Script ===${NC}\n"
+
+# Check if already installed
+if [ -f "$BINARY_PATH" ] && [ $FORCE_INSTALL -eq 0 ]; then
+  echo -e "${YELLOW}wt is already installed at ${BINARY_PATH}${NC}"
+  echo -e "${YELLOW}To update/reinstall, run: ${GREEN}./install.sh --force${NC}"
+  exit 0
+fi
+
+if [ $FORCE_INSTALL -eq 1 ]; then
+  echo -e "${YELLOW}Force install mode: Updating existing installation${NC}\n"
+fi
 
 # Create install directory if it doesn't exist
 if [ ! -d "$INSTALL_DIR" ]; then
@@ -56,9 +83,21 @@ add_wrapper_to_config() {
   fi
   
   # Check if wrapper already exists
-  if grep -q "# wt shell wrapper" "$config_file"; then
+  if grep -q "# wt shell wrapper" "$config_file" && [ $FORCE_INSTALL -eq 0 ]; then
     echo -e "${YELLOW}✓ ${shell_type} wrapper already exists in ${config_file}${NC}"
     return
+  fi
+  
+  # Remove existing wrapper if force installing
+  if [ $FORCE_INSTALL -eq 1 ] && grep -q "# wt shell wrapper" "$config_file"; then
+    echo -e "${YELLOW}Removing existing ${shell_type} wrapper...${NC}"
+    # Use awk to remove the wrapper block
+    awk '
+      /# wt shell wrapper/ { skip=1 }
+      !skip { print }
+      /^}$/ && skip { skip=0; next }
+    ' "$config_file" > "${config_file}.tmp"
+    mv "${config_file}.tmp" "$config_file"
   fi
   
   echo -e "${BLUE}Adding ${shell_type} wrapper to ${config_file}...${NC}"
