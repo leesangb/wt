@@ -1,4 +1,5 @@
 import { execa } from "execa";
+import { basename } from "path";
 import type { WorktreeInfo } from "../types/index.js";
 
 export async function isGitRepository(): Promise<boolean> {
@@ -13,6 +14,11 @@ export async function isGitRepository(): Promise<boolean> {
 export async function getGitRoot(): Promise<string> {
   const result = await execa("git", ["rev-parse", "--show-toplevel"]);
   return result.stdout.trim();
+}
+
+export async function getRepoName(): Promise<string> {
+  const root = await getGitRoot();
+  return basename(root);
 }
 
 export async function createWorktree(path: string, branch: string, base?: string): Promise<void> {

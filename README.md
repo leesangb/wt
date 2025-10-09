@@ -4,10 +4,10 @@ A CLI tool to manage git worktrees with pre/post script support.
 
 ## Features
 
-- 🚀 Create worktrees with UUID-based directories
+- 🚀 Create worktrees with short IDs and repo-based naming
 - ⚙️ Configure worktree base directory and scripts per repository
 - 🎯 Pre/post script execution for automation with environment variables
-- 📦 Fast and lightweight
+- 📦 Fast and lightweight (works with both Node.js and Bun)
 - 🎨 Colored CLI output for better UX
 
 ## Installation
@@ -60,9 +60,12 @@ wt new feature-branch --base main
 
 This will:
 1. Run the pre scripts (if configured)
-2. Create a worktree at `~/.wt/<uuid>` with branch `feature-branch`
+2. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
 3. Run the post scripts in the new worktree (if configured)
-4. Display the path to navigate to
+4. Display the worktree path
+
+**Options:**
+- `--base <branch>` - Base branch to create from (default: current branch)
 
 ### List all worktrees
 
@@ -75,10 +78,12 @@ wt ls
 ### Remove a worktree
 
 ```bash
-wt remove <uuid>
+wt remove <id>
 # or
-wt rm <uuid>
+wt rm <id>
 ```
+
+The ID is the short ID shown when creating the worktree (e.g., `x7k2m9n4`).
 
 ## Configuration
 
@@ -93,7 +98,7 @@ Edit `.wt/settings.json` in your repository:
 Scripts have access to these environment variables:
 
 - `$WT_PATH` - Full path to the worktree directory
-- `$WT_ID` - UUID of the worktree
+- `$WT_ID` - Short ID of the worktree (e.g., `x7k2m9n4`)
 - `$WT_BRANCH` - Branch name
 
 ### Example configurations
@@ -154,7 +159,7 @@ wt/
 │   ├── utils/
 │   │   ├── git.ts            # Git worktree utilities
 │   │   ├── script.ts         # Script execution
-│   │   └── uuid.ts           # UUID generation
+│   │   └── id.ts             # Short ID generation
 │   └── types/
 │       └── index.ts          # TypeScript types
 ├── package.json

@@ -1,9 +1,9 @@
 import chalk from "chalk";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { isGitRepository, getGitRoot, createWorktree } from "../utils/git.js";
+import { isGitRepository, getGitRoot, getRepoName, createWorktree } from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
-import { generateUUID } from "../utils/uuid.js";
+import { generateShortId } from "../utils/id.js";
 import { executeScripts } from "../utils/script.js";
 
 interface NewCommandOptions {
@@ -17,11 +17,13 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   }
 
   const repoRoot = await getGitRoot();
+  const repoName = await getRepoName();
   const settings = await loadSettings(repoRoot);
   
-  const uuid = generateUUID();
+  const shortId = generateShortId();
+  const dirName = `${repoName}-${shortId}`;
   const worktreeBaseDir = expandPath(settings.worktreeDir);
-  const worktreePath = join(worktreeBaseDir, uuid);
+  const worktreePath = join(worktreeBaseDir, dirName);
 
   if (!existsSync(worktreeBaseDir)) {
     mkdirSync(worktreeBaseDir, { recursive: true });
@@ -32,7 +34,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
       console.log(chalk.blue("Running pre scripts..."));
       await executeScripts(settings.scripts.pre, repoRoot, {
         WT_PATH: worktreePath,
-        WT_ID: uuid,
+        WT_ID: shortId,
         WT_BRANCH: branchName,
       });
     }
@@ -45,13 +47,13 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
       console.log(chalk.blue("Running post scripts..."));
       await executeScripts(settings.scripts.post, worktreePath, {
         WT_PATH: worktreePath,
-        WT_ID: uuid,
+        WT_ID: shortId,
         WT_BRANCH: branchName,
       });
     }
 
     console.log(chalk.green(`\n✓ Worktree created successfully!`));
-    console.log(chalk.dim(`  ID: ${uuid}`));
+    console.log(chalk.dim(`  ID: ${shortId}`));
     console.log(chalk.dim(`  Path: ${worktreePath}`));
     console.log(chalk.dim(`  Branch: ${branchName}`));
     console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
