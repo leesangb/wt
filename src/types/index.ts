@@ -1,5 +1,7 @@
 export interface WtSettings {
   worktreeDir: string;
+  baseBranch?: string;
+  pushRemote?: boolean;
   scripts?: {
     pre?: string[];
     post?: string[];

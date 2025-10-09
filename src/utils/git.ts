@@ -21,11 +21,11 @@ export async function getRepoName(): Promise<string> {
   return basename(root);
 }
 
-export async function createWorktree(path: string, branch: string, base?: string): Promise<void> {
-  if (base) {
-    await execa("git", ["worktree", "add", "-b", branch, path, base]);
-  } else {
-    await execa("git", ["worktree", "add", "-b", branch, path]);
+export async function createWorktree(path: string, branch: string, base: string, pushRemote: boolean = true): Promise<void> {
+  await execa("git", ["worktree", "add", "-b", branch, path, base]);
+
+  if (pushRemote) {
+    await execa("git", ["push", "-u", "origin", branch], { cwd: path });
   }
 }
 

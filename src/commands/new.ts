@@ -8,6 +8,7 @@ import { executeScripts } from "../utils/script.js";
 
 interface NewCommandOptions {
   base?: string;
+  pushRemote?: boolean;
 }
 
 export async function newCommand(branchName: string, options: NewCommandOptions): Promise<void> {
@@ -19,6 +20,9 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   const repoRoot = await getGitRoot();
   const repoName = await getRepoName();
   const settings = await loadSettings(repoRoot);
+  
+  const baseBranch = options.base ?? settings.baseBranch ?? "main";
+  const pushRemote = options.pushRemote ?? settings.pushRemote ?? true;
   
   const shortId = generateShortId();
   const dirName = `${repoName}-${shortId}`;
@@ -40,7 +44,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
     }
 
     console.log(chalk.blue(`Creating worktree at ${worktreePath}...`));
-    await createWorktree(worktreePath, branchName, options.base);
+    await createWorktree(worktreePath, branchName, baseBranch, pushRemote);
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 
     if (settings.scripts?.post && settings.scripts.post.length > 0) {
