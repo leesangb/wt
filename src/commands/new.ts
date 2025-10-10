@@ -23,7 +23,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   const settings = await loadSettings(repoRoot);
   
   const baseBranch = options.base ?? settings.baseBranch ?? "main";
-  const pushRemote = options.push ?? settings.pushRemote ?? false;
+  const pushRemote = options.push ?? settings.pushRemote ?? true;
   
   const shortId = generateShortId();
   const dirName = `${repoName}-${shortId}`;

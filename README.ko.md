@@ -10,7 +10,7 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 - 🎯 새 worktree로 자동 이동 (shell wrapper 통합)
 - ⚙️ 저장소별로 worktree 기본 디렉토리, 기본 브랜치, 원격 푸시 동작 설정
 - 🔄 worktree 생성 전 최신 변경사항 자동 fetch
-- 📤 `--push` 플래그로 선택적 원격 푸시
+- 📤 기본적으로 원격에 자동 푸시 (`--no-push` 플래그로 비활성화)
 - 🎯 환경 변수를 사용한 자동화를 위한 Pre/post 스크립트 실행
 - 📦 빠르고 경량화된 Bun 기반 바이너리
 - 🎨 더 나은 UX를 위한 컬러 CLI 출력
@@ -108,7 +108,7 @@ wt init
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
-  "pushRemote": false,
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": []
@@ -125,8 +125,8 @@ wt new feature-branch
 # 기본 브랜치 지정
 wt new feature-branch --base develop
 
-# 원격에 즉시 푸시
-wt new feature-branch --push
+# 원격 푸시 건너뛰기
+wt new feature-branch --no-push
 
 # 자동 cd 없이 직접 바이너리 사용
 wt new feature-branch --no-cd
@@ -136,13 +136,13 @@ wt new feature-branch --no-cd
 1. 원격에서 최신 변경사항 가져오기 (`git fetch`)
 2. pre 스크립트 실행 (설정된 경우)
 3. `~/.wt/<저장소명-짧은ID>`에 `feature-branch` 브랜치로 worktree 생성
-4. 브랜치의 upstream 추적 설정
+4. 새 브랜치를 원격에 upstream 추적과 함께 푸시 (`--no-push`를 사용하지 않는 경우)
 5. 새 worktree에서 post 스크립트 실행 (설정된 경우)
 6. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
 
 **옵션:**
 - `--base <branch>` - 생성할 기본 브랜치 (기본값: 설정 또는 `main`)
-- `--push` - 새 브랜치를 즉시 원격에 푸시
+- `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
 
 ### 모든 worktree 목록 조회
@@ -169,7 +169,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 
 - **worktreeDir**: worktree의 기본 디렉토리 (기본값: `~/.wt`)
 - **baseBranch**: 새 worktree의 기본 브랜치 (기본값: `main`)
-- **pushRemote**: 새 브랜치를 원격에 자동 푸시 (기본값: `false`)
+- **pushRemote**: 새 브랜치를 원격에 자동 푸시 (기본값: `true`)
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 
@@ -188,7 +188,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "develop",
-  "pushRemote": false,
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": []
@@ -201,7 +201,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 {
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
-  "pushRemote": false,
+  "pushRemote": true,
   "scripts": {
     "pre": [],
     "post": ["npm install"]
@@ -227,7 +227,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 {
   "worktreeDir": "~/projects/worktrees",
   "baseBranch": "develop",
-  "pushRemote": false,
+  "pushRemote": true,
   "scripts": {
     "pre": [
       "echo Creating worktree for branch: $WT_BRANCH"
