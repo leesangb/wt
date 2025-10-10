@@ -12,7 +12,7 @@ export async function removeCommand(id: string, options: RemoveCommandOptions): 
   }
 
   const worktrees = await listWorktrees();
-  const worktree = worktrees.find((wt) => wt.id === id || wt.path.includes(id));
+  const worktree = worktrees.find((wt) => wt.id === id || wt.fullId === id || wt.path.includes(id));
 
   if (!worktree) {
     console.error(chalk.red(`Error: Worktree with ID "${id}" not found`));

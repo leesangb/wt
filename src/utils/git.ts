@@ -17,6 +17,17 @@ export async function getGitRoot(): Promise<string> {
 }
 
 export async function getRepoName(): Promise<string> {
+  try {
+    const remoteUrl = await $`git remote get-url origin`.text();
+    const url = remoteUrl.trim();
+    
+    const match = url.match(/\/([^\/]+?)(?:\.git)?$/);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+  }
+  
   const root = await getGitRoot();
   return basename(root);
 }
@@ -38,6 +49,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
   const worktrees: WorktreeInfo[] = [];
   
   const entries = result.trim().split('\n\n');
+  const repoName = await getRepoName();
   
   for (const entry of entries) {
     const lines = entry.split('\n');
@@ -53,13 +65,17 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
     }
     
     if (path && branch) {
-      const pathParts = path.split('/');
-      const id = pathParts[pathParts.length - 1];
+      const fullId = basename(path);
+      const id = fullId.startsWith(`${repoName}-`) 
+        ? fullId.substring(repoName.length + 1) 
+        : fullId;
       
       worktrees.push({
         id,
+        fullId,
         path,
         branch,
+        repoName,
         createdAt: new Date().toISOString(),
       });
     }

@@ -10,7 +10,9 @@ export interface WtSettings {
 
 export interface WorktreeInfo {
   id: string;
+  fullId: string;
   path: string;
   branch: string;
+  repoName: string;
   createdAt: string;
 }

@@ -43,6 +43,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
       await executeScripts(settings.scripts.pre, repoRoot, {
         WT_PATH: worktreePath,
         WT_ID: shortId,
+        WT_FULL_ID: dirName,
         WT_BRANCH: branchName,
         WT_REPO_ROOT: repoRoot,
       });
@@ -57,6 +58,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
       await executeScripts(settings.scripts.post, worktreePath, {
         WT_PATH: worktreePath,
         WT_ID: shortId,
+        WT_FULL_ID: dirName,
         WT_BRANCH: branchName,
         WT_REPO_ROOT: repoRoot,
       });

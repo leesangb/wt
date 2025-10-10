@@ -163,7 +163,10 @@ wt remove <id>
 wt rm <id>
 ```
 
-The ID is the short ID shown when creating the worktree (e.g., `x7k2m9n4`).
+You can remove a worktree using:
+- Short ID (e.g., `x7k2m9n4`)
+- Full ID with repo prefix (e.g., `myrepo-x7k2m9n4`)
+- Any part of the path that uniquely identifies the worktree
 
 ## Configuration
 
@@ -181,6 +184,7 @@ Scripts have access to these environment variables:
 
 - `$WT_PATH` - Full path to the worktree directory
 - `$WT_ID` - Short ID of the worktree (e.g., `x7k2m9n4`)
+- `$WT_FULL_ID` - Full ID with repo prefix (e.g., `myrepo-x7k2m9n4`)
 - `$WT_BRANCH` - Branch name
 - `$WT_REPO_ROOT` - Full path to the repository root directory
 

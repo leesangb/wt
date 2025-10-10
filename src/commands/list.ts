@@ -14,11 +14,21 @@ export async function listCommand(): Promise<void> {
     return;
   }
 
-  console.log(chalk.bold("\nWorktrees:"));
+  const currentPath = process.cwd();
+  const currentWorktree = worktrees.find(wt => currentPath.startsWith(wt.path));
+  
+  const sortedWorktrees = currentWorktree
+    ? [currentWorktree, ...worktrees.filter(wt => wt.path !== currentWorktree.path)]
+    : worktrees;
+
+  console.log(chalk.bold(`\nWorktrees (${worktrees[0].repoName}):`));
   console.log(chalk.dim("─".repeat(80)));
 
-  for (const wt of worktrees) {
-    console.log(chalk.cyan(`ID:      ${wt.id}`));
+  for (const wt of sortedWorktrees) {
+    const isCurrent = wt.path === currentWorktree?.path;
+    const idLabel = isCurrent ? `${wt.id} ${chalk.green("(current)")}` : wt.id;
+    
+    console.log(chalk.cyan(`ID:      ${idLabel}`));
     console.log(chalk.white(`Branch:  ${wt.branch}`));
     console.log(chalk.dim(`Path:    ${wt.path}`));
     console.log(chalk.dim("─".repeat(80)));

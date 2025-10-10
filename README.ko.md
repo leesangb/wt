@@ -163,7 +163,10 @@ wt remove <id>
 wt rm <id>
 ```
 
-ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
+다음 방법으로 worktree를 제거할 수 있습니다:
+- 짧은 ID (예: `x7k2m9n4`)
+- 레포 prefix가 포함된 전체 ID (예: `myrepo-x7k2m9n4`)
+- worktree를 고유하게 식별할 수 있는 경로의 일부
 
 ## 설정
 
@@ -181,6 +184,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 
 - `$WT_PATH` - worktree 디렉토리의 전체 경로
 - `$WT_ID` - worktree의 짧은 ID (예: `x7k2m9n4`)
+- `$WT_FULL_ID` - 레포 prefix가 포함된 전체 ID (예: `myrepo-x7k2m9n4`)
 - `$WT_BRANCH` - 브랜치 이름
 - `$WT_REPO_ROOT` - 저장소 루트 디렉토리의 전체 경로
 
