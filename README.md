@@ -96,6 +96,8 @@ wt new feature-branch --no-cd
 
 ## Usage
 
+**Note:** All commands automatically run from the repository root directory, regardless of your current location within the git repository.
+
 ### Initialize configuration
 
 ```bash
@@ -180,6 +182,7 @@ Scripts have access to these environment variables:
 - `$WT_PATH` - Full path to the worktree directory
 - `$WT_ID` - Short ID of the worktree (e.g., `x7k2m9n4`)
 - `$WT_BRANCH` - Branch name
+- `$WT_REPO_ROOT` - Full path to the repository root directory
 
 ### Example configurations
 

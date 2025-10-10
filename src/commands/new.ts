@@ -44,6 +44,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
         WT_PATH: worktreePath,
         WT_ID: shortId,
         WT_BRANCH: branchName,
+        WT_REPO_ROOT: repoRoot,
       });
     }
 
@@ -57,6 +58,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
         WT_PATH: worktreePath,
         WT_ID: shortId,
         WT_BRANCH: branchName,
+        WT_REPO_ROOT: repoRoot,
       });
     }
 

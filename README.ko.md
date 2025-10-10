@@ -96,6 +96,8 @@ wt new feature-branch --no-cd
 
 ## 사용법
 
+**참고:** 모든 명령어는 git 저장소 내 어느 위치에서 실행하든 자동으로 저장소 루트 디렉토리에서 실행됩니다.
+
 ### 설정 초기화
 
 ```bash
@@ -180,6 +182,7 @@ ID는 worktree 생성 시 표시되는 짧은 ID입니다 (예: `x7k2m9n4`).
 - `$WT_PATH` - worktree 디렉토리의 전체 경로
 - `$WT_ID` - worktree의 짧은 ID (예: `x7k2m9n4`)
 - `$WT_BRANCH` - 브랜치 이름
+- `$WT_REPO_ROOT` - 저장소 루트 디렉토리의 전체 경로
 
 ### 설정 예시
 

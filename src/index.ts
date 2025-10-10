@@ -5,13 +5,20 @@ import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
+import { isGitRepository, getGitRoot } from "./utils/git.js";
 
 const program = new Command();
 
 program
   .name("wt")
   .description("Git worktree manager CLI")
-  .version("0.1.0");
+  .version("0.1.0")
+  .hook('preAction', async () => {
+    if (await isGitRepository()) {
+      const repoRoot = await getGitRoot();
+      process.chdir(repoRoot);
+    }
+  });
 
 program
   .command("init")
