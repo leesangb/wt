@@ -1,5 +1,6 @@
 import { basename } from "path";
 import { spawn } from "bun";
+import { statSync } from "fs";
 import type { WorktreeInfo } from "../types/index.js";
 import { $ } from "bun";
 
@@ -85,13 +86,15 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
         ? fullId.substring(repoName.length + 1) 
         : fullId;
       
+      const stats = statSync(path);
+      
       worktrees.push({
         id,
         fullId,
         path,
         branch,
         repoName,
-        createdAt: new Date().toISOString(),
+        createdAt: stats.birthtime.toISOString(),
       });
     }
   }

@@ -28,9 +28,13 @@ export async function listCommand(): Promise<void> {
     const isCurrent = wt.path === currentWorktree?.path;
     const idLabel = isCurrent ? `${wt.id} ${chalk.green("(current)")}` : wt.id;
     
+    const createdDate = new Date(wt.createdAt);
+    const timestamp = createdDate.toLocaleString();
+    
     console.log(chalk.cyan(`ID:      ${idLabel}`));
     console.log(chalk.white(`Branch:  ${wt.branch}`));
     console.log(chalk.dim(`Path:    ${wt.path}`));
+    console.log(chalk.dim(`Created: ${timestamp}`));
     console.log(chalk.dim("─".repeat(80)));
   }
 }
