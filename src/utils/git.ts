@@ -93,7 +93,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
       
       try {
         const { readFileSync } = await import("fs");
-        const metaPath = `${path}/.wt-meta`;
+        const metaPath = `${path}/.wt/meta.json`;
         const metaContent = readFileSync(metaPath, 'utf-8');
         const meta = JSON.parse(metaContent);
         baseBranch = meta.baseBranch;

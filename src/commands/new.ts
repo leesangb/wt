@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
 import { join } from "path";
 import { isGitRepository, getGitRoot, getRepoName, createWorktree, fetchRemote, getCommitHash } from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
@@ -22,10 +22,10 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   const repoRoot = await getGitRoot();
   const repoName = await getRepoName();
   const settings = await loadSettings(repoRoot);
-  
+
   const baseBranch = options.base ?? settings.baseBranch ?? "main";
   const pushRemote = options.push ?? settings.pushRemote ?? true;
-  
+
   const shortId = options.id ?? generateShortId();
   const dirName = `${repoName}-${shortId}`;
   const worktreeBaseDir = expandPath(settings.worktreeDir);
@@ -38,9 +38,9 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   try {
     console.log(chalk.blue("Fetching latest changes..."));
     await fetchRemote();
-    
+
     const baseCommit = await getCommitHash(baseBranch);
-    
+
     if (settings.scripts?.pre && settings.scripts.pre.length > 0) {
       console.log(chalk.blue("Running pre scripts..."));
       await executeScripts(settings.scripts.pre, repoRoot, {
@@ -54,14 +54,19 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
 
     console.log(chalk.blue(`Creating worktree at ${worktreePath}...`));
     await createWorktree(worktreePath, branchName, baseBranch, pushRemote);
-    
+
+    const wtDir = join(worktreePath, ".wt");
+    mkdirSync(wtDir, { recursive: true });
+
     const metaInfo = {
       baseBranch,
       baseCommit,
       createdAt: new Date().toISOString(),
     };
-    writeFileSync(join(worktreePath, ".wt-meta"), JSON.stringify(metaInfo, null, 2));
-    
+    writeFileSync(join(wtDir, "meta.json"), JSON.stringify(metaInfo, null, 2));
+
+    writeFileSync(join(wtDir, ".gitignore"), ".gitignore\nmeta.json\n");
+
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 
     if (settings.scripts?.post && settings.scripts.post.length > 0) {
@@ -79,7 +84,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
     console.log(chalk.dim(`  WT_ID: ${shortId}`));
     console.log(chalk.dim(`  WT_PATH: ${worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${branchName}`));
-    
+
     // Output cd command for shell wrapper function
     if (options.cd !== false) {
       console.log(`cd ${worktreePath}`);
@@ -87,7 +92,6 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
       console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
       console.log(chalk.cyan(`  cd ${worktreePath}`));
     }
-
   } catch (error) {
     console.error(chalk.red(`Error creating worktree: ${error}`));
     process.exit(1);
