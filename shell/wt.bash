@@ -2,7 +2,7 @@
 # Add this to your ~/.bashrc
 
 wt() {
-  if [ "$1" = "new" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
     local output
     output=$(/path/to/wt "$@")
     local exit_code=$?

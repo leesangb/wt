@@ -5,6 +5,7 @@ import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
+import { cdCommand } from "./commands/cd.js";
 import { isGitRepository, getGitRoot } from "./utils/git.js";
 import pkg from "../package.json";
 
@@ -46,5 +47,10 @@ program
   .description("Remove a worktree by ID")
   .option("--keep-branch", "Keep the branch after removing worktree")
   .action(removeCommand);
+
+program
+  .command("cd <target>")
+  .description("Change directory to a worktree by ID or branch name")
+  .action(cdCommand);
 
 program.parse();

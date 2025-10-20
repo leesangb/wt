@@ -2,7 +2,7 @@
 # Add this to your ~/.config/fish/config.fish
 
 function wt
-    if test "$argv[1]" = "new"
+    if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"
         set -l output (/path/to/wt $argv)
         set -l exit_code $status
         
