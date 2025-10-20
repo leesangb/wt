@@ -10,6 +10,7 @@ interface NewCommandOptions {
   base?: string;
   push?: boolean;
   cd?: boolean;
+  id?: string;
 }
 
 export async function newCommand(branchName: string, options: NewCommandOptions): Promise<void> {
@@ -25,7 +26,7 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
   const baseBranch = options.base ?? settings.baseBranch ?? "main";
   const pushRemote = options.push ?? settings.pushRemote ?? true;
   
-  const shortId = generateShortId();
+  const shortId = options.id ?? generateShortId();
   const dirName = `${repoName}-${shortId}`;
   const worktreeBaseDir = expandPath(settings.worktreeDir);
   const worktreePath = join(worktreeBaseDir, dirName);
