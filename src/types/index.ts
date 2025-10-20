@@ -15,4 +15,6 @@ export interface WorktreeInfo {
   branch: string;
   repoName: string;
   createdAt: string;
+  baseBranch?: string;
+  baseCommit?: string;
 }

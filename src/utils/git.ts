@@ -88,6 +88,19 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
       
       const stats = statSync(path);
       
+      let baseBranch: string | undefined;
+      let baseCommit: string | undefined;
+      
+      try {
+        const { readFileSync } = await import("fs");
+        const metaPath = `${path}/.wt-meta`;
+        const metaContent = readFileSync(metaPath, 'utf-8');
+        const meta = JSON.parse(metaContent);
+        baseBranch = meta.baseBranch;
+        baseCommit = meta.baseCommit;
+      } catch {
+      }
+      
       worktrees.push({
         id,
         fullId,
@@ -95,6 +108,8 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
         branch,
         repoName,
         createdAt: stats.birthtime.toISOString(),
+        baseBranch,
+        baseCommit,
       });
     }
   }
@@ -108,4 +123,42 @@ export async function removeWorktree(path: string): Promise<void> {
 
 export async function deleteBranch(branch: string): Promise<void> {
   await $`git branch -D ${branch}`;
+}
+
+export async function isBranchMergedToRemote(branch: string): Promise<boolean> {
+  try {
+    const result = await $`git branch -r --merged origin/main`.text();
+    const mergedBranches = result.trim().split('\n').map(b => b.trim());
+    return mergedBranches.some(b => b === `origin/${branch}`);
+  } catch {
+    return false;
+  }
+}
+
+export async function getUnpushedCommitCount(path: string, branch: string): Promise<number> {
+  try {
+    const result = await $`git -C ${path} rev-list --count origin/${branch}..${branch}`.quiet().text();
+    return parseInt(result.trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function getLocalModificationCount(path: string): Promise<number> {
+  try {
+    const result = await $`git -C ${path} status --porcelain`.text();
+    const lines = result.trim().split('\n').filter(line => line.length > 0);
+    return lines.length;
+  } catch {
+    return 0;
+  }
+}
+
+export async function getCommitHash(ref: string): Promise<string> {
+  try {
+    const result = await $`git rev-parse ${ref}`.text();
+    return result.trim();
+  } catch {
+    return '';
+  }
 }

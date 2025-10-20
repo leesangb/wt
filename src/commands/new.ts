@@ -1,7 +1,7 @@
 import chalk from "chalk";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { isGitRepository, getGitRoot, getRepoName, createWorktree, fetchRemote } from "../utils/git.js";
+import { isGitRepository, getGitRoot, getRepoName, createWorktree, fetchRemote, getCommitHash } from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
 import { generateShortId } from "../utils/id.js";
 import { executeScripts } from "../utils/script.js";
@@ -39,6 +39,8 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
     console.log(chalk.blue("Fetching latest changes..."));
     await fetchRemote();
     
+    const baseCommit = await getCommitHash(baseBranch);
+    
     if (settings.scripts?.pre && settings.scripts.pre.length > 0) {
       console.log(chalk.blue("Running pre scripts..."));
       await executeScripts(settings.scripts.pre, repoRoot, {
@@ -52,6 +54,14 @@ export async function newCommand(branchName: string, options: NewCommandOptions)
 
     console.log(chalk.blue(`Creating worktree at ${worktreePath}...`));
     await createWorktree(worktreePath, branchName, baseBranch, pushRemote);
+    
+    const metaInfo = {
+      baseBranch,
+      baseCommit,
+      createdAt: new Date().toISOString(),
+    };
+    writeFileSync(join(worktreePath, ".wt-meta"), JSON.stringify(metaInfo, null, 2));
+    
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 
     if (settings.scripts?.post && settings.scripts.post.length > 0) {

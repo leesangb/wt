@@ -1,5 +1,11 @@
 import chalk from "chalk";
-import { isGitRepository, listWorktrees } from "../utils/git.js";
+import {
+  isGitRepository,
+  listWorktrees,
+  isBranchMergedToRemote,
+  getUnpushedCommitCount,
+  getLocalModificationCount,
+} from "../utils/git.js";
 
 export async function listCommand(): Promise<void> {
   if (!(await isGitRepository())) {
@@ -15,10 +21,10 @@ export async function listCommand(): Promise<void> {
   }
 
   const currentPath = process.cwd();
-  const currentWorktree = worktrees.find(wt => currentPath.startsWith(wt.path));
-  
+  const currentWorktree = worktrees.find((wt) => currentPath.startsWith(wt.path));
+
   const sortedWorktrees = currentWorktree
-    ? [currentWorktree, ...worktrees.filter(wt => wt.path !== currentWorktree.path)]
+    ? [currentWorktree, ...worktrees.filter((wt) => wt.path !== currentWorktree.path)]
     : worktrees;
 
   console.log(chalk.bold(`\nWorktrees (${worktrees[0].repoName}):`));
@@ -27,12 +33,32 @@ export async function listCommand(): Promise<void> {
   for (const wt of sortedWorktrees) {
     const isCurrent = wt.path === currentWorktree?.path;
     const idLabel = isCurrent ? `${wt.id} ${chalk.green("(current)")}` : wt.id;
-    
+
     const createdDate = new Date(wt.createdAt);
     const timestamp = createdDate.toLocaleString();
+
+    const isMerged = await isBranchMergedToRemote(wt.branch);
+    const unpushedCount = await getUnpushedCommitCount(wt.path, wt.branch);
+    const modifiedCount = await getLocalModificationCount(wt.path);
+
+    const baseInfo = wt.baseBranch && wt.baseCommit
+      ? chalk.dim(`from ${wt.baseBranch}@${wt.baseCommit.substring(0, 7)}`)
+      : wt.baseBranch
+      ? chalk.dim(`from ${wt.baseBranch}`)
+      : '';
     
+    const indicators = [];
+    if (isMerged) indicators.push(chalk.dim("(merged)"));
+    if (unpushedCount > 0) indicators.push(chalk.yellow(`↑${unpushedCount} commits not pushed`));
+    if (modifiedCount > 0) indicators.push(chalk.red(`!${modifiedCount} files not tracked`));
+
+    const parts = [wt.branch];
+    if (baseInfo) parts.push(baseInfo);
+    if (indicators.length > 0) parts.push(indicators.join(" "));
+    const branchLabel = parts.join(" ");
+
     console.log(chalk.cyan(`ID:      ${idLabel}`));
-    console.log(chalk.white(`Branch:  ${wt.branch}`));
+    console.log(chalk.white(`Branch:  ${branchLabel}`));
     console.log(chalk.dim(`Path:    ${wt.path}`));
     console.log(chalk.dim(`Created: ${timestamp}`));
     console.log(chalk.dim("─".repeat(80)));
