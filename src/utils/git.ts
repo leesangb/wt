@@ -1,4 +1,5 @@
 import { basename } from "path";
+import { spawn } from "bun";
 import type { WorktreeInfo } from "../types/index.js";
 import { $ } from "bun";
 
@@ -37,10 +38,24 @@ export async function fetchRemote(): Promise<void> {
 }
 
 export async function createWorktree(path: string, branch: string, base: string, pushRemote: boolean = true): Promise<void> {
-  await $`git worktree add -b ${branch} ${path} ${base}`;
+  const addProc = spawn(['git', 'worktree', 'add', '-b', branch, path, base], {
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const addResult = await addProc.exited;
+  if (addResult !== 0) {
+    throw new Error(`git worktree add failed with exit code ${addResult}`);
+  }
 
   if (pushRemote) {
-    await $`cd ${path} && git push -u origin ${branch}`;
+    const pushProc = spawn(['git', '-C', path, 'push', '-u', 'origin', branch], {
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    const pushResult = await pushProc.exited;
+    if (pushResult !== 0) {
+      throw new Error(`git push failed with exit code ${pushResult}`);
+    }
   }
 }
 

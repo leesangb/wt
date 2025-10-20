@@ -4,15 +4,18 @@
 wt() {
   if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
     local output
-    output=$(/path/to/wt "$@")
+    output=$(/path/to/wt "$@" 2>&1)
     local exit_code=$?
     
     if [ $exit_code -eq 0 ]; then
-      local cd_cmd=$(echo "$output" | tail -n 1)
+      local last_line=$(echo "$output" | tail -n 1 | tr -d '\n')
       
-      if [[ "$cd_cmd" == cd\ * ]]; then
-        echo "$output" | sed '$d'
-        eval "$cd_cmd"
+      if [[ "$last_line" == cd\ * ]]; then
+        local lines=$(echo "$output" | wc -l | tr -d ' ')
+        if [ "$lines" -gt 1 ]; then
+          echo "$output" | head -n -1
+        fi
+        eval "$last_line"
       else
         echo "$output"
       fi
