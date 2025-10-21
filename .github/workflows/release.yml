@@ -18,6 +18,7 @@ jobs:
     outputs:
       hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
       version: ${{ steps.package-version.outputs.VERSION }}
+      skipRelease: ${{ steps.tag-check.outputs.SKIP_RELEASE }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -39,11 +40,36 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Check existing tag & release
+        id: tag-check
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${{ steps.package-version.outputs.VERSION }}
+          git fetch --tags --quiet
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/releases/tags/v${VERSION})
+            if [ "$code" = "200" ]; then
+              echo "SKIP_RELEASE=true" >> $GITHUB_OUTPUT
+              echo "Existing release v${VERSION} found – skipping build." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "SKIP_RELEASE=false" >> $GITHUB_OUTPUT
+              echo "Tag v${VERSION} exists without release – will publish assets." >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "SKIP_RELEASE=false" >> $GITHUB_OUTPUT
+            echo "No existing tag v${VERSION} – proceeding." >> $GITHUB_STEP_SUMMARY
+          fi
+
   build-and-release:
     name: Build and Release (macOS)
     runs-on: macos-latest
     needs: release
-    if: needs.release.outputs.hasChangesets == 'false'
+    if: needs.release.outputs.hasChangesets == 'false' && needs.release.outputs.skipRelease != 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
