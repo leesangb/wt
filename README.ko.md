@@ -147,6 +147,28 @@ wt new feature-branch --no-cd
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
 
+### wt 업데이트
+
+최신 릴리스로 업데이트 (현재 macOS만 지원):
+```bash
+wt update
+```
+
+현재 버전을 강제로 다시 다운로드:
+```bash
+wt update --force
+```
+
+특정 버전 설치:
+```bash
+wt update --version 0.1.2
+```
+
+quarantine 속성 제거를 건너뛰기:
+```bash
+wt update --no-remove-quarantine
+```
+
 ### 모든 worktree 목록 조회
 
 ```bash

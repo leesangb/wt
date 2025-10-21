@@ -147,6 +147,28 @@ This will:
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
 
+### Update wt
+
+Update to the latest release (macOS only for now):
+```bash
+wt update
+```
+
+Force re-download current version:
+```bash
+wt update --force
+```
+
+Install a specific version:
+```bash
+wt update --version 0.1.2
+```
+
+Skip removing quarantine attribute:
+```bash
+wt update --no-remove-quarantine
+```
+
 ### List all worktrees
 
 ```bash
