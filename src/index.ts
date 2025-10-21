@@ -6,6 +6,7 @@ import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
+import { updateCommand } from "./commands/update.js";
 import { isGitRepository, getGitRoot } from "./utils/git.js";
 import pkg from "../package.json";
 
@@ -53,5 +54,13 @@ program
   .command("cd <target>")
   .description("Change directory to a worktree by ID or branch name")
   .action(cdCommand);
+
+program
+  .command("update")
+  .description("Update wt to the latest (or specified) released version")
+  .option("-v, --version <version>", "Specific version to install (e.g. 0.3.1)")
+  .option("-f, --force", "Force re-download even if version is not newer")
+  .option("--no-remove-quarantine", "Do not remove macOS quarantine attribute after download")
+  .action(updateCommand);
 
 program.parse();
