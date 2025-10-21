@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --compile --outfile wt",
-    "build:release": "bun run build && changeset publish",
     "version": "changeset version",
     "changeset": "changeset"
   },

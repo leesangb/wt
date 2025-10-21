@@ -29,11 +29,17 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bun run version
-          publish: bun run build:release
           commit: "chore: release packages"
           title: "chore: release packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Git Tag
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git tag v$VERSION
+          git push origin v$VERSION
 
   build-binaries:
     name: Build Binaries (${{ matrix.platform }})
