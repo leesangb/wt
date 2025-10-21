@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --compile --outfile wt"
+    "build": "bun build src/index.ts --compile --outfile wt",
+    "build:release": "bun run build && changeset publish",
+    "version": "changeset version",
+    "changeset": "changeset"
   },
   "keywords": [
     "git",
@@ -31,6 +34,7 @@
     "commander": "^14.0.1"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@changesets/cli": "^2.27.1"
   }
 }
