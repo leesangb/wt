@@ -5,26 +5,26 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
-      publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
-    permissions:
-      contents: write
-      pull-requests: write
+      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
+      version: ${{ steps.package-version.outputs.VERSION }}
     steps:
-      - name: Checkout repository
+      - name: Checkout Repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Create Release Pull Request or Publish
+      - name: Create Release Pull Request
         id: changesets
         uses: changesets/action@v1
         with:
@@ -34,45 +34,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Git Tag
+      - name: Get Package Version
+        id: package-version
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          git tag v$VERSION
-          git push origin v$VERSION
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-  build-binaries:
-    name: Build Binaries (${{ matrix.platform }})
+  build-and-release:
+    name: Build and Release (macOS)
     runs-on: macos-latest
     needs: release
-    if: needs.release.outputs.published == 'true'
-    strategy:
-      matrix:
-        include:
-          - platform: macos-x64
-            target: bun-darwin-x64
-            artifact: wt-macos-x64
-          - platform: macos-arm64
-            target: bun-darwin-arm64
-            artifact: wt-macos-arm64
-
+    if: needs.release.outputs.hasChangesets == 'false'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Build binary
-        run: bun build src/index.ts --compile --target=${{ matrix.target }} --outfile ${{ matrix.artifact }}
+      - name: Build macOS x64 binary
+        run: bun build src/index.ts --compile --target=bun-darwin-x64 --outfile wt-macos-x64
 
-      - name: Get version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      - name: Build macOS arm64 binary
+        run: bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile wt-macos-arm64
 
-      - name: Upload to Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: ${{ matrix.artifact }}
+          tag_name: v${{ needs.release.outputs.version }}
+          files: |
+            wt-macos-x64
+            wt-macos-arm64
+          generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
