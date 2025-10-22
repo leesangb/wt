@@ -27,3 +27,13 @@ wt() {
     /path/to/wt "$@"
   fi
 }
+
+_wt_completion() {
+  if [ "${COMP_WORDS[1]}" = "cd" ] && [ $COMP_CWORD -eq 2 ]; then
+    local items=$(/path/to/wt list --completion bash 2>/dev/null)
+    local ids=$(echo "$items" | cut -d: -f1)
+    COMPREPLY=($(compgen -W "$ids" -- "${COMP_WORDS[2]}"))
+  fi
+}
+
+complete -F _wt_completion wt

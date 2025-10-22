@@ -16,7 +16,7 @@ program
   .name("wt")
   .description("Git worktree manager CLI")
   .version(pkg.version)
-  .hook('preAction', async () => {
+  .hook("preAction", async () => {
     if (await isGitRepository()) {
       const repoRoot = await getGitRoot();
       process.chdir(repoRoot);
@@ -41,6 +41,7 @@ program
   .command("list")
   .alias("ls")
   .description("List all worktrees")
+  .option("--completion <format>", "Output completion format (bash, zsh, fish)")
   .action(listCommand);
 
 program
@@ -60,7 +61,10 @@ program
   .description("Update wt to the latest (or specified) released version")
   .option("-v, --version <version>", "Specific version to install (e.g. 0.3.1)")
   .option("-f, --force", "Force re-download even if version is not newer")
-  .option("--no-remove-quarantine", "Do not remove macOS quarantine attribute after download")
+  .option(
+    "--no-remove-quarantine",
+    "Do not remove macOS quarantine attribute after download"
+  )
   .action(updateCommand);
 
 program.parse();

@@ -7,7 +7,11 @@ import {
   getLocalModificationCount,
 } from "../utils/git.js";
 
-export async function listCommand(): Promise<void> {
+type CompletionFormat = "bash" | "zsh" | "fish";
+
+export async function listCommand(options?: {
+  completion?: CompletionFormat;
+}): Promise<void> {
   if (!(await isGitRepository())) {
     console.error(chalk.red("Error: Not a git repository"));
     process.exit(1);
@@ -15,16 +19,42 @@ export async function listCommand(): Promise<void> {
 
   const worktrees = await listWorktrees();
 
+  if (options?.completion) {
+    for (const wt of worktrees) {
+      let description = wt.branch;
+      if (wt.baseBranch && wt.baseCommit) {
+        description += ` from ${wt.baseBranch}@${wt.baseCommit.substring(
+          0,
+          7
+        )}`;
+      } else if (wt.baseBranch) {
+        description += ` from ${wt.baseBranch}`;
+      }
+
+      if (options.completion === "fish") {
+        console.log(`${wt.id}\t${description}`);
+      } else {
+        console.log(`${wt.id}:${description}`);
+      }
+    }
+    return;
+  }
+
   if (worktrees.length === 0) {
     console.log(chalk.yellow("No worktrees found"));
     return;
   }
 
   const currentPath = process.cwd();
-  const currentWorktree = worktrees.find((wt) => currentPath.startsWith(wt.path));
+  const currentWorktree = worktrees.find((wt) =>
+    currentPath.startsWith(wt.path)
+  );
 
   const sortedWorktrees = currentWorktree
-    ? [currentWorktree, ...worktrees.filter((wt) => wt.path !== currentWorktree.path)]
+    ? [
+        currentWorktree,
+        ...worktrees.filter((wt) => wt.path !== currentWorktree.path),
+      ]
     : worktrees;
 
   console.log(chalk.bold(`\nWorktrees (${worktrees[0].repoName}):`));
@@ -41,16 +71,19 @@ export async function listCommand(): Promise<void> {
     const unpushedCount = await getUnpushedCommitCount(wt.path, wt.branch);
     const modifiedCount = await getLocalModificationCount(wt.path);
 
-    const baseInfo = wt.baseBranch && wt.baseCommit
-      ? chalk.dim(`from ${wt.baseBranch}@${wt.baseCommit.substring(0, 7)}`)
-      : wt.baseBranch
-      ? chalk.dim(`from ${wt.baseBranch}`)
-      : '';
-    
+    const baseInfo =
+      wt.baseBranch && wt.baseCommit
+        ? chalk.dim(`from ${wt.baseBranch}@${wt.baseCommit.substring(0, 7)}`)
+        : wt.baseBranch
+        ? chalk.dim(`from ${wt.baseBranch}`)
+        : "";
+
     const indicators = [];
     if (isMerged) indicators.push(chalk.dim("(merged)"));
-    if (unpushedCount > 0) indicators.push(chalk.yellow(`↑${unpushedCount} commits not pushed`));
-    if (modifiedCount > 0) indicators.push(chalk.red(`!${modifiedCount} files not tracked`));
+    if (unpushedCount > 0)
+      indicators.push(chalk.yellow(`↑${unpushedCount} commits not pushed`));
+    if (modifiedCount > 0)
+      indicators.push(chalk.red(`!${modifiedCount} files not tracked`));
 
     const parts = [wt.branch];
     if (baseInfo) parts.push(baseInfo);

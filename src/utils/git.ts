@@ -22,14 +22,13 @@ export async function getRepoName(): Promise<string> {
   try {
     const remoteUrl = await $`git remote get-url origin`.text();
     const url = remoteUrl.trim();
-    
+
     const match = url.match(/\/([^\/]+?)(?:\.git)?$/);
     if (match) {
       return match[1];
     }
-  } catch {
-  }
-  
+  } catch {}
+
   const root = await getGitRoot();
   return basename(root);
 }
@@ -38,10 +37,15 @@ export async function fetchRemote(): Promise<void> {
   await $`git fetch`;
 }
 
-export async function createWorktree(path: string, branch: string, base: string, pushRemote: boolean = true): Promise<void> {
-  const addProc = spawn(['git', 'worktree', 'add', '-b', branch, path, base], {
-    stdout: 'inherit',
-    stderr: 'inherit',
+export async function createWorktree(
+  path: string,
+  branch: string,
+  base: string,
+  pushRemote: boolean = true
+): Promise<void> {
+  const addProc = spawn(["git", "worktree", "add", "-b", branch, path, base], {
+    stdout: "inherit",
+    stderr: "inherit",
   });
   const addResult = await addProc.exited;
   if (addResult !== 0) {
@@ -49,10 +53,13 @@ export async function createWorktree(path: string, branch: string, base: string,
   }
 
   if (pushRemote) {
-    const pushProc = spawn(['git', '-C', path, 'push', '-u', 'origin', branch], {
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
+    const pushProc = spawn(
+      ["git", "-C", path, "push", "-u", "origin", branch],
+      {
+        stdout: "inherit",
+        stderr: "inherit",
+      }
+    );
     const pushResult = await pushProc.exited;
     if (pushResult !== 0) {
       throw new Error(`git push failed with exit code ${pushResult}`);
@@ -63,44 +70,46 @@ export async function createWorktree(path: string, branch: string, base: string,
 export async function listWorktrees(): Promise<WorktreeInfo[]> {
   const result = await $`git worktree list --porcelain`.text();
   const worktrees: WorktreeInfo[] = [];
-  
-  const entries = result.trim().split('\n\n');
+
+  const entries = result.trim().split("\n\n");
   const repoName = await getRepoName();
-  
+
   for (const entry of entries) {
-    const lines = entry.split('\n');
-    let path = '';
-    let branch = '';
-    
+    const lines = entry.split("\n");
+    let path = "";
+    let branch = "";
+
     for (const line of lines) {
-      if (line.startsWith('worktree ')) {
+      if (line.startsWith("worktree ")) {
         path = line.substring(9);
-      } else if (line.startsWith('branch ')) {
-        branch = line.substring(7).replace('refs/heads/', '');
+      } else if (line.startsWith("branch ")) {
+        branch = line.substring(7).replace("refs/heads/", "");
       }
     }
-    
+
     if (path && branch) {
       const fullId = basename(path);
-      const id = fullId.startsWith(`${repoName}-`) 
-        ? fullId.substring(repoName.length + 1) 
+      const id = fullId.startsWith(`${repoName}-`)
+        ? fullId.substring(repoName.length + 1)
         : fullId;
-      
+
       const stats = statSync(path);
-      
+
       let baseBranch: string | undefined;
       let baseCommit: string | undefined;
-      
+
       try {
         const { readFileSync } = await import("fs");
-        const metaPath = `${path}/.wt/meta.json`;
-        const metaContent = readFileSync(metaPath, 'utf-8');
+        let metaPath = `${path}/.wt/meta.json`;
+        if (!require("fs").existsSync(metaPath)) {
+          metaPath = `${path}/.wt/meta`;
+        }
+        const metaContent = readFileSync(metaPath, "utf-8");
         const meta = JSON.parse(metaContent);
         baseBranch = meta.baseBranch;
         baseCommit = meta.baseCommit;
-      } catch {
-      }
-      
+      } catch {}
+
       worktrees.push({
         id,
         fullId,
@@ -113,7 +122,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
       });
     }
   }
-  
+
   return worktrees;
 }
 
@@ -128,16 +137,25 @@ export async function deleteBranch(branch: string): Promise<void> {
 export async function isBranchMergedToRemote(branch: string): Promise<boolean> {
   try {
     const result = await $`git branch -r --merged origin/main`.text();
-    const mergedBranches = result.trim().split('\n').map(b => b.trim());
-    return mergedBranches.some(b => b === `origin/${branch}`);
+    const mergedBranches = result
+      .trim()
+      .split("\n")
+      .map((b) => b.trim());
+    return mergedBranches.some((b) => b === `origin/${branch}`);
   } catch {
     return false;
   }
 }
 
-export async function getUnpushedCommitCount(path: string, branch: string): Promise<number> {
+export async function getUnpushedCommitCount(
+  path: string,
+  branch: string
+): Promise<number> {
   try {
-    const result = await $`git -C ${path} rev-list --count origin/${branch}..${branch}`.quiet().text();
+    const result =
+      await $`git -C ${path} rev-list --count origin/${branch}..${branch}`
+        .quiet()
+        .text();
     return parseInt(result.trim(), 10) || 0;
   } catch {
     return 0;
@@ -147,7 +165,10 @@ export async function getUnpushedCommitCount(path: string, branch: string): Prom
 export async function getLocalModificationCount(path: string): Promise<number> {
   try {
     const result = await $`git -C ${path} status --porcelain`.text();
-    const lines = result.trim().split('\n').filter(line => line.length > 0);
+    const lines = result
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0);
     return lines.length;
   } catch {
     return 0;
@@ -159,6 +180,6 @@ export async function getCommitHash(ref: string): Promise<string> {
     const result = await $`git rev-parse ${ref}`.text();
     return result.trim();
   } catch {
-    return '';
+    return "";
   }
 }

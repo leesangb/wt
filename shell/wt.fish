@@ -26,3 +26,5 @@ function wt
         /path/to/wt $argv
     end
 end
+
+complete -c wt -n "__fish_seen_subcommand_from cd" -a "(/path/to/wt list --completion fish 2>/dev/null)" -f

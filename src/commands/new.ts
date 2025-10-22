@@ -1,7 +1,20 @@
 import chalk from "chalk";
-import { existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  appendFileSync,
+} from "fs";
 import { join } from "path";
-import { isGitRepository, getGitRoot, getRepoName, createWorktree, fetchRemote, getCommitHash } from "../utils/git.js";
+import {
+  isGitRepository,
+  getGitRoot,
+  getRepoName,
+  createWorktree,
+  fetchRemote,
+  getCommitHash,
+} from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
 import { generateShortId } from "../utils/id.js";
 import { executeScripts } from "../utils/script.js";
@@ -13,7 +26,10 @@ interface NewCommandOptions {
   id?: string;
 }
 
-export async function newCommand(branchName: string, options: NewCommandOptions): Promise<void> {
+export async function newCommand(
+  branchName: string,
+  options: NewCommandOptions
+): Promise<void> {
   if (!(await isGitRepository())) {
     console.error(chalk.red("Error: Not a git repository"));
     process.exit(1);
