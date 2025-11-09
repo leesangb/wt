@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import { mkdtempSync, writeFileSync, chmodSync, renameSync } from "fs";
-import { tmpdir } from "os";
+import { mkdtempSync, writeFileSync, chmodSync, renameSync, existsSync } from "fs";
+import { tmpdir, homedir } from "os";
 import { join } from "path";
 
 interface UpdateOptions {
@@ -128,5 +128,58 @@ async function downloadAndSwapBinary(url: string, version: string, assetName: st
   }
 
   console.log(chalk.green(`✓ Updated wt to version ${version}`));
+  
+  // Update shell integration scripts
+  await updateShellIntegration(version);
+  
   console.log(chalk.dim('Run: wt --version to verify.'));
+}
+
+async function updateShellIntegration(version: string) {
+  const shellDir = join(homedir(), '.wt', 'shell');
+  
+  if (!existsSync(shellDir)) {
+    console.log(chalk.yellow('Shell integration directory not found. Skipping shell integration update.'));
+    return;
+  }
+
+  console.log(chalk.blue('Updating shell integration scripts...'));
+  
+  const shellScripts = ['wt.bash', 'wt.zsh', 'wt.fish'];
+  const binaryPath = process.execPath;
+  
+  let updatedCount = 0;
+  
+  for (const scriptName of shellScripts) {
+    const scriptPath = join(shellDir, scriptName);
+    
+    if (!existsSync(scriptPath)) {
+      continue;
+    }
+    
+    try {
+      const url = `https://raw.githubusercontent.com/leesangb/wt/v${version}/shell/${scriptName}`;
+      const resp = await fetch(url);
+      
+      if (!resp.ok) {
+        console.log(chalk.yellow(`Could not download ${scriptName} (status ${resp.status})`));
+        continue;
+      }
+      
+      let content = await resp.text();
+      // Replace placeholder with actual binary path
+      content = content.replace(/\/path\/to\/wt/g, binaryPath);
+      
+      writeFileSync(scriptPath, content, 'utf-8');
+      updatedCount++;
+      console.log(chalk.green(`✓ Updated ${scriptName}`));
+    } catch (err: any) {
+      console.log(chalk.yellow(`Failed to update ${scriptName}: ${err.message}`));
+    }
+  }
+  
+  if (updatedCount > 0) {
+    console.log(chalk.green(`✓ Updated ${updatedCount} shell integration script(s)`));
+    console.log(chalk.yellow('Note: Restart your shell or source your config file to apply changes.'));
+  }
 }
