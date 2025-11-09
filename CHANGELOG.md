@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.1.5
+
+### Patch Changes
+
+- 8a06c5c: fix update script to update shell-integration
+
 ## 0.1.4
 
 ### Patch Changes
