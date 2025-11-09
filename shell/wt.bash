@@ -13,7 +13,7 @@ wt() {
       if [[ "$last_line" == cd\ * ]]; then
         local lines=$(echo "$output" | wc -l | tr -d ' ')
         if [ "$lines" -gt 1 ]; then
-          echo "$output" | head -n -1
+          echo "$output" | sed '$d'
         fi
         eval "$last_line"
       else

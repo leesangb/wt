@@ -12,7 +12,7 @@ function wt
             if string match -q "cd *" -- $last_line
                 set -l lines (echo "$output" | wc -l | tr -d ' ')
                 if test $lines -gt 1
-                    echo "$output" | head -n -1
+                    echo "$output" | sed '$d'
                 end
                 eval $last_line
             else
