@@ -113,7 +113,8 @@ This creates `.wt/settings.json` in your repository:
   "pushRemote": true,
   "scripts": {
     "pre": [],
-    "post": []
+    "post": [],
+    "postMode": "sync"
   }
 }
 ```
@@ -142,10 +143,14 @@ This will:
 5. Run the post scripts in the new worktree (if configured)
 6. Automatically change to the new worktree directory (with shell wrapper)
 
+When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`).
+
 **Options:**
 - `--base <branch>` - Base branch to create from (default: from settings or `main`)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
+- `--post-async` - Run post scripts in background and return immediately
+- `--post-sync` - Force waiting for post scripts to complete
 
 ### Update wt
 
@@ -199,6 +204,7 @@ Edit `.wt/settings.json` in your repository:
 - **pushRemote**: Auto-push new branch to remote (default: `true`)
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
+- **scripts.postMode**: `sync` (default) or `async` for background execution
 
 ### Environment Variables
 
