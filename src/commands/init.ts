@@ -23,6 +23,7 @@ export async function initCommand(): Promise<void> {
     scripts: {
       pre: [],
       post: [],
+      postMode: "async",
     },
   };
 
@@ -34,4 +35,5 @@ export async function initCommand(): Promise<void> {
   console.log(chalk.dim("  - pushRemote: Auto-push new branch to remote (default: true)"));
   console.log(chalk.dim("  - scripts.pre: Array of commands to run before creating worktree"));
   console.log(chalk.dim("  - scripts.post: Array of commands to run after creating worktree"));
+  console.log(chalk.dim("  - scripts.postMode: 'sync' | 'async' (default: async)"));
 }

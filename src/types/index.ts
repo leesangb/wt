@@ -1,3 +1,5 @@
+export type ScriptMode = "sync" | "async";
+
 export interface WtSettings {
   worktreeDir: string;
   baseBranch?: string;
@@ -5,6 +7,7 @@ export interface WtSettings {
   scripts?: {
     pre?: string[];
     post?: string[];
+    postMode?: ScriptMode;
   };
 }
 

@@ -17,7 +17,7 @@ import {
 } from "../utils/git.js";
 import { loadSettings, expandPath } from "../config/settings.js";
 import { generateShortId } from "../utils/id.js";
-import { executeScripts } from "../utils/script.js";
+import { executeScripts, executeScriptsDetached } from "../utils/script.js";
 
 interface NewCommandOptions {
   base?: string;
@@ -86,14 +86,35 @@ export async function newCommand(
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 
     if (settings.scripts?.post && settings.scripts.post.length > 0) {
-      console.log(chalk.blue("Running post scripts..."));
-      await executeScripts(settings.scripts.post, worktreePath, {
+      const env = {
         WT_PATH: worktreePath,
         WT_ID: shortId,
         WT_FULL_ID: dirName,
         WT_BRANCH: branchName,
         WT_REPO_ROOT: repoRoot,
-      });
+      };
+
+      const postMode = settings.scripts.postMode ?? "async";
+
+      if (postMode === "async") {
+        const statusFilePath = join(wtDir, "post-task.json");
+        const logFilePath = join(wtDir, "post-task.log");
+        const pid = executeScriptsDetached(
+          settings.scripts.post,
+          worktreePath,
+          env,
+          statusFilePath,
+          logFilePath
+        );
+
+        console.log(chalk.blue("Starting post scripts in background..."));
+        console.log(chalk.dim(`  PID: ${pid}`));
+        console.log(chalk.dim(`  Status: ${statusFilePath}`));
+        console.log(chalk.dim(`  Log: ${logFilePath}`));
+      } else {
+        console.log(chalk.blue("Running post scripts..."));
+        await executeScripts(settings.scripts.post, worktreePath, env);
+      }
     }
 
     console.log(chalk.green(`\n✓ Worktree created successfully!`));

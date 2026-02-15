@@ -4,7 +4,9 @@ import type { WtSettings } from "../types/index.js";
 
 const DEFAULT_SETTINGS: WtSettings = {
   worktreeDir: "~/.wt",
-  scripts: {},
+  scripts: {
+    postMode: "async",
+  },
 };
 
 export async function getSettingsPath(repoRoot: string): Promise<string> {
@@ -24,8 +26,15 @@ export async function loadSettings(repoRoot: string): Promise<WtSettings> {
   }
   
   const content = JSON.parse(await Bun.file(settingsPath).text());
-  
-  return { ...DEFAULT_SETTINGS, ...content };
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...content,
+    scripts: {
+      ...DEFAULT_SETTINGS.scripts,
+      ...content.scripts,
+    },
+  };
 }
 
 export async function saveSettings(repoRoot: string, settings: WtSettings): Promise<void> {
