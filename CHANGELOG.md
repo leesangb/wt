@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.1.6
+
+### Patch Changes
+
+- 804efd9: async mode
+
 ## 0.1.5
 
 ### Patch Changes
