@@ -114,7 +114,7 @@ This creates `.wt/settings.json` in your repository:
   "scripts": {
     "pre": [],
     "post": [],
-    "postMode": "sync"
+    "postMode": "async"
   }
 }
 ```
@@ -149,8 +149,6 @@ When post scripts run in async mode, `wt` returns immediately and writes status/
 - `--base <branch>` - Base branch to create from (default: from settings or `main`)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
-- `--post-async` - Run post scripts in background and return immediately
-- `--post-sync` - Force waiting for post scripts to complete
 
 ### Update wt
 
@@ -204,7 +202,7 @@ Edit `.wt/settings.json` in your repository:
 - **pushRemote**: Auto-push new branch to remote (default: `true`)
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
-- **scripts.postMode**: `sync` (default) or `async` for background execution
+- **scripts.postMode**: `async` (default) or `sync` for foreground execution
 
 ### Environment Variables
 

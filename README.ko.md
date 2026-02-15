@@ -148,8 +148,6 @@ post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `
 - `--base <branch>` - 생성할 기본 브랜치 (기본값: 설정 또는 `main`)
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
-- `--post-async` - post 스크립트를 백그라운드에서 실행하고 즉시 반환
-- `--post-sync` - post 스크립트 완료까지 대기하도록 강제
 
 ### wt 업데이트
 
@@ -203,7 +201,7 @@ wt rm <id>
 - **pushRemote**: 새 브랜치를 원격에 자동 푸시 (기본값: `true`)
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
-- **scripts.postMode**: `sync`(기본값) 또는 `async`(백그라운드 실행)
+- **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
 
 ### 환경 변수
 
@@ -226,7 +224,7 @@ wt rm <id>
   "scripts": {
     "pre": [],
     "post": [],
-    "postMode": "sync"
+    "postMode": "async"
   }
 }
 ```
