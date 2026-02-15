@@ -5,7 +5,7 @@ import type { WtSettings } from "../types/index.js";
 const DEFAULT_SETTINGS: WtSettings = {
   worktreeDir: "~/.wt",
   scripts: {
-    postMode: "sync",
+    postMode: "async",
   },
 };
 

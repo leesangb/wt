@@ -24,8 +24,6 @@ interface NewCommandOptions {
   push?: boolean;
   cd?: boolean;
   id?: string;
-  postAsync?: boolean;
-  postSync?: boolean;
 }
 
 export async function newCommand(
@@ -96,11 +94,7 @@ export async function newCommand(
         WT_REPO_ROOT: repoRoot,
       };
 
-      const postMode = options.postSync
-        ? "sync"
-        : options.postAsync
-          ? "async"
-          : settings.scripts.postMode ?? "sync";
+      const postMode = settings.scripts.postMode ?? "async";
 
       if (postMode === "async") {
         const statusFilePath = join(wtDir, "post-task.json");

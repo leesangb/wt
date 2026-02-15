@@ -35,8 +35,6 @@ program
   .option("--id <id>", "Custom ID for the worktree")
   .option("--no-push", "Skip pushing the new branch to remote")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
-  .option("--post-async", "Run post scripts in background and return immediately")
-  .option("--post-sync", "Force waiting for post scripts to finish")
   .action(newCommand);
 
 program
