@@ -1,6 +1,6 @@
 import { basename } from "path";
 import { spawn } from "bun";
-import { statSync } from "fs";
+import { existsSync, statSync } from "fs";
 import type { WorktreeInfo } from "../types/index.js";
 import { $ } from "bun";
 
@@ -52,19 +52,41 @@ export async function createWorktree(
     throw new Error(`git worktree add failed with exit code ${addResult}`);
   }
 
-  if (pushRemote) {
-    const pushProc = spawn(
-      ["git", "-C", path, "push", "-u", "origin", branch],
-      {
-        stdout: "inherit",
-        stderr: "inherit",
+  try {
+    if (pushRemote) {
+      const pushProc = spawn(
+        ["git", "-C", path, "push", "-u", "origin", branch],
+        {
+          stdout: "inherit",
+          stderr: "inherit",
+        }
+      );
+      const pushResult = await pushProc.exited;
+      if (pushResult !== 0) {
+        throw new Error(`git push failed with exit code ${pushResult}`);
       }
-    );
-    const pushResult = await pushProc.exited;
-    if (pushResult !== 0) {
-      throw new Error(`git push failed with exit code ${pushResult}`);
     }
+  } catch (error) {
+    await cleanupFailedWorktreeCreation(path, branch);
+    throw error;
   }
+}
+
+async function cleanupFailedWorktreeCreation(
+  path: string,
+  branch: string
+): Promise<void> {
+  try {
+    if (existsSync(path)) {
+      await $`git worktree remove ${path} --force`.quiet();
+    }
+  } catch {}
+
+  try {
+    if (await branchExists(branch)) {
+      await $`git branch -D ${branch}`.quiet();
+    }
+  } catch {}
 }
 
 export async function listWorktrees(): Promise<WorktreeInfo[]> {
@@ -132,6 +154,15 @@ export async function removeWorktree(path: string): Promise<void> {
 
 export async function deleteBranch(branch: string): Promise<void> {
   await $`git branch -D ${branch}`;
+}
+
+export async function branchExists(branch: string): Promise<boolean> {
+  try {
+    await $`git show-ref --verify --quiet refs/heads/${branch}`.quiet();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function isBranchMergedToRemote(branch: string): Promise<boolean> {
