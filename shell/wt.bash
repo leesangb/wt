@@ -3,6 +3,7 @@
 
 wt() {
   if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
+    local cd_prefix="__WT_CD__:"
     local output
     output=$(/path/to/wt "$@" 2>&1)
     local exit_code=$?
@@ -10,12 +11,13 @@ wt() {
     if [ $exit_code -eq 0 ]; then
       local last_line=$(echo "$output" | tail -n 1 | tr -d '\n')
       
-      if [[ "$last_line" == cd\ * ]]; then
+      if [[ "$last_line" == "$cd_prefix"* ]]; then
+        local target_path="${last_line#${cd_prefix}}"
         local lines=$(echo "$output" | wc -l | tr -d ' ')
         if [ "$lines" -gt 1 ]; then
           echo "$output" | sed '$d'
         fi
-        eval "$last_line"
+        builtin cd -- "$target_path"
       else
         echo "$output"
       fi

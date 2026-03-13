@@ -3,18 +3,20 @@
 
 function wt
     if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"
+        set -l cd_prefix "__WT_CD__:"
         set -l output (/path/to/wt $argv 2>&1)
         set -l exit_code $status
         
         if test $exit_code -eq 0
             set -l last_line (echo "$output" | tail -n 1 | tr -d '\n')
             
-            if string match -q "cd *" -- $last_line
+            if string match -q "$cd_prefix*" -- $last_line
+                set -l target_path (string replace "$cd_prefix" "" -- $last_line)
                 set -l lines (echo "$output" | wc -l | tr -d ' ')
                 if test $lines -gt 1
                     echo "$output" | sed '$d'
                 end
-                eval $last_line
+                cd -- "$target_path"
             else
                 echo "$output"
             end
