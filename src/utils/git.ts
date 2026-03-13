@@ -134,9 +134,28 @@ export async function deleteBranch(branch: string): Promise<void> {
   await $`git branch -D ${branch}`;
 }
 
-export async function isBranchMergedToRemote(branch: string): Promise<boolean> {
+async function getDefaultRemoteBranch(): Promise<string | undefined> {
   try {
-    const result = await $`git branch -r --merged origin/main`.text();
+    const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.text();
+    return result.trim().replace("refs/remotes/origin/", "");
+  } catch {
+    return undefined;
+  }
+}
+
+export async function isBranchMergedToRemote(
+  branch: string,
+  baseBranch?: string
+): Promise<boolean> {
+  try {
+    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
+    if (!mergeBaseBranch) {
+      return false;
+    }
+
+    await $`git rev-parse --verify origin/${branch}`.quiet();
+
+    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
     const mergedBranches = result
       .trim()
       .split("\n")

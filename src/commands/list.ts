@@ -67,7 +67,7 @@ export async function listCommand(options?: {
     const createdDate = new Date(wt.createdAt);
     const timestamp = createdDate.toLocaleString();
 
-    const isMerged = await isBranchMergedToRemote(wt.branch);
+    const isMerged = await isBranchMergedToRemote(wt.branch, wt.baseBranch);
     const unpushedCount = await getUnpushedCommitCount(wt.path, wt.branch);
     const modifiedCount = await getLocalModificationCount(wt.path);
 
