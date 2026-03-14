@@ -18,6 +18,7 @@ import {
 import { loadSettings, expandPath } from "../config/settings.js";
 import { generateShortId } from "../utils/id.js";
 import { executeScripts, executeScriptsDetached } from "../utils/script.js";
+import { emitShellCd } from "../utils/cd.js";
 
 interface NewCommandOptions {
   base?: string;
@@ -124,7 +125,7 @@ export async function newCommand(
 
     // Output cd command for shell wrapper function
     if (options.cd !== false) {
-      console.log(`cd ${worktreePath}`);
+      emitShellCd(worktreePath);
     } else {
       console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
       console.log(chalk.cyan(`  cd ${worktreePath}`));
