@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { isGitRepository, listWorktrees } from "../utils/git.js";
+import { emitShellCd } from "../utils/cd.js";
 
 export async function cdCommand(target: string): Promise<void> {
   if (!(await isGitRepository())) {
@@ -22,5 +23,5 @@ export async function cdCommand(target: string): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`cd ${worktree.path}`);
+  emitShellCd(worktree.path);
 }
