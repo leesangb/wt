@@ -1,8 +1,47 @@
 import chalk from "chalk";
 import { isGitRepository, listWorktrees, removeWorktree, deleteBranch } from "../utils/git.js";
+import type { WorktreeInfo } from "../types/index.js";
 
 interface RemoveCommandOptions {
   keepBranch?: boolean;
+}
+
+interface ResolveRemovalTargetResult {
+  worktree?: WorktreeInfo;
+  error?: string;
+}
+
+export function resolveRemovalTarget(
+  worktrees: WorktreeInfo[],
+  target: string
+): ResolveRemovalTargetResult {
+  const exactMatch = worktrees.find(
+    (wt) => wt.id === target || wt.fullId === target || wt.path === target
+  );
+
+  if (exactMatch) {
+    return { worktree: exactMatch };
+  }
+
+  const partialMatches = worktrees.filter((wt) => wt.path.includes(target));
+
+  if (partialMatches.length === 1) {
+    return { worktree: partialMatches[0] };
+  }
+
+  if (partialMatches.length > 1) {
+    const candidates = partialMatches
+      .map((wt) => `${wt.id} (${wt.path})`)
+      .join(", ");
+
+    return {
+      error: `Ambiguous worktree target "${target}". Matches: ${candidates}`,
+    };
+  }
+
+  return {
+    error: `Worktree with ID "${target}" not found`,
+  };
 }
 
 export async function removeCommand(id: string, options: RemoveCommandOptions): Promise<void> {
@@ -12,12 +51,14 @@ export async function removeCommand(id: string, options: RemoveCommandOptions): 
   }
 
   const worktrees = await listWorktrees();
-  const worktree = worktrees.find((wt) => wt.id === id || wt.fullId === id || wt.path.includes(id));
+  const result = resolveRemovalTarget(worktrees, id);
 
-  if (!worktree) {
-    console.error(chalk.red(`Error: Worktree with ID "${id}" not found`));
+  if (!result.worktree) {
+    console.error(chalk.red(`Error: ${result.error}`));
     process.exit(1);
   }
+
+  const worktree = result.worktree;
 
   try {
     console.log(chalk.blue(`Removing worktree: ${worktree.branch} (${worktree.id})...`));
