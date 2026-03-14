@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { mkdtempSync, writeFileSync, chmodSync, renameSync, existsSync } from "fs";
 import { tmpdir, homedir } from "os";
 import { join } from "path";
+import { spawnSync } from "child_process";
 
 interface UpdateOptions {
   force?: boolean;
@@ -120,7 +121,6 @@ async function downloadAndSwapBinary(url: string, version: string, assetName: st
 
   if (attemptQuarantineRemoval && process.platform === 'darwin') {
     try {
-      const { spawnSync } = await import('child_process');
       spawnSync('xattr', ['-d', 'com.apple.quarantine', execPath], { stdio: 'ignore' });
     } catch {
       // ignore
@@ -130,12 +130,12 @@ async function downloadAndSwapBinary(url: string, version: string, assetName: st
   console.log(chalk.green(`✓ Updated wt to version ${version}`));
   
   // Update shell integration scripts
-  await updateShellIntegration(version);
+  await updateShellIntegration();
   
   console.log(chalk.dim('Run: wt --version to verify.'));
 }
 
-async function updateShellIntegration(version: string) {
+async function updateShellIntegration() {
   const shellDir = join(homedir(), '.wt', 'shell');
   
   if (!existsSync(shellDir)) {
@@ -145,36 +145,40 @@ async function updateShellIntegration(version: string) {
 
   console.log(chalk.blue('Updating shell integration scripts...'));
   
-  const shellScripts = ['wt.bash', 'wt.zsh', 'wt.fish'];
+  const shellScripts = ['bash', 'zsh', 'fish'] as const;
   const binaryPath = process.execPath;
   
   let updatedCount = 0;
   
-  for (const scriptName of shellScripts) {
-    const scriptPath = join(shellDir, scriptName);
+  for (const shell of shellScripts) {
+    const scriptPath = join(shellDir, `wt.${shell}`);
     
     if (!existsSync(scriptPath)) {
       continue;
     }
     
     try {
-      const url = `https://raw.githubusercontent.com/leesangb/wt/v${version}/shell/${scriptName}`;
-      const resp = await fetch(url);
-      
-      if (!resp.ok) {
-        console.log(chalk.yellow(`Could not download ${scriptName} (status ${resp.status})`));
+      const hookResult = spawnSync(binaryPath, ['shell-hook', shell], {
+        encoding: 'utf-8',
+      });
+      if (hookResult.status !== 0) {
+        console.log(chalk.yellow(`Failed to generate shell hook for ${shell}`));
         continue;
       }
-      
-      let content = await resp.text();
-      // Replace placeholder with actual binary path
-      content = content.replace(/\/path\/to\/wt/g, binaryPath);
-      
+      const completionResult = spawnSync(binaryPath, ['completion', shell], {
+        encoding: 'utf-8',
+      });
+      if (completionResult.status !== 0) {
+        console.log(chalk.yellow(`Failed to generate completion for ${shell}`));
+        continue;
+      }
+
+      const content = `${hookResult.stdout}\n${completionResult.stdout}`;
       writeFileSync(scriptPath, content, 'utf-8');
       updatedCount++;
-      console.log(chalk.green(`✓ Updated ${scriptName}`));
+      console.log(chalk.green(`✓ Updated wt.${shell}`));
     } catch (err: any) {
-      console.log(chalk.yellow(`Failed to update ${scriptName}: ${err.message}`));
+      console.log(chalk.yellow(`Failed to update wt.${shell}: ${err.message}`));
     }
   }
   

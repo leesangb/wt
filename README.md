@@ -7,7 +7,7 @@ A CLI tool to manage git worktrees with pre/post script support.
 ## Features
 
 - 🚀 Create worktrees with short IDs and repo-based naming
-- 🎯 Auto-cd to new worktree (with shell wrapper integration)
+- 🎯 Auto-cd to new worktree (with generated shell integration)
 - ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
 - 🔄 Auto-fetch latest changes before creating worktree
 - 📤 Auto-push to remote by default (disable with `--no-push` flag)
@@ -35,8 +35,8 @@ The installation script will:
 - Check if Bun is installed
 - Run `bun install` and `bun run build` automatically
 - Install the `wt` binary to `~/.local/bin/wt`
-- Copy shell wrapper scripts to `~/.wt/shell/`
-- Automatically add shell wrapper source lines to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
+- Generate shell integration scripts under `~/.wt/shell/`
+- Automatically add shell integration source lines to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
 - Set up auto-cd functionality
 
 After installation, restart your shell or run:
@@ -46,7 +46,7 @@ source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
 
 ### Manual Shell Integration (Optional)
 
-If you prefer manual setup or if the installation script didn't automatically configure your shell, you can manually source the wrapper scripts that are installed at `~/.wt/shell/`:
+If you prefer manual setup or if the installation script didn't automatically configure your shell, you can manually source the generated integration script under `~/.wt/shell/`:
 
 #### Zsh (~/.zshrc)
 
@@ -66,7 +66,12 @@ source ~/.wt/shell/wt.bash
 source ~/.wt/shell/wt.fish
 ```
 
-**Note:** The shell wrapper scripts are automatically installed to `~/.wt/shell/` during installation.
+You can also inspect or regenerate the underlying scripts directly:
+
+```bash
+wt shell-hook zsh
+wt completion zsh
+```
 
 ### Uninstallation
 
@@ -76,18 +81,18 @@ source ~/.wt/shell/wt.fish
 
 # This will:
 # - Remove the wt binary from ~/.local/bin/
-# - Remove shell wrapper scripts from ~/.wt/shell/
+# - Remove generated shell integration scripts from ~/.wt/shell/
 # - Remove source lines from shell config files
 ```
 
 **Note:** The uninstallation script does not remove worktrees or repository-specific `.wt/settings.json` files. To fully clean up, manually run:
 ```bash
-rm -rf ~/.wt/  # Remove all worktrees and shell scripts
+rm -rf ~/.wt/  # Remove all worktrees and generated shell integration
 ```
 
 ### Without Shell Integration
 
-If you don't set up the shell wrapper, you can use `--no-cd` flag:
+If you don't set up the shell integration, you can use `--no-cd` flag:
 
 ```bash
 wt new feature-branch --no-cd
@@ -122,7 +127,7 @@ This creates `.wt/settings.json` in your repository:
 ### Create a new worktree
 
 ```bash
-# Create and auto-cd (requires shell wrapper)
+# Create and auto-cd (requires shell integration)
 wt new feature-branch
 
 # Specify base branch
@@ -141,14 +146,14 @@ This will:
 3. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
 4. Push the new branch to remote with upstream tracking (unless `--no-push` is used)
 5. Run the post scripts in the new worktree (if configured)
-6. Automatically change to the new worktree directory (with shell wrapper)
+6. Automatically change to the new worktree directory (with shell integration)
 
 When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`).
 
 **Options:**
 - `--base <branch>` - Base branch to create from (default: from settings or `main`)
 - `--no-push` - Skip pushing the new branch to remote
-- `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
+- `--no-cd` - Don't output cd command (for direct binary usage without shell integration)
 
 ### Update wt
 
@@ -284,19 +289,18 @@ wt/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
 │   │   ├── list.ts           # wt list
-│   │   └── remove.ts         # wt remove
+│   │   ├── remove.ts         # wt remove
+│   │   ├── completion.ts     # wt completion
+│   │   └── shell-hook.ts     # wt shell-hook
 │   ├── config/
 │   │   └── settings.ts       # Settings management
 │   ├── utils/
 │   │   ├── git.ts            # Git worktree utilities
 │   │   ├── script.ts         # Script execution
+│   │   ├── shell.ts          # Shell integration generators
 │   │   └── id.ts             # Short ID generation
 │   └── types/
 │       └── index.ts          # TypeScript types
-├── shell/
-│   ├── wt.zsh                # Zsh wrapper function
-│   ├── wt.bash               # Bash wrapper function
-│   └── wt.fish               # Fish wrapper function
 ├── package.json
 └── tsconfig.json
 ```

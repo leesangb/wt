@@ -7,7 +7,7 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 ## 기능
 
 - 🚀 짧은 ID와 저장소 기반 이름으로 worktree 생성
-- 🎯 새 worktree로 자동 이동 (shell wrapper 통합)
+- 🎯 새 worktree로 자동 이동 (생성형 shell integration)
 - ⚙️ 저장소별로 worktree 기본 디렉토리, 기본 브랜치, 원격 푸시 동작 설정
 - 🔄 worktree 생성 전 최신 변경사항 자동 fetch
 - 📤 기본적으로 원격에 자동 푸시 (`--no-push` 플래그로 비활성화)
@@ -35,8 +35,8 @@ cd wt
 - Bun 설치 여부 확인
 - `bun install` 및 `bun run build` 자동 실행
 - `wt` 바이너리를 `~/.local/bin/wt`에 설치
-- shell wrapper 스크립트를 `~/.wt/shell/`로 복사
-- shell 설정 파일(`.zshrc`, `.bashrc`, 또는 `config.fish`)에 shell wrapper source 라인 자동 추가
+- shell integration 스크립트를 `~/.wt/shell/` 아래에 생성
+- shell 설정 파일(`.zshrc`, `.bashrc`, 또는 `config.fish`)에 shell integration source 라인 자동 추가
 - 자동 cd 기능 설정
 
 설치 후 shell을 재시작하거나 다음을 실행하세요:
@@ -46,7 +46,7 @@ source ~/.zshrc  # 또는 ~/.bashrc 또는 ~/.config/fish/config.fish
 
 ### 수동 Shell 통합 (선택사항)
 
-수동 설정을 선호하거나 설치 스크립트가 자동으로 shell을 구성하지 않은 경우, `~/.wt/shell/`에 설치된 wrapper 스크립트를 수동으로 source할 수 있습니다:
+수동 설정을 선호하거나 설치 스크립트가 자동으로 shell을 구성하지 않은 경우, `~/.wt/shell/`에 생성된 integration 스크립트를 수동으로 source할 수 있습니다:
 
 #### Zsh (~/.zshrc)
 
@@ -66,7 +66,12 @@ source ~/.wt/shell/wt.bash
 source ~/.wt/shell/wt.fish
 ```
 
-**참고:** shell wrapper 스크립트는 설치 시 `~/.wt/shell/`에 자동으로 설치됩니다.
+내부적으로 생성되는 스크립트는 직접 확인하거나 다시 생성할 수도 있습니다:
+
+```bash
+wt shell-hook zsh
+wt completion zsh
+```
 
 ### 제거
 
@@ -76,18 +81,18 @@ source ~/.wt/shell/wt.fish
 
 # 다음을 수행합니다:
 # - ~/.local/bin/에서 wt 바이너리 제거
-# - ~/.wt/shell/에서 shell wrapper 스크립트 제거
+# - ~/.wt/shell/에서 생성된 shell integration 스크립트 제거
 # - shell 설정 파일에서 source 라인 제거
 ```
 
 **참고:** 제거 스크립트는 worktree나 저장소별 `.wt/settings.json` 파일을 제거하지 않습니다. 완전히 정리하려면 수동으로 실행하세요:
 ```bash
-rm -rf ~/.wt/  # 모든 worktree와 shell 스크립트 제거
+rm -rf ~/.wt/  # 모든 worktree와 생성된 shell integration 제거
 ```
 
 ### Shell 통합 없이 사용
 
-shell wrapper를 설정하지 않은 경우 `--no-cd` 플래그를 사용할 수 있습니다:
+shell integration을 설정하지 않은 경우 `--no-cd` 플래그를 사용할 수 있습니다:
 
 ```bash
 wt new feature-branch --no-cd
@@ -121,7 +126,7 @@ wt init
 ### 새 worktree 생성
 
 ```bash
-# 생성 후 자동 이동 (shell wrapper 필요)
+# 생성 후 자동 이동 (shell integration 필요)
 wt new feature-branch
 
 # 기본 브랜치 지정
@@ -140,14 +145,14 @@ wt new feature-branch --no-cd
 3. `~/.wt/<저장소명-짧은ID>`에 `feature-branch` 브랜치로 worktree 생성
 4. 새 브랜치를 원격에 upstream 추적과 함께 푸시 (`--no-push`를 사용하지 않는 경우)
 5. 새 worktree에서 post 스크립트 실행 (설정된 경우)
-6. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
+6. 새 worktree 디렉토리로 자동 이동 (shell integration 사용 시)
 
 post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `<worktree>/.wt/` 아래에 상태/로그 파일(`post-task.json`, `post-task.log`)이 생성됩니다.
 
 **옵션:**
 - `--base <branch>` - 생성할 기본 브랜치 (기본값: 설정 또는 `main`)
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
-- `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
+- `--no-cd` - cd 명령 출력 안 함 (shell integration 없이 직접 바이너리 사용 시)
 
 ### wt 업데이트
 
@@ -284,19 +289,18 @@ wt/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
 │   │   ├── list.ts           # wt list
-│   │   └── remove.ts         # wt remove
+│   │   ├── remove.ts         # wt remove
+│   │   ├── completion.ts     # wt completion
+│   │   └── shell-hook.ts     # wt shell-hook
 │   ├── config/
 │   │   └── settings.ts       # 설정 관리
 │   ├── utils/
 │   │   ├── git.ts            # Git worktree 유틸리티
 │   │   ├── script.ts         # 스크립트 실행
+│   │   ├── shell.ts          # Shell integration 생성기
 │   │   └── id.ts             # 짧은 ID 생성
 │   └── types/
 │       └── index.ts          # TypeScript 타입
-├── shell/
-│   ├── wt.zsh                # Zsh wrapper 함수
-│   ├── wt.bash               # Bash wrapper 함수
-│   └── wt.fish               # Fish wrapper 함수
 ├── package.json
 └── tsconfig.json
 ```

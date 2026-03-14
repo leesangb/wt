@@ -7,6 +7,8 @@ import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
+import { completionCommand } from "./commands/completion.js";
+import { shellHookCommand } from "./commands/shell-hook.js";
 import { isGitRepository, getGitRoot } from "./utils/git.js";
 import pkg from "../package.json";
 
@@ -66,5 +68,15 @@ program
     "Do not remove macOS quarantine attribute after download"
   )
   .action(updateCommand);
+
+program
+  .command("completion <shell>")
+  .description("Generate a shell completion script")
+  .action(completionCommand);
+
+program
+  .command("shell-hook <shell>")
+  .description("Generate a shell integration hook")
+  .action(shellHookCommand);
 
 program.parse();

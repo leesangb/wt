@@ -71,25 +71,32 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 # Create shell script directory
-echo -e "${BLUE}Creating shell script directory at ${SHELL_DIR}...${NC}"
+echo -e "${BLUE}Creating shell integration directory at ${SHELL_DIR}...${NC}"
 mkdir -p "$SHELL_DIR"
-
-# Copy shell wrapper scripts
-echo -e "${BLUE}Copying shell wrapper scripts...${NC}"
-for shell_file in "${SCRIPT_DIR}/shell/"*.{zsh,bash,fish}; do
-  if [ -f "$shell_file" ]; then
-    # Replace /path/to/wt with actual binary path and copy
-    filename=$(basename "$shell_file")
-    sed "s|/path/to/wt|${BINARY_PATH}|g" "$shell_file" > "${SHELL_DIR}/${filename}"
-    echo -e "${GREEN}✓ Copied ${filename}${NC}"
-  fi
-done
 
 # Install binary
 echo -e "${BLUE}Installing wt binary to ${BINARY_PATH}...${NC}"
 cp "${SCRIPT_DIR}/wt" "$BINARY_PATH"
 chmod +x "$BINARY_PATH"
 echo -e "${GREEN}✓ Binary installed${NC}\n"
+
+# Generate shell integration scripts from the installed binary
+generate_shell_integration() {
+  local shell_type=$1
+  local output_path="${SHELL_DIR}/wt.${shell_type}"
+
+  echo -e "${BLUE}Generating ${shell_type} shell integration...${NC}"
+  {
+    "$BINARY_PATH" shell-hook "$shell_type"
+    echo ""
+    "$BINARY_PATH" completion "$shell_type"
+  } > "$output_path"
+  echo -e "${GREEN}✓ Generated wt.${shell_type}${NC}"
+}
+
+for shell_type in zsh bash fish; do
+  generate_shell_integration "$shell_type"
+done
 
 # Check if INSTALL_DIR is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -113,24 +120,24 @@ add_source_to_config() {
   
   # Check if source line already exists
   if grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file" && [ $FORCE_INSTALL -eq 0 ]; then
-    echo -e "${YELLOW}✓ ${shell_type} wrapper already configured in ${config_file}${NC}"
+    echo -e "${YELLOW}✓ ${shell_type} integration already configured in ${config_file}${NC}"
     return
   fi
   
   # Remove existing source line if force installing
   if [ $FORCE_INSTALL -eq 1 ] && grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file"; then
-    echo -e "${YELLOW}Removing existing ${shell_type} wrapper configuration...${NC}"
+    echo -e "${YELLOW}Removing existing ${shell_type} integration configuration...${NC}"
     grep -v "source.*wt/shell/wt\.${shell_type}" "$config_file" > "${config_file}.tmp"
     mv "${config_file}.tmp" "$config_file"
   fi
   
-  echo -e "${BLUE}Adding ${shell_type} wrapper to ${config_file}...${NC}"
+  echo -e "${BLUE}Adding ${shell_type} integration to ${config_file}...${NC}"
   
   # Add newline and source line
   echo "" >> "$config_file"
   echo "$source_line" >> "$config_file"
   
-  echo -e "${GREEN}✓ ${shell_type} wrapper configured${NC}"
+  echo -e "${GREEN}✓ ${shell_type} integration configured${NC}"
 }
 
 # Detect shells and add source lines

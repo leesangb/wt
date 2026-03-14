@@ -122,7 +122,7 @@ export async function newCommand(
     console.log(chalk.dim(`  WT_PATH: ${worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${branchName}`));
 
-    // Output cd command for shell wrapper function
+    // Output cd command for shell integration
     if (options.cd !== false) {
       console.log(`cd ${worktreePath}`);
     } else {

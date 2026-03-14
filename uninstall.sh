@@ -46,11 +46,11 @@ remove_source_from_config() {
   
   # Check if source line exists
   if ! grep -q "source.*\.wt/shell/wt\.${shell_type}" "$config_file"; then
-    echo -e "${YELLOW}✓ ${shell_type} wrapper not found in ${config_file}${NC}"
+    echo -e "${YELLOW}✓ ${shell_type} integration not found in ${config_file}${NC}"
     return
   fi
   
-  echo -e "${BLUE}Removing ${shell_type} wrapper from ${config_file}...${NC}"
+  echo -e "${BLUE}Removing ${shell_type} integration from ${config_file}...${NC}"
   
   # Create a backup
   cp "$config_file" "${config_file}.bak"
@@ -61,10 +61,10 @@ remove_source_from_config() {
   # Remove the backup if successful
   rm "${config_file}.bak"
   
-  echo -e "${GREEN}✓ ${shell_type} wrapper removed${NC}"
+  echo -e "${GREEN}✓ ${shell_type} integration removed${NC}"
 }
 
-# Remove wrappers from shells
+# Remove shell integrations from shells
 echo ""
 SHELLS_UPDATED=0
 
