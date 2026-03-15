@@ -12,21 +12,28 @@ interface RemoveCommandOptions {
 }
 
 function buildPendingWorkSummary(
-  modifiedCount: number,
-  unpushedCount: number
+  localChangeCount: number,
+  localCommitCount: number,
+  hasUnknownLocalCommits: boolean
 ): string {
   const details: string[] = [];
 
-  if (modifiedCount > 0) {
+  if (localChangeCount > 0) {
     details.push(
-      `${modifiedCount} ${modifiedCount === 1 ? "modified file" : "modified files"}`
+      `${localChangeCount} ${localChangeCount === 1 ? "local change" : "local changes"}`
     );
   }
 
-  if (unpushedCount > 0) {
+  if (localCommitCount > 0) {
     details.push(
-      `${unpushedCount} ${unpushedCount === 1 ? "unpushed commit" : "unpushed commits"}`
+      `${localCommitCount} ${
+        localCommitCount === 1 ? "local commit not on the base or upstream branch" : "local commits not on the base or upstream branch"
+      }`
     );
+  }
+
+  if (hasUnknownLocalCommits) {
+    details.push("commits that could not be compared safely");
   }
 
   return details.join(" and ");
@@ -35,10 +42,15 @@ function buildPendingWorkSummary(
 async function confirmRemoval(
   worktreeId: string,
   branch: string,
-  modifiedCount: number,
-  unpushedCount: number
+  localChangeCount: number,
+  localCommitCount: number,
+  hasUnknownLocalCommits: boolean
 ): Promise<boolean> {
-  const summary = buildPendingWorkSummary(modifiedCount, unpushedCount);
+  const summary = buildPendingWorkSummary(
+    localChangeCount,
+    localCommitCount,
+    hasUnknownLocalCommits
+  );
   const readline = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -66,14 +78,17 @@ export async function removeCommand(id: string, options: RemoveCommandOptions): 
   await runCommand(async () => {
     const preview = await inspectRemoveWorktree(id);
     const hasPendingWork =
-      preview.modifiedCount > 0 || preview.unpushedCount > 0;
+      preview.localChangeCount > 0 ||
+      preview.localCommitCount > 0 ||
+      preview.hasUnknownLocalCommits;
 
     if (hasPendingWork && !options.force) {
       const confirmed = await confirmRemoval(
         preview.worktree.id,
         preview.worktree.branch,
-        preview.modifiedCount,
-        preview.unpushedCount
+        preview.localChangeCount,
+        preview.localCommitCount,
+        preview.hasUnknownLocalCommits
       );
 
       if (!confirmed) {

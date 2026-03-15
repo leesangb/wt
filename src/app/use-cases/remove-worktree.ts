@@ -6,7 +6,7 @@ import {
   deleteBranch,
   removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
-import { getWorktreeStatusSummary } from "../../infra/git/status.js";
+import { getWorktreeRemovalStatusSummary } from "../../infra/git/status.js";
 import type { WorktreeInfo } from "../../domain/worktree.js";
 
 export interface RemoveWorktreeOptions {
@@ -15,8 +15,9 @@ export interface RemoveWorktreeOptions {
 
 export interface RemoveWorktreePreview {
   worktree: WorktreeInfo;
-  unpushedCount: number;
-  modifiedCount: number;
+  localCommitCount: number;
+  localChangeCount: number;
+  hasUnknownLocalCommits: boolean;
 }
 
 export interface RemoveWorktreeResult {
@@ -54,16 +55,23 @@ export async function inspectRemoveWorktree(
   target: string,
   cwd: string = process.cwd()
 ): Promise<RemoveWorktreePreview> {
-  const { worktree } = await resolveRemovalTarget(target, cwd);
-  const { unpushedCount, modifiedCount } = await getWorktreeStatusSummary(
+  const { context, worktree } = await resolveRemovalTarget(target, cwd);
+  const {
+    localCommitCount,
+    localChangeCount,
+    hasUnknownLocalCommits,
+  } = await getWorktreeRemovalStatusSummary(
+    context.repoRoot,
     worktree.path,
-    worktree.branch
+    worktree.branch,
+    worktree.baseBranch
   );
 
   return {
     worktree,
-    unpushedCount,
-    modifiedCount,
+    localCommitCount,
+    localChangeCount,
+    hasUnknownLocalCommits,
   };
 }
 

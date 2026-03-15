@@ -1,5 +1,11 @@
 import { $ } from "bun";
 
+export interface WorktreeRemovalStatusSummary {
+  localCommitCount: number;
+  localChangeCount: number;
+  hasUnknownLocalCommits: boolean;
+}
+
 export async function getDefaultRemoteBranch(
   repoRoot: string
 ): Promise<string | undefined> {
@@ -75,6 +81,110 @@ export async function getWorktreeStatusSummary(
       modifiedCount: 0,
     };
   }
+}
+
+async function countStatusEntries(worktreePath: string): Promise<number> {
+  try {
+    const status = await $`git -C ${worktreePath} status --porcelain`.text();
+
+    return status
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+async function refExists(worktreePath: string, ref: string): Promise<boolean> {
+  try {
+    await $`git -C ${worktreePath} rev-parse --verify ${ref}`.quiet();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getRevisionRangeCount(
+  worktreePath: string,
+  baseRef: string,
+  branch: string
+): Promise<number | undefined> {
+  try {
+    const result =
+      await $`git -C ${worktreePath} rev-list --count ${baseRef}..${branch}`
+        .quiet()
+        .text();
+
+    return parseInt(result.trim(), 10) || 0;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getWorktreeRemovalStatusSummary(
+  repoRoot: string,
+  worktreePath: string,
+  branch: string,
+  baseBranch?: string
+): Promise<WorktreeRemovalStatusSummary> {
+  const localChangeCount = await countStatusEntries(worktreePath);
+  const branchRemoteRef = `refs/remotes/origin/${branch}`;
+
+  if (await refExists(worktreePath, branchRemoteRef)) {
+    const localCommitCount = await getRevisionRangeCount(
+      worktreePath,
+      branchRemoteRef,
+      branch
+    );
+
+    return {
+      localCommitCount: localCommitCount ?? 0,
+      localChangeCount,
+      hasUnknownLocalCommits: localCommitCount === undefined,
+    };
+  }
+
+  const fallbackBaseBranches = [
+    ...new Set(
+      [baseBranch, await getDefaultRemoteBranch(repoRoot)].filter(
+        (value): value is string => Boolean(value) && value !== branch
+      )
+    ),
+  ];
+
+  for (const fallbackBaseBranch of fallbackBaseBranches) {
+    const fallbackRefs = [
+      `refs/remotes/origin/${fallbackBaseBranch}`,
+      `refs/heads/${fallbackBaseBranch}`,
+    ];
+
+    for (const fallbackRef of fallbackRefs) {
+      if (!(await refExists(worktreePath, fallbackRef))) {
+        continue;
+      }
+
+      const localCommitCount = await getRevisionRangeCount(
+        worktreePath,
+        fallbackRef,
+        branch
+      );
+
+      if (localCommitCount !== undefined) {
+        return {
+          localCommitCount,
+          localChangeCount,
+          hasUnknownLocalCommits: false,
+        };
+      }
+    }
+  }
+
+  return {
+    localCommitCount: 0,
+    localChangeCount,
+    hasUnknownLocalCommits: true,
+  };
 }
 
 export async function getUnpushedCommitCount(

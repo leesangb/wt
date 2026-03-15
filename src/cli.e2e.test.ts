@@ -361,20 +361,21 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
-  test("asks for confirmation before removing a dirty worktree", async () => {
+  test("asks for confirmation before removing a worktree with local changes", async () => {
     const repo = await createTestRepo();
     const worktreeId = "confirm123";
     const branchName = "feature-confirm";
     const worktreePath = getWorktreePath(repo, worktreeId);
 
     runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
-    writeFileSync(join(worktreePath, "README.md"), "dirty\n");
+    writeFileSync(join(worktreePath, "UNTRACKED.md"), "dirty\n");
 
     const cancelResult = runCliCapture(["remove", worktreeId], repo.repoRoot, {
       input: "n\n",
     });
 
     expect(cancelResult.status).toBe(1);
+    expect(cancelResult.stdout).toContain("1 local change");
     expect(cancelResult.stdout).toContain("Remove this worktree anyway? [y/N]");
     expect(cancelResult.stderr).toContain("Error: Removal cancelled");
     expect(existsSync(worktreePath)).toBeTrue();
@@ -389,6 +390,43 @@ describe("cli e2e", () => {
       confirmResult.stdout
     );
     expect(confirmResult.stdout).toContain("Warning:");
+    expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("asks for confirmation before removing a worktree with local-only commits", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "noremote123";
+    const branchName = "feature-no-remote";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(
+      ["new", branchName, "--id", worktreeId, "--no-push", "--no-cd"],
+      repo.repoRoot
+    );
+    writeFileSync(join(worktreePath, "README.md"), "base\nlocal commit\n");
+    await $`git -C ${worktreePath} add README.md`.quiet();
+    await $`git -C ${worktreePath} commit -m local`.quiet();
+
+    const cancelResult = runCliCapture(["remove", worktreeId], repo.repoRoot, {
+      input: "n\n",
+    });
+
+    expect(cancelResult.status).toBe(1);
+    expect(cancelResult.stdout).toContain(
+      "1 local commit not on the base or upstream branch"
+    );
+    expect(cancelResult.stderr).toContain("Error: Removal cancelled");
+    expect(existsSync(worktreePath)).toBeTrue();
+
+    const confirmResult = runCliCapture(["remove", worktreeId], repo.repoRoot, {
+      input: "y\n",
+    });
+
+    assertProcessSuccess(
+      confirmResult.status,
+      confirmResult.stderr,
+      confirmResult.stdout
+    );
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
