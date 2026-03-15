@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import { SHELL_CD_FILE_ENV } from "./cd.js";
 
 export interface DetachedScriptOptions {
   statusFilePath: string;
@@ -28,10 +29,23 @@ printf '{"status":"failed","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ
 }`;
 }
 
+export function buildScriptEnv(
+  env?: Record<string, string>
+): Record<string, string | undefined> {
+  const scriptEnv: Record<string, string | undefined> = {
+    ...process.env,
+    ...env,
+  };
+
+  delete scriptEnv[SHELL_CD_FILE_ENV];
+
+  return scriptEnv;
+}
+
 export async function executeScript(script: string, cwd: string, env?: Record<string, string>): Promise<void> {
   const proc = Bun.spawn(["sh", "-c", script], {
     cwd,
-    env: { ...process.env, ...env },
+    env: buildScriptEnv(env),
     stdout: "inherit",
     stderr: "inherit",
     stdin: "inherit",
@@ -71,7 +85,7 @@ export function executeScriptsDetached(scripts: string[], cwd: string, env: Reco
 
   const proc = Bun.spawn(["sh", "-c", command], {
     cwd,
-    env: { ...process.env, ...env },
+    env: buildScriptEnv(env),
     stdout: "ignore",
     stderr: "ignore",
     stdin: "ignore",
