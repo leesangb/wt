@@ -9,7 +9,7 @@ function wt
         
         if test $exit_code -eq 0; and test -s "$cd_file"
             set -l target_dir (string trim (cat "$cd_file"))
-            cd -- $target_dir
+            builtin cd -- $target_dir
             set -l cd_status $status
             if test $cd_status -ne 0
                 set exit_code $cd_status

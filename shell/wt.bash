@@ -10,7 +10,7 @@ wt() {
     
     if [ $exit_code -eq 0 ] && [ -s "$cd_file" ]; then
       target_dir=$(tail -n 1 "$cd_file")
-      cd -- "$target_dir" || exit_code=$?
+      builtin cd -- "$target_dir" || exit_code=$?
     fi
 
     rm -f "$cd_file"
