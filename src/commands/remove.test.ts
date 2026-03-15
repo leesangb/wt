@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveRemovalTarget } from "./remove.js";
+import { resolveWorktreeTarget } from "../domain/worktree-target.js";
 import type { WorktreeInfo } from "../types/index.js";
 
 const worktrees: WorktreeInfo[] = [
@@ -23,20 +23,26 @@ const worktrees: WorktreeInfo[] = [
 
 describe("resolveRemovalTarget", () => {
   test("matches exact identifiers before partial path matches", () => {
-    const result = resolveRemovalTarget(worktrees, "abc");
+    const result = resolveWorktreeTarget(worktrees, "abc", {
+      allowPartialPath: true,
+    });
 
     expect(result.worktree?.id).toBe("abc");
     expect(result.error).toBeUndefined();
   });
 
   test("allows a unique partial path match", () => {
-    const result = resolveRemovalTarget(worktrees, "repo-abcd");
+    const result = resolveWorktreeTarget(worktrees, "repo-abcd", {
+      allowPartialPath: true,
+    });
 
     expect(result.worktree?.id).toBe("abcd");
   });
 
   test("fails when a partial path is ambiguous", () => {
-    const result = resolveRemovalTarget(worktrees, "bc");
+    const result = resolveWorktreeTarget(worktrees, "bc", {
+      allowPartialPath: true,
+    });
 
     expect(result.worktree).toBeUndefined();
     expect(result.error).toContain('Ambiguous worktree target "bc"');
@@ -45,9 +51,11 @@ describe("resolveRemovalTarget", () => {
   });
 
   test("returns a not-found error when nothing matches", () => {
-    const result = resolveRemovalTarget(worktrees, "missing");
+    const result = resolveWorktreeTarget(worktrees, "missing", {
+      allowPartialPath: true,
+    });
 
     expect(result.worktree).toBeUndefined();
-    expect(result.error).toBe('Worktree with ID "missing" not found');
+    expect(result.error).toBe('Worktree with target "missing" not found');
   });
 });

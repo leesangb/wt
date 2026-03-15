@@ -1,27 +1,21 @@
 import chalk from "chalk";
-import { isGitRepository, listWorktrees } from "../utils/git.js";
-import { emitShellCd } from "../utils/cd.js";
+import { AppError } from "../app/errors.js";
+import { resolveWorktreeCd } from "../app/use-cases/resolve-worktree-cd.js";
+import { runCommand } from "../cli/command-runtime.js";
+import { emitShellCd } from "../infra/shell/cd.js";
 
 export async function cdCommand(target: string): Promise<void> {
-  if (!(await isGitRepository())) {
-    console.error(chalk.red("Error: Not a git repository"));
-    process.exit(1);
-  }
+  await runCommand(async () => {
+    const result = await resolveWorktreeCd(target);
 
-  const worktrees = await listWorktrees();
-
-  const worktree = worktrees.find(
-    wt => wt.id === target || wt.branch === target
-  );
-
-  if (!worktree) {
-    console.error(chalk.red(`Error: Worktree not found: ${target}`));
-    console.log(chalk.dim("\nAvailable worktrees:"));
-    for (const wt of worktrees) {
-      console.log(chalk.cyan(`  ${wt.id}`) + chalk.dim(` (${wt.branch})`));
+    if (!result.worktree) {
+      console.log(chalk.dim("\nAvailable worktrees:"));
+      for (const worktree of result.availableWorktrees) {
+        console.log(chalk.cyan(`  ${worktree.id}`) + chalk.dim(` (${worktree.branch})`));
+      }
+      throw new AppError(`Worktree not found: ${target}`);
     }
-    process.exit(1);
-  }
 
-  emitShellCd(worktree.path);
+    emitShellCd(result.worktree.path);
+  });
 }
