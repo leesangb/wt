@@ -177,28 +177,22 @@ export async function isBranchMergedToRemote(
   }
 }
 
-export async function getWorktreeStatusSummary(path: string): Promise<{
+export async function getWorktreeStatusSummary(
+  path: string,
+  branch: string
+): Promise<{
   unpushedCount: number;
   modifiedCount: number;
 }> {
   try {
-    const result = await $`git -C ${path} status --porcelain=2 --branch`.text();
-    let unpushedCount = 0;
-    let modifiedCount = 0;
-
-    for (const line of result.split("\n")) {
-      if (line.startsWith("# branch.ab ")) {
-        const match = line.match(/\+(\d+)\s+-(\d+)/);
-        if (match) {
-          unpushedCount = parseInt(match[1], 10) || 0;
-        }
-        continue;
-      }
-
-      if (line.length > 0 && !line.startsWith("# ")) {
-        modifiedCount += 1;
-      }
-    }
+    const [unpushedCount, result] = await Promise.all([
+      getUnpushedCommitCount(path, branch),
+      $`git -C ${path} status --porcelain`.text(),
+    ]);
+    const modifiedCount = result
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0).length;
 
     return { unpushedCount, modifiedCount };
   } catch {

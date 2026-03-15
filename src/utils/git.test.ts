@@ -61,7 +61,7 @@ describe("isBranchMergedToRemote", () => {
 });
 
 describe("getWorktreeStatusSummary", () => {
-  test("returns ahead count and local modification count from one status query", async () => {
+  test("keeps ahead count based on origin branch even without an upstream", async () => {
     const originDir = makeTempDir("wt-origin-");
     const repoRoot = makeTempDir("wt-repo-");
 
@@ -69,17 +69,18 @@ describe("getWorktreeStatusSummary", () => {
     await $`git clone ${originDir} ${repoRoot}`.quiet();
     await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
     await $`git -C ${repoRoot} config user.name tester`.quiet();
-    await $`git -C ${repoRoot} checkout -b main`.quiet();
     await Bun.write(join(repoRoot, "README.md"), "base\n");
     await $`git -C ${repoRoot} add README.md`.quiet();
     await $`git -C ${repoRoot} commit -m base`.quiet();
     await $`git -C ${repoRoot} push -u origin main`.quiet();
+    await $`git -C ${repoRoot} checkout -b feature`.quiet();
+    await $`git -C ${repoRoot} push origin feature`.quiet();
 
     await Bun.write(join(repoRoot, "README.md"), "base\nlocal-change\n");
     await Bun.write(join(repoRoot, "UNTRACKED.md"), "new\n");
     await $`git -C ${repoRoot} commit --allow-empty -m ahead`.quiet();
 
-    expect(await getWorktreeStatusSummary(repoRoot)).toEqual({
+    expect(await getWorktreeStatusSummary(repoRoot, "feature")).toEqual({
       unpushedCount: 1,
       modifiedCount: 2,
     });

@@ -83,7 +83,8 @@ export async function listCommand(options?: {
         ? mergedBranchesByBase.get(mergeBaseBranch)
         : undefined;
       const { unpushedCount, modifiedCount } = await getWorktreeStatusSummary(
-        wt.path
+        wt.path,
+        wt.branch
       );
       const isMerged = mergedBranches?.has(`origin/${wt.branch}`) ?? false;
 
