@@ -25,6 +25,10 @@ interface WrapperRunResult {
   stderr: string;
 }
 
+interface RunWrapperOptions {
+  overrideCd?: boolean;
+}
+
 const shellDir = fileURLToPath(new URL("../../shell/", import.meta.url));
 const shellCases: ShellCase[] = [
   { name: "bash", scriptName: "wt.bash" },
@@ -38,7 +42,11 @@ function isShellAvailable(shell: ShellName): boolean {
   }).status === 0;
 }
 
-function runWrapper(shellCase: ShellCase, targetDir: string): WrapperRunResult {
+function runWrapper(
+  shellCase: ShellCase,
+  targetDir: string,
+  options: RunWrapperOptions = {}
+): WrapperRunResult {
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-wrapper-"));
 
   try {
@@ -71,6 +79,7 @@ function runWrapper(shellCase: ShellCase, targetDir: string): WrapperRunResult {
     const command =
       shellCase.name === "fish"
         ? [
+            ...(options.overrideCd ? ["function cd; echo alias-hit; end"] : []),
             'source "$WRAPPER_PATH"',
             "wt cd demo >/dev/null 2>/dev/null",
             "set wrapper_status $status",
@@ -80,6 +89,10 @@ function runWrapper(shellCase: ShellCase, targetDir: string): WrapperRunResult {
             ...(shellCase.name === "zsh"
               ? ["autoload -Uz compinit", "compinit >/dev/null 2>&1"]
               : []),
+            ...(shellCase.name === "bash" && options.overrideCd
+              ? ["shopt -s expand_aliases"]
+              : []),
+            ...(options.overrideCd ? ['alias cd="echo alias-hit"'] : []),
             'source "$WRAPPER_PATH"',
             "wt cd demo >/dev/null 2>/dev/null",
             "wrapper_status=$?",
@@ -152,6 +165,23 @@ describe("shell wrappers", () => {
         assertShellProcess(result);
         expect(result.status).not.toBe(0);
         expect(result.pwd).not.toBe(missingDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} ignores cd overrides in the parent shell`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "worktree");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { overrideCd: true });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
