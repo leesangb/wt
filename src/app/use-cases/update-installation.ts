@@ -26,6 +26,7 @@ export interface UpdateInstallationResult {
   updated: boolean;
   assetName?: string;
   shellScriptsUpdated: string[];
+  shellScriptWarnings: string[];
   shellScriptsSkipped: boolean;
 }
 
@@ -63,6 +64,7 @@ export async function updateInstallation(
         updated: false,
         assetName,
         shellScriptsUpdated: [],
+        shellScriptWarnings: [],
         shellScriptsSkipped: false,
       };
     }
@@ -84,6 +86,7 @@ export async function updateInstallation(
         updated: false,
         assetName,
         shellScriptsUpdated: [],
+        shellScriptWarnings: [],
         shellScriptsSkipped: false,
       };
     }
@@ -112,6 +115,7 @@ export async function updateInstallation(
     updated: true,
     assetName,
     shellScriptsUpdated: shellUpdate.updatedScripts,
+    shellScriptWarnings: shellUpdate.warnings,
     shellScriptsSkipped: shellUpdate.skipped,
   };
 }

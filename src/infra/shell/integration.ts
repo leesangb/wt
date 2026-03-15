@@ -9,6 +9,7 @@ export interface UpdateInstalledShellWrappersOptions {
 
 export interface ShellWrapperUpdateResult {
   updatedScripts: string[];
+  warnings: string[];
   skipped: boolean;
 }
 
@@ -18,11 +19,13 @@ export async function updateInstalledShellWrappers(
   if (!existsSync(options.shellDir)) {
     return {
       updatedScripts: [],
+      warnings: [],
       skipped: true,
     };
   }
 
   const updatedScripts: string[] = [];
+  const warnings: string[] = [];
 
   for (const scriptName of SHELL_WRAPPER_FILES) {
     const scriptPath = `${options.shellDir}/${scriptName}`;
@@ -37,6 +40,9 @@ export async function updateInstalledShellWrappers(
       const response = await fetch(url);
 
       if (!response.ok) {
+        warnings.push(
+          `Could not download ${scriptName} (status ${response.status})`
+        );
         continue;
       }
 
@@ -47,11 +53,14 @@ export async function updateInstalledShellWrappers(
 
       writeFileSync(scriptPath, content, "utf-8");
       updatedScripts.push(scriptName);
-    } catch {}
+    } catch (error: any) {
+      warnings.push(`Failed to update ${scriptName}: ${error.message || error}`);
+    }
   }
 
   return {
     updatedScripts,
+    warnings,
     skipped: false,
   };
 }

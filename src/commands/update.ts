@@ -46,21 +46,30 @@ export async function updateCommand(options: UpdateOptions): Promise<void> {
           "Shell integration directory not found. Skipping shell integration update."
         )
       );
-    } else if (result.shellScriptsUpdated.length > 0) {
+    } else if (
+      result.shellScriptsUpdated.length > 0 ||
+      result.shellScriptWarnings.length > 0
+    ) {
       console.log(chalk.blue("Updating shell integration scripts..."));
       for (const scriptName of result.shellScriptsUpdated) {
         console.log(chalk.green(`✓ Updated ${scriptName}`));
       }
-      console.log(
-        chalk.green(
-          `✓ Updated ${result.shellScriptsUpdated.length} shell integration script(s)`
-        )
-      );
-      console.log(
-        chalk.yellow(
-          "Note: Restart your shell or source your config file to apply changes."
-        )
-      );
+      for (const warning of result.shellScriptWarnings) {
+        console.log(chalk.yellow(warning));
+      }
+
+      if (result.shellScriptsUpdated.length > 0) {
+        console.log(
+          chalk.green(
+            `✓ Updated ${result.shellScriptsUpdated.length} shell integration script(s)`
+          )
+        );
+        console.log(
+          chalk.yellow(
+            "Note: Restart your shell or source your config file to apply changes."
+          )
+        );
+      }
     }
 
     console.log(chalk.dim("Run: wt --version to verify."));
