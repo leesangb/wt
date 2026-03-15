@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.1.7
+
+### Patch Changes
+
+- b5944dc: Fix streams, improve worktrees listing perf
+
 ## 0.1.6
 
 ### Patch Changes
