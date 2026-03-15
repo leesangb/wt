@@ -2,9 +2,9 @@ import chalk from "chalk";
 import {
   isGitRepository,
   listWorktrees,
-  isBranchMergedToRemote,
-  getUnpushedCommitCount,
-  getLocalModificationCount,
+  getDefaultRemoteBranch,
+  getMergedRemoteBranches,
+  getWorktreeStatusSummary,
 } from "../utils/git.js";
 
 type CompletionFormat = "bash" | "zsh" | "fish";
@@ -60,16 +60,43 @@ export async function listCommand(options?: {
   console.log(chalk.bold(`\nWorktrees (${worktrees[0].repoName}):`));
   console.log(chalk.dim("─".repeat(80)));
 
-  for (const wt of sortedWorktrees) {
+  const defaultRemoteBaseBranch = await getDefaultRemoteBranch();
+  const baseBranches = [
+    ...new Set(
+      sortedWorktrees
+        .map((wt) => wt.baseBranch ?? defaultRemoteBaseBranch)
+        .filter((branch): branch is string => Boolean(branch))
+    ),
+  ];
+  const mergedBranchesByBase = new Map(
+    await Promise.all(
+      baseBranches.map(async (baseBranch) => [
+        baseBranch,
+        await getMergedRemoteBranches(baseBranch),
+      ])
+    )
+  );
+  const worktreeStates = await Promise.all(
+    sortedWorktrees.map(async (wt) => {
+      const mergeBaseBranch = wt.baseBranch ?? defaultRemoteBaseBranch;
+      const mergedBranches = mergeBaseBranch
+        ? mergedBranchesByBase.get(mergeBaseBranch)
+        : undefined;
+      const { unpushedCount, modifiedCount } = await getWorktreeStatusSummary(
+        wt.path
+      );
+      const isMerged = mergedBranches?.has(`origin/${wt.branch}`) ?? false;
+
+      return { wt, isMerged, unpushedCount, modifiedCount };
+    })
+  );
+
+  for (const { wt, isMerged, unpushedCount, modifiedCount } of worktreeStates) {
     const isCurrent = wt.path === currentWorktree?.path;
     const idLabel = isCurrent ? `${wt.id} ${chalk.green("(current)")}` : wt.id;
 
     const createdDate = new Date(wt.createdAt);
     const timestamp = createdDate.toLocaleString();
-
-    const isMerged = await isBranchMergedToRemote(wt.branch, wt.baseBranch);
-    const unpushedCount = await getUnpushedCommitCount(wt.path, wt.branch);
-    const modifiedCount = await getLocalModificationCount(wt.path);
 
     const baseInfo =
       wt.baseBranch && wt.baseCommit

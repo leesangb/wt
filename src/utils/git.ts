@@ -134,7 +134,7 @@ export async function deleteBranch(branch: string): Promise<void> {
   await $`git branch -D ${branch}`;
 }
 
-async function getDefaultRemoteBranch(): Promise<string | undefined> {
+export async function getDefaultRemoteBranch(): Promise<string | undefined> {
   try {
     const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.text();
     return result.trim().replace("refs/remotes/origin/", "");
@@ -143,26 +143,66 @@ async function getDefaultRemoteBranch(): Promise<string | undefined> {
   }
 }
 
+export async function getMergedRemoteBranches(
+  baseBranch?: string
+): Promise<Set<string>> {
+  try {
+    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
+    if (!mergeBaseBranch) {
+      return new Set();
+    }
+
+    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
+    return new Set(
+      result
+        .trim()
+        .split("\n")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0)
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
   try {
-    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
-    if (!mergeBaseBranch) {
-      return false;
-    }
-
-    await $`git rev-parse --verify origin/${branch}`.quiet();
-
-    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
-    const mergedBranches = result
-      .trim()
-      .split("\n")
-      .map((b) => b.trim());
-    return mergedBranches.some((b) => b === `origin/${branch}`);
+    const mergedBranches = await getMergedRemoteBranches(baseBranch);
+    return mergedBranches.has(`origin/${branch}`);
   } catch {
     return false;
+  }
+}
+
+export async function getWorktreeStatusSummary(path: string): Promise<{
+  unpushedCount: number;
+  modifiedCount: number;
+}> {
+  try {
+    const result = await $`git -C ${path} status --porcelain=2 --branch`.text();
+    let unpushedCount = 0;
+    let modifiedCount = 0;
+
+    for (const line of result.split("\n")) {
+      if (line.startsWith("# branch.ab ")) {
+        const match = line.match(/\+(\d+)\s+-(\d+)/);
+        if (match) {
+          unpushedCount = parseInt(match[1], 10) || 0;
+        }
+        continue;
+      }
+
+      if (line.length > 0 && !line.startsWith("# ")) {
+        modifiedCount += 1;
+      }
+    }
+
+    return { unpushedCount, modifiedCount };
+  } catch {
+    return { unpushedCount: 0, modifiedCount: 0 };
   }
 }
 
