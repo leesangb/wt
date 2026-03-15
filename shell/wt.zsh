@@ -42,7 +42,7 @@ _wt_completion() {
       ;;
     args)
       case $line[1] in
-        cd)
+        cd|rm|remove)
           suggestions=("${(@f)$(/path/to/wt list --completion zsh 2>/dev/null)}")
           _describe 'worktree' suggestions
           ;;

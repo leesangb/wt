@@ -29,6 +29,17 @@ interface RunWrapperOptions {
   overrideCd?: boolean;
 }
 
+interface CompletionRunResult {
+  suggestions: string[];
+  processStatus: number | null;
+  stderr: string;
+}
+
+interface ShellProcessResult {
+  processStatus: number | null;
+  stderr: string;
+}
+
 const shellDir = fileURLToPath(new URL("../../shell/", import.meta.url));
 const shellCases = [
   { name: "bash", scriptName: "wt.bash" },
@@ -122,6 +133,97 @@ function runWrapper(
   }
 }
 
+function runCompletion(
+  shellCase: ShellCase,
+  subcommand: "cd" | "rm" | "remove"
+): CompletionRunResult {
+  const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
+
+  try {
+    const wrapperTemplate = readFileSync(
+      join(shellDir, shellCase.scriptName),
+      "utf-8"
+    );
+    const mockWtPath = join(tempDir, "mock-wt");
+    const wrapperPath = join(tempDir, shellCase.scriptName);
+
+    writeFileSync(
+      mockWtPath,
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "list" ] && [ -n "$2" ]; then',
+        '  case "$2" in',
+        '    --completion)',
+        '      if [ "$3" = "fish" ]; then',
+        '        printf \'%s\\n\' "demo\tDemo branch" "sample\tSample branch"',
+        "      else",
+        '        printf \'%s\\n\' "demo:Demo branch" "sample:Sample branch"',
+        "      fi",
+        "      ;;",
+        "  esac",
+        "fi",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    writeFileSync(
+      wrapperPath,
+      wrapperTemplate.replaceAll("/path/to/wt", mockWtPath),
+      "utf-8"
+    );
+
+    const command =
+      shellCase.name === "fish"
+        ? [
+            'source "$WRAPPER_PATH"',
+            `complete --do-complete "wt ${subcommand} "`,
+          ].join("\n")
+        : shellCase.name === "bash"
+        ? [
+            'source "$WRAPPER_PATH"',
+            `COMP_WORDS=(wt ${subcommand} "")`,
+            "COMP_CWORD=2",
+            "_wt_completion",
+            'printf \'%s\\n\' "${COMPREPLY[@]}"',
+          ].join("\n")
+        : [
+            'source "$WRAPPER_PATH"',
+            `typeset -g TEST_SUBCOMMAND=${subcommand}`,
+            "function _arguments {",
+            "  state=args",
+            "  line=($TEST_SUBCOMMAND)",
+            "  return 0",
+            "}",
+            "function _describe {",
+            "  local array_name=$2",
+            `  eval 'printf "%s\\\\n" "\${'\"$array_name\"'[@]}"'`,
+            "}",
+            "_wt_completion",
+          ].join("\n");
+
+    const result = spawnSync(shellCase.name, ["-lc", command], {
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        WRAPPER_PATH: wrapperPath,
+      },
+    });
+
+    return {
+      suggestions: result.stdout
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.split(/[:\t]/, 1)[0]),
+      processStatus: result.status,
+      stderr: result.stderr,
+    };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 function readOutputValue(stdout: string, key: string): string {
   const line = stdout.split(/\r?\n/).find(entry => entry.startsWith(`${key}=`));
 
@@ -133,6 +235,12 @@ function readOutputValue(stdout: string, key: string): string {
 }
 
 function assertShellProcess(result: WrapperRunResult): void {
+  if (result.processStatus !== 0) {
+    throw new Error(`Shell exited with ${result.processStatus}:\n${result.stderr}`);
+  }
+}
+
+function assertCompletionProcess(result: ShellProcessResult): void {
   if (result.processStatus !== 0) {
     throw new Error(`Shell exited with ${result.processStatus}:\n${result.stderr}`);
   }
@@ -187,6 +295,22 @@ describe("shell wrappers", () => {
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
+    });
+
+    test(`${shellCase.scriptName} completes worktree ids for rm`, () => {
+      const result = runCompletion(shellCase, "rm");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).toContain("demo");
+      expect(result.suggestions).toContain("sample");
+    });
+
+    test(`${shellCase.scriptName} completes worktree ids for remove`, () => {
+      const result = runCompletion(shellCase, "remove");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).toContain("demo");
+      expect(result.suggestions).toContain("sample");
     });
   }
 });
