@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { isAbsolute, join } from "path";
 import {
   normalizeSettings,
   type WtSettings,
@@ -46,4 +46,17 @@ export function expandPath(path: string): string {
   }
 
   return path;
+}
+
+export function resolveWorktreeDir(
+  worktreeDir: string,
+  repoRoot: string
+): string {
+  const expandedPath = expandPath(worktreeDir);
+
+  if (isAbsolute(expandedPath)) {
+    return expandedPath;
+  }
+
+  return join(repoRoot, expandedPath);
 }

@@ -3,8 +3,8 @@ import { join } from "path";
 import { createWorktreeMeta } from "../../domain/worktree.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
-  expandPath,
   loadSettings,
+  resolveWorktreeDir,
 } from "../../infra/storage/settings-store.js";
 import {
   createGitWorktree,
@@ -66,7 +66,10 @@ export async function createWorktree(
   const pushRemote = options.push ?? settings.pushRemote;
   const shortId = options.id ?? generateShortId();
   const fullId = `${context.repoName}-${shortId}`;
-  const worktreeBaseDir = expandPath(settings.worktreeDir);
+  const worktreeBaseDir = resolveWorktreeDir(
+    settings.worktreeDir,
+    context.repoRoot
+  );
   const worktreePath = join(worktreeBaseDir, fullId);
 
   if (!existsSync(worktreeBaseDir)) {
