@@ -2,6 +2,7 @@ import { spawnSync } from "child_process";
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -22,6 +23,12 @@ interface TestRepo {
 
 interface ShellSessionResult {
   processStatus: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+interface CliRunResult {
+  status: number | null;
   stdout: string;
   stderr: string;
 }
@@ -60,13 +67,22 @@ function assertProcessSuccess(status: number | null, stderr: string, stdout?: st
   }
 }
 
-function runCli(args: string[], cwd: string): void {
+function runCliCapture(args: string[], cwd: string): CliRunResult {
   const result = spawnSync(process.execPath, [cliEntry, ...args], {
     cwd,
     encoding: "utf-8",
     env: process.env,
   });
 
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+function runCli(args: string[], cwd: string): void {
+  const result = runCliCapture(args, cwd);
   assertProcessSuccess(result.status, result.stderr, result.stdout);
 }
 
@@ -348,5 +364,38 @@ describe("cli e2e", () => {
     expect(postLines[4]).toBe(branchName);
     expect(realpathSync(postLines[5])).toBe(resolvedRepoRoot);
     expect(postLines[6]).toBe("missing");
+  });
+
+  test("resolves relative worktreeDir from repo root even when invoked in a subdirectory", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "relative1";
+    const branchName = "feature-relative-dir";
+    const nestedDir = join(repo.repoRoot, "packages", "app");
+    const expectedWorktreeRoot = join(repo.repoRoot, "worktrees");
+    const expectedWorktreePath = join(
+      expectedWorktreeRoot,
+      `${repo.repoName}-${worktreeId}`
+    );
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.worktreeDir = "./worktrees";
+    });
+
+    mkdirSync(nestedDir, { recursive: true });
+    writeFileSync(join(nestedDir, ".gitkeep"), "");
+
+    const result = runCliCapture(
+      ["new", branchName, "--id", worktreeId, "--no-cd"],
+      nestedDir
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const resolvedWorktreePath = realpathSync(expectedWorktreePath);
+
+    expect(existsSync(expectedWorktreePath)).toBeTrue();
+    expect(existsSync(join(expectedWorktreePath, ".wt", "meta.json"))).toBeTrue();
+    expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
+    expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
   });
 });

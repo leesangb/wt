@@ -96,7 +96,7 @@ wt new feature-branch --no-cd
 
 ## 사용법
 
-**참고:** 모든 명령어는 git 저장소 내 어느 위치에서 실행하든 자동으로 저장소 루트 디렉토리에서 실행됩니다.
+**참고:** `wt`는 git 저장소 내부 어느 디렉터리에서나 실행할 수 있습니다. 명령어는 내부적으로 저장소 루트를 기준으로 컨텍스트를 해석하며, `.wt/settings.json`의 상대 `worktreeDir` 값도 저장소 루트를 기준으로 해석됩니다.
 
 ### 설정 초기화
 
@@ -274,29 +274,61 @@ wt rm <id>
 }
 ```
 
+## 아키텍처 개요
+
+코드베이스는 얇은 CLI 어댑터와 레이어드 모듈 구조로 나뉘어 있습니다.
+
+- `src/commands/*`: 옵션을 해석하고 사용자 출력만 담당하는 커맨드 핸들러
+- `src/app/*`: 유스케이스와 워크플로 오케스트레이션
+- `src/domain/*`: 설정/worktree 모델과 순수 해석 로직
+- `src/infra/*`: git 접근, 저장소 파일 I/O, 스크립트 실행, shell 통합, updater 구현
+- `src/utils/*`: 호환용 shim과 작은 공용 헬퍼
+
+이 구조 덕분에 command 파일은 작게 유지되고, git 동작, 메타데이터 처리, 업데이트 로직은 서로 독립적으로 테스트하고 확장하기 쉬워집니다.
+
 ## 프로젝트 구조
 
 ```
 wt/
 ├── src/
-│   ├── index.ts              # CLI 진입점
+│   ├── index.ts               # Commander CLI 진입점
+│   ├── cli/
+│   │   └── command-runtime.ts # 공통 command 에러/exit 처리
 │   ├── commands/
-│   │   ├── init.ts           # wt init
-│   │   ├── new.ts            # wt new
-│   │   ├── list.ts           # wt list
-│   │   └── remove.ts         # wt remove
+│   │   ├── init.ts            # wt init
+│   │   ├── new.ts             # wt new
+│   │   ├── list.ts            # wt list / wt ls
+│   │   ├── remove.ts          # wt remove / wt rm
+│   │   ├── cd.ts              # wt cd
+│   │   └── update.ts          # wt update
+│   ├── app/
+│   │   ├── repository-context.ts # 현재 cwd 기준 repo root/name 해석
+│   │   ├── worktree-catalog.ts   # worktree 정보와 상태 집계
+│   │   └── use-cases/            # command 워크플로
+│   ├── domain/
+│   │   ├── settings.ts        # 설정 스키마와 정규화
+│   │   ├── worktree.ts        # worktree 모델과 메타데이터 헬퍼
+│   │   └── worktree-target.ts # worktree 대상 해석 규칙
+│   ├── infra/
+│   │   ├── git/               # git 저장소/worktree/status 접근
+│   │   ├── storage/           # 설정 및 메타데이터 저장
+│   │   ├── scripts/           # pre/post 스크립트 실행
+│   │   ├── shell/             # shell cd handoff 및 wrapper 업데이트
+│   │   └── update/            # 릴리스 조회 및 바이너리 교체
 │   ├── config/
-│   │   └── settings.ts       # 설정 관리
+│   │   └── settings.ts        # 설정 접근용 호환 export
+│   ├── types/
+│   │   └── index.ts           # 공개 TypeScript 타입 re-export
 │   ├── utils/
-│   │   ├── git.ts            # Git worktree 유틸리티
-│   │   ├── script.ts         # 스크립트 실행
-│   │   └── id.ts             # 짧은 ID 생성
-│   └── types/
-│       └── index.ts          # TypeScript 타입
+│   │   ├── git.ts             # 기존 git helper 호환 shim
+│   │   ├── script.ts          # 기존 script helper 호환 shim
+│   │   ├── cd.ts              # shell cd handoff 호환 shim
+│   │   └── id.ts              # 짧은 ID 생성
 ├── shell/
-│   ├── wt.zsh                # Zsh wrapper 함수
-│   ├── wt.bash               # Bash wrapper 함수
-│   └── wt.fish               # Fish wrapper 함수
+│   ├── wt.zsh                 # Zsh wrapper 함수
+│   ├── wt.bash                # Bash wrapper 함수
+│   └── wt.fish                # Fish wrapper 함수
+├── .github/workflows/ci.yml   # CI 체크
 ├── package.json
 └── tsconfig.json
 ```

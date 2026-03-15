@@ -7,7 +7,6 @@ import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
-import { isGitRepository, getGitRoot } from "./utils/git.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -15,13 +14,7 @@ const program = new Command();
 program
   .name("wt")
   .description("Git worktree manager CLI")
-  .version(pkg.version)
-  .hook("preAction", async () => {
-    if (await isGitRepository()) {
-      const repoRoot = await getGitRoot();
-      process.chdir(repoRoot);
-    }
-  });
+  .version(pkg.version);
 
 program
   .command("init")
@@ -67,4 +60,4 @@ program
   )
   .action(updateCommand);
 
-program.parse();
+await program.parseAsync();

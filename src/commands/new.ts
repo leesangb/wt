@@ -1,24 +1,7 @@
 import chalk from "chalk";
-import {
-  existsSync,
-  mkdirSync,
-  writeFileSync,
-  readFileSync,
-  appendFileSync,
-} from "fs";
-import { join } from "path";
-import {
-  isGitRepository,
-  getGitRoot,
-  getRepoName,
-  createWorktree,
-  fetchRemote,
-  getCommitHash,
-} from "../utils/git.js";
-import { loadSettings, expandPath } from "../config/settings.js";
-import { generateShortId } from "../utils/id.js";
-import { executeScripts, executeScriptsDetached } from "../utils/script.js";
-import { emitShellCd } from "../utils/cd.js";
+import { createWorktree } from "../app/use-cases/create-worktree.js";
+import { runCommand } from "../cli/command-runtime.js";
+import { emitShellCd } from "../infra/shell/cd.js";
 
 interface NewCommandOptions {
   base?: string;
@@ -31,107 +14,32 @@ export async function newCommand(
   branchName: string,
   options: NewCommandOptions
 ): Promise<void> {
-  if (!(await isGitRepository())) {
-    console.error(chalk.red("Error: Not a git repository"));
-    process.exit(1);
-  }
-
-  const repoRoot = await getGitRoot();
-  const repoName = await getRepoName();
-  const settings = await loadSettings(repoRoot);
-
-  const baseBranch = options.base ?? settings.baseBranch ?? "main";
-  const pushRemote = options.push ?? settings.pushRemote ?? true;
-
-  const shortId = options.id ?? generateShortId();
-  const dirName = `${repoName}-${shortId}`;
-  const worktreeBaseDir = expandPath(settings.worktreeDir);
-  const worktreePath = join(worktreeBaseDir, dirName);
-
-  if (!existsSync(worktreeBaseDir)) {
-    mkdirSync(worktreeBaseDir, { recursive: true });
-  }
-
-  try {
+  await runCommand(async () => {
     console.log(chalk.blue("Fetching latest changes..."));
-    await fetchRemote();
-
-    const baseCommit = await getCommitHash(baseBranch);
-
-    if (settings.scripts?.pre && settings.scripts.pre.length > 0) {
-      console.log(chalk.blue("Running pre scripts..."));
-      await executeScripts(settings.scripts.pre, repoRoot, {
-        WT_PATH: worktreePath,
-        WT_ID: shortId,
-        WT_FULL_ID: dirName,
-        WT_BRANCH: branchName,
-        WT_REPO_ROOT: repoRoot,
-      });
-    }
-
-    console.log(chalk.blue(`Creating worktree at ${worktreePath}...`));
-    await createWorktree(worktreePath, branchName, baseBranch, pushRemote);
-
-    const wtDir = join(worktreePath, ".wt");
-    mkdirSync(wtDir, { recursive: true });
-
-    const metaInfo = {
-      baseBranch,
-      baseCommit,
-      createdAt: new Date().toISOString(),
-    };
-    writeFileSync(join(wtDir, "meta.json"), JSON.stringify(metaInfo, null, 2));
-
-    writeFileSync(join(wtDir, ".gitignore"), ".gitignore\nmeta.json\n");
+    const result = await createWorktree(branchName, options);
 
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 
-    if (settings.scripts?.post && settings.scripts.post.length > 0) {
-      const env = {
-        WT_PATH: worktreePath,
-        WT_ID: shortId,
-        WT_FULL_ID: dirName,
-        WT_BRANCH: branchName,
-        WT_REPO_ROOT: repoRoot,
-      };
-
-      const postMode = settings.scripts.postMode ?? "async";
-
-      if (postMode === "async") {
-        const statusFilePath = join(wtDir, "post-task.json");
-        const logFilePath = join(wtDir, "post-task.log");
-        const pid = executeScriptsDetached(
-          settings.scripts.post,
-          worktreePath,
-          env,
-          statusFilePath,
-          logFilePath
-        );
-
-        console.log(chalk.blue("Starting post scripts in background..."));
-        console.log(chalk.dim(`  PID: ${pid}`));
-        console.log(chalk.dim(`  Status: ${statusFilePath}`));
-        console.log(chalk.dim(`  Log: ${logFilePath}`));
-      } else {
-        console.log(chalk.blue("Running post scripts..."));
-        await executeScripts(settings.scripts.post, worktreePath, env);
-      }
+    if (result.postMode === "async" && result.postTask) {
+      console.log(chalk.blue("Starting post scripts in background..."));
+      console.log(chalk.dim(`  PID: ${result.postTask.pid}`));
+      console.log(chalk.dim(`  Status: ${result.postTask.statusFilePath}`));
+      console.log(chalk.dim(`  Log: ${result.postTask.logFilePath}`));
+    } else if (result.postMode === "sync") {
+      console.log(chalk.blue("Running post scripts..."));
     }
 
     console.log(chalk.green(`\n✓ Worktree created successfully!`));
-    console.log(chalk.dim(`  WT_ID: ${shortId}`));
-    console.log(chalk.dim(`  WT_PATH: ${worktreePath}`));
-    console.log(chalk.dim(`  WT_BRANCH: ${branchName}`));
+    console.log(chalk.dim(`  WT_ID: ${result.shortId}`));
+    console.log(chalk.dim(`  WT_PATH: ${result.worktreePath}`));
+    console.log(chalk.dim(`  WT_BRANCH: ${result.branchName}`));
 
-    // Output cd command for shell wrapper function
     if (options.cd !== false) {
-      emitShellCd(worktreePath);
-    } else {
-      console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
-      console.log(chalk.cyan(`  cd ${worktreePath}`));
+      emitShellCd(result.worktreePath);
+      return;
     }
-  } catch (error) {
-    console.error(chalk.red(`Error creating worktree: ${error}`));
-    process.exit(1);
-  }
+
+    console.log(chalk.cyan(`\nTo navigate to the worktree, run:`));
+    console.log(chalk.cyan(`  cd ${result.worktreePath}`));
+  });
 }

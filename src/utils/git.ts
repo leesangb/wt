@@ -1,40 +1,38 @@
-import { basename } from "path";
-import { spawn } from "bun";
-import { statSync } from "fs";
-import type { WorktreeInfo } from "../types/index.js";
-import { $ } from "bun";
+import { requireRepositoryContext } from "../app/repository-context.js";
+import { loadWorktreeInfos } from "../app/worktree-catalog.js";
+import {
+  createGitWorktree,
+  deleteBranch as deleteBranchByRepoRoot,
+  fetchRemote as fetchRemoteByRepoRoot,
+  listGitWorktrees,
+  removeGitWorktree,
+} from "../infra/git/worktree-repository.js";
+import {
+  getCommitHash as getCommitHashByRepoRoot,
+  getDefaultRemoteBranch as getDefaultRemoteBranchByRepoRoot,
+  getMergedRemoteBranches as getMergedRemoteBranchesByRepoRoot,
+  getWorktreeStatusSummary,
+  isBranchMergedToRemote as isBranchMergedToRemoteByRepoRoot,
+} from "../infra/git/status.js";
+export { getWorktreeStatusSummary };
+export {
+  getGitRoot,
+  isGitRepository,
+} from "../infra/git/repository.js";
+import { getRepoName as getRepoNameByRepoRoot } from "../infra/git/repository.js";
 
-export async function isGitRepository(): Promise<boolean> {
-  try {
-    await $`git rev-parse --git-dir`.quiet();
-    return true;
-  } catch {
-    return false;
+export async function getRepoName(repoRoot?: string): Promise<string> {
+  if (repoRoot) {
+    return getRepoNameByRepoRoot(repoRoot);
   }
-}
 
-export async function getGitRoot(): Promise<string> {
-  const result = await $`git rev-parse --show-toplevel`.text();
-  return result.trim();
-}
-
-export async function getRepoName(): Promise<string> {
-  try {
-    const remoteUrl = await $`git remote get-url origin`.text();
-    const url = remoteUrl.trim();
-
-    const match = url.match(/\/([^\/]+?)(?:\.git)?$/);
-    if (match) {
-      return match[1];
-    }
-  } catch {}
-
-  const root = await getGitRoot();
-  return basename(root);
+  const context = await requireRepositoryContext();
+  return context.repoName;
 }
 
 export async function fetchRemote(): Promise<void> {
-  await $`git fetch`;
+  const context = await requireRepositoryContext();
+  await fetchRemoteByRepoRoot(context.repoRoot);
 }
 
 export async function createWorktree(
@@ -43,196 +41,57 @@ export async function createWorktree(
   base: string,
   pushRemote: boolean = true
 ): Promise<void> {
-  const addProc = spawn(["git", "worktree", "add", "-b", branch, path, base], {
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const addResult = await addProc.exited;
-  if (addResult !== 0) {
-    throw new Error(`git worktree add failed with exit code ${addResult}`);
-  }
-
-  if (pushRemote) {
-    const pushProc = spawn(
-      ["git", "-C", path, "push", "-u", "origin", branch],
-      {
-        stdout: "inherit",
-        stderr: "inherit",
-      }
-    );
-    const pushResult = await pushProc.exited;
-    if (pushResult !== 0) {
-      throw new Error(`git push failed with exit code ${pushResult}`);
-    }
-  }
+  const context = await requireRepositoryContext();
+  await createGitWorktree(context.repoRoot, path, branch, base, pushRemote);
 }
 
-export async function listWorktrees(): Promise<WorktreeInfo[]> {
-  const result = await $`git worktree list --porcelain`.text();
-  const worktrees: WorktreeInfo[] = [];
-
-  const entries = result.trim().split("\n\n");
-  const repoName = await getRepoName();
-
-  for (const entry of entries) {
-    const lines = entry.split("\n");
-    let path = "";
-    let branch = "";
-
-    for (const line of lines) {
-      if (line.startsWith("worktree ")) {
-        path = line.substring(9);
-      } else if (line.startsWith("branch ")) {
-        branch = line.substring(7).replace("refs/heads/", "");
-      }
-    }
-
-    if (path && branch) {
-      const fullId = basename(path);
-      const id = fullId.startsWith(`${repoName}-`)
-        ? fullId.substring(repoName.length + 1)
-        : fullId;
-
-      const stats = statSync(path);
-
-      let baseBranch: string | undefined;
-      let baseCommit: string | undefined;
-
-      try {
-        const { readFileSync } = await import("fs");
-        let metaPath = `${path}/.wt/meta.json`;
-        if (!require("fs").existsSync(metaPath)) {
-          metaPath = `${path}/.wt/meta`;
-        }
-        const metaContent = readFileSync(metaPath, "utf-8");
-        const meta = JSON.parse(metaContent);
-        baseBranch = meta.baseBranch;
-        baseCommit = meta.baseCommit;
-      } catch {}
-
-      worktrees.push({
-        id,
-        fullId,
-        path,
-        branch,
-        repoName,
-        createdAt: stats.birthtime.toISOString(),
-        baseBranch,
-        baseCommit,
-      });
-    }
-  }
-
-  return worktrees;
+export async function listWorktrees() {
+  const context = await requireRepositoryContext();
+  return loadWorktreeInfos(context);
 }
 
 export async function removeWorktree(path: string): Promise<void> {
-  await $`git worktree remove ${path} --force`;
+  const context = await requireRepositoryContext();
+  await removeGitWorktree(context.repoRoot, path);
 }
 
 export async function deleteBranch(branch: string): Promise<void> {
-  await $`git branch -D ${branch}`;
+  const context = await requireRepositoryContext();
+  await deleteBranchByRepoRoot(context.repoRoot, branch);
 }
 
 export async function getDefaultRemoteBranch(): Promise<string | undefined> {
-  try {
-    const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.text();
-    return result.trim().replace("refs/remotes/origin/", "");
-  } catch {
-    return undefined;
-  }
+  const context = await requireRepositoryContext();
+  return getDefaultRemoteBranchByRepoRoot(context.repoRoot);
 }
 
 export async function getMergedRemoteBranches(
   baseBranch?: string
 ): Promise<Set<string>> {
-  try {
-    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
-    if (!mergeBaseBranch) {
-      return new Set();
-    }
-
-    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
-    return new Set(
-      result
-        .trim()
-        .split("\n")
-        .map((branch) => branch.trim())
-        .filter((branch) => branch.length > 0)
-    );
-  } catch {
-    return new Set();
-  }
+  const context = await requireRepositoryContext();
+  return getMergedRemoteBranchesByRepoRoot(context.repoRoot, baseBranch);
 }
 
 export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
-  try {
-    const mergedBranches = await getMergedRemoteBranches(baseBranch);
-    return mergedBranches.has(`origin/${branch}`);
-  } catch {
-    return false;
-  }
-}
-
-export async function getWorktreeStatusSummary(
-  path: string,
-  branch: string
-): Promise<{
-  unpushedCount: number;
-  modifiedCount: number;
-}> {
-  try {
-    const [unpushedCount, result] = await Promise.all([
-      getUnpushedCommitCount(path, branch),
-      $`git -C ${path} status --porcelain`.text(),
-    ]);
-    const modifiedCount = result
-      .trim()
-      .split("\n")
-      .filter((line) => line.length > 0).length;
-
-    return { unpushedCount, modifiedCount };
-  } catch {
-    return { unpushedCount: 0, modifiedCount: 0 };
-  }
-}
-
-export async function getUnpushedCommitCount(
-  path: string,
-  branch: string
-): Promise<number> {
-  try {
-    const result =
-      await $`git -C ${path} rev-list --count origin/${branch}..${branch}`
-        .quiet()
-        .text();
-    return parseInt(result.trim(), 10) || 0;
-  } catch {
-    return 0;
-  }
+  const context = await requireRepositoryContext();
+  return isBranchMergedToRemoteByRepoRoot(
+    context.repoRoot,
+    branch,
+    baseBranch
+  );
 }
 
 export async function getLocalModificationCount(path: string): Promise<number> {
-  try {
-    const result = await $`git -C ${path} status --porcelain`.text();
-    const lines = result
-      .trim()
-      .split("\n")
-      .filter((line) => line.length > 0);
-    return lines.length;
-  } catch {
-    return 0;
-  }
+  const summary = await getWorktreeStatusSummary(path, "HEAD");
+  return summary.modifiedCount;
 }
 
 export async function getCommitHash(ref: string): Promise<string> {
-  try {
-    const result = await $`git rev-parse ${ref}`.text();
-    return result.trim();
-  } catch {
-    return "";
-  }
+  const context = await requireRepositoryContext();
+  return getCommitHashByRepoRoot(context.repoRoot, ref);
 }
+
+export { listGitWorktrees };

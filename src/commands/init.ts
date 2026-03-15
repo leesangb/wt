@@ -1,39 +1,23 @@
 import chalk from "chalk";
-import { isGitRepository, getGitRoot } from "../utils/git.js";
-import { settingsExist, saveSettings } from "../config/settings.js";
-import type { WtSettings } from "../types/index.js";
+import { initSettings } from "../app/use-cases/init-settings.js";
+import { runCommand } from "../cli/command-runtime.js";
 
 export async function initCommand(): Promise<void> {
-  if (!(await isGitRepository())) {
-    console.error(chalk.red("Error: Not a git repository"));
-    process.exit(1);
-  }
+  await runCommand(async () => {
+    const result = await initSettings();
 
-  const repoRoot = await getGitRoot();
+    if (!result.created) {
+      console.log(chalk.yellow("Warning: .wt/settings.json already exists"));
+      return;
+    }
 
-  if (await settingsExist(repoRoot)) {
-    console.log(chalk.yellow("Warning: .wt/settings.json already exists"));
-    return;
-  }
-
-  const defaultSettings: WtSettings = {
-    worktreeDir: "~/.wt",
-    baseBranch: "main",
-    pushRemote: true,
-    scripts: {
-      pre: [],
-      post: [],
-      postMode: "async",
-    },
-  };
-
-  await saveSettings(repoRoot, defaultSettings);
-  console.log(chalk.green("✓ Initialized wt configuration at .wt/settings.json"));
-  console.log(chalk.dim("\nEdit .wt/settings.json to customize:"));
-  console.log(chalk.dim("  - worktreeDir: Base directory for worktrees"));
-  console.log(chalk.dim("  - baseBranch: Default base branch (default: main)"));
-  console.log(chalk.dim("  - pushRemote: Auto-push new branch to remote (default: true)"));
-  console.log(chalk.dim("  - scripts.pre: Array of commands to run before creating worktree"));
-  console.log(chalk.dim("  - scripts.post: Array of commands to run after creating worktree"));
-  console.log(chalk.dim("  - scripts.postMode: 'sync' | 'async' (default: async)"));
+    console.log(chalk.green("✓ Initialized wt configuration at .wt/settings.json"));
+    console.log(chalk.dim("\nEdit .wt/settings.json to customize:"));
+    console.log(chalk.dim("  - worktreeDir: Base directory for worktrees"));
+    console.log(chalk.dim("  - baseBranch: Default base branch (default: main)"));
+    console.log(chalk.dim("  - pushRemote: Auto-push new branch to remote (default: true)"));
+    console.log(chalk.dim("  - scripts.pre: Array of commands to run before creating worktree"));
+    console.log(chalk.dim("  - scripts.post: Array of commands to run after creating worktree"));
+    console.log(chalk.dim("  - scripts.postMode: 'sync' | 'async' (default: async)"));
+  });
 }
