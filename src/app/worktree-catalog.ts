@@ -33,7 +33,8 @@ export async function loadWorktreeInfos(
       const meta = await readWorktreeMeta(worktree.path);
       const { id, fullId } = buildWorktreeIdentifiers(
         context.repoName,
-        worktree.path
+        worktree.path,
+        meta
       );
 
       return {

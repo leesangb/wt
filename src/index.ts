@@ -25,7 +25,7 @@ program
   .command("new <branch-name>")
   .description("Create a new worktree")
   .option("-b, --base <base-branch>", "Base branch to create from")
-  .option("--id <id>", "Custom ID for the worktree")
+  .option("--id <id>", "Custom ID for the worktree (default: branch name)")
   .option("--no-push", "Skip pushing the new branch to remote")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .action(newCommand);

@@ -35,6 +35,8 @@ describe("worktree meta store", () => {
       baseBranch: "main",
       baseCommit: "abc123",
       createdAt: "2026-03-15T00:00:00.000Z",
+      id: "feature/issue-12",
+      fullId: "repo-feature/issue-12",
     });
 
     expect(
@@ -45,6 +47,8 @@ describe("worktree meta store", () => {
       baseBranch: "main",
       baseCommit: "abc123",
       createdAt: "2026-03-15T00:00:00.000Z",
+      id: "feature/issue-12",
+      fullId: "repo-feature/issue-12",
     });
     expect(
       readFileSync(join(worktreePath, ".wt", ".gitignore"), "utf-8")
