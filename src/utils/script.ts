@@ -1,3 +1,4 @@
+import { spawn as spawnChildProcess } from "node:child_process";
 import { mkdirSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { SHELL_CD_FILE_ENV } from "./cd.js";
@@ -83,15 +84,17 @@ export function executeScriptsDetached(scripts: string[], cwd: string, env: Reco
     scripts,
   });
 
-  const proc = Bun.spawn(["sh", "-c", command], {
+  const proc = spawnChildProcess("sh", ["-c", command], {
     cwd,
     env: buildScriptEnv(env),
-    stdout: "ignore",
-    stderr: "ignore",
-    stdin: "ignore",
+    detached: true,
+    stdio: "ignore",
   });
 
   const pid = proc.pid;
+  if (pid === undefined) {
+    throw new Error("Failed to start detached script process");
+  }
   proc.unref();
 
   writeFileSync(
