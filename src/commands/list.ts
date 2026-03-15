@@ -1,5 +1,8 @@
 import chalk from "chalk";
-import { listWorktrees } from "../app/use-cases/list-worktrees.js";
+import {
+  listWorktreeInfos,
+  listWorktrees,
+} from "../app/use-cases/list-worktrees.js";
 import { runCommand } from "../cli/command-runtime.js";
 
 type CompletionFormat = "bash" | "zsh" | "fish";
@@ -8,9 +11,9 @@ export async function listCommand(options?: {
   completion?: CompletionFormat;
 }): Promise<void> {
   await runCommand(async () => {
-    const result = await listWorktrees();
-
     if (options?.completion) {
+      const result = await listWorktreeInfos();
+
       for (const worktree of result.worktrees) {
         let description = worktree.branch;
 
@@ -28,6 +31,8 @@ export async function listCommand(options?: {
       }
       return;
     }
+
+    const result = await listWorktrees();
 
     if (result.worktrees.length === 0) {
       console.log(chalk.yellow("No worktrees found"));

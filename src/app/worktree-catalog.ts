@@ -63,14 +63,16 @@ export async function loadWorktreeStates(
         .filter((branch): branch is string => Boolean(branch))
     ),
   ];
-  const mergedBranchesByBase = new Map(
+  const mergedBranchEntries: Array<readonly [string, Set<string>]> =
     await Promise.all(
-      baseBranches.map(async (baseBranch) => [
+      baseBranches.map(
+        async (baseBranch): Promise<readonly [string, Set<string>]> => [
         baseBranch,
         await getMergedRemoteBranches(context.repoRoot, baseBranch),
-      ])
-    )
-  );
+      ]
+      )
+    );
+  const mergedBranchesByBase = new Map<string, Set<string>>(mergedBranchEntries);
 
   const worktreeStates = await Promise.all(
     worktrees.map(async (worktree) => {

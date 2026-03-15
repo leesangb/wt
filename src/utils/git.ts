@@ -17,9 +17,18 @@ import {
 export { getWorktreeStatusSummary };
 export {
   getGitRoot,
-  getRepoName,
   isGitRepository,
 } from "../infra/git/repository.js";
+import { getRepoName as getRepoNameByRepoRoot } from "../infra/git/repository.js";
+
+export async function getRepoName(repoRoot?: string): Promise<string> {
+  if (repoRoot) {
+    return getRepoNameByRepoRoot(repoRoot);
+  }
+
+  const context = await requireRepositoryContext();
+  return context.repoName;
+}
 
 export async function fetchRemote(): Promise<void> {
   const context = await requireRepositoryContext();
