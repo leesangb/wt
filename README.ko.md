@@ -190,6 +190,8 @@ wt remove <id>
 wt rm <id>
 ```
 
+worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면, `wt rm`은 삭제 전에 한 번 더 확인합니다. 프롬프트를 건너뛰려면 `wt rm <id> --force`를 사용할 수 있습니다.
+
 다음 방법으로 worktree를 제거할 수 있습니다:
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
 - 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)

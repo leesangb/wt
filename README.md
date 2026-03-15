@@ -191,6 +191,8 @@ wt remove <id>
 wt rm <id>
 ```
 
+If the worktree has modified files or unpushed commits, `wt rm` asks for confirmation before deleting it. Use `wt rm <id> --force` to skip the prompt.
+
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
 - Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)

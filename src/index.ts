@@ -42,6 +42,7 @@ program
   .alias("rm")
   .description("Remove a worktree by ID")
   .option("--keep-branch", "Keep the branch after removing worktree")
+  .option("-f, --force", "Skip confirmation for worktrees with pending changes")
   .action(removeCommand);
 
 program

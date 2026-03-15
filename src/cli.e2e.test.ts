@@ -33,6 +33,10 @@ interface CliRunResult {
   stderr: string;
 }
 
+interface CliRunOptions {
+  input?: string;
+}
+
 const tempDirs: string[] = [];
 const cliEntry = fileURLToPath(new URL("./index.ts", import.meta.url));
 const bashWrapperTemplatePath = fileURLToPath(new URL("../shell/wt.bash", import.meta.url));
@@ -77,11 +81,16 @@ function assertProcessSuccess(status: number | null, stderr: string, stdout?: st
   }
 }
 
-function runCliCapture(args: string[], cwd: string): CliRunResult {
+function runCliCapture(
+  args: string[],
+  cwd: string,
+  options: CliRunOptions = {}
+): CliRunResult {
   const result = spawnSync(process.execPath, [cliEntry, ...args], {
     cwd,
     encoding: "utf-8",
     env: process.env,
+    input: options.input,
   });
 
   return {
@@ -349,6 +358,56 @@ describe("cli e2e", () => {
     );
 
     expect(removeResult.stdout).toContain(`(${branchName})`);
+    expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("asks for confirmation before removing a dirty worktree", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "confirm123";
+    const branchName = "feature-confirm";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    writeFileSync(join(worktreePath, "README.md"), "dirty\n");
+
+    const cancelResult = runCliCapture(["remove", worktreeId], repo.repoRoot, {
+      input: "n\n",
+    });
+
+    expect(cancelResult.status).toBe(1);
+    expect(cancelResult.stdout).toContain("Remove this worktree anyway? [y/N]");
+    expect(cancelResult.stderr).toContain("Error: Removal cancelled");
+    expect(existsSync(worktreePath)).toBeTrue();
+
+    const confirmResult = runCliCapture(["remove", worktreeId], repo.repoRoot, {
+      input: "y\n",
+    });
+
+    assertProcessSuccess(
+      confirmResult.status,
+      confirmResult.stderr,
+      confirmResult.stdout
+    );
+    expect(confirmResult.stdout).toContain("Warning:");
+    expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("allows force removal without confirmation", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "force123";
+    const branchName = "feature-force";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    writeFileSync(join(worktreePath, "README.md"), "dirty\n");
+
+    const result = runCliCapture(
+      ["remove", worktreeId, "--force"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).not.toContain("Remove this worktree anyway? [y/N]");
     expect(existsSync(worktreePath)).toBeFalse();
   });
 

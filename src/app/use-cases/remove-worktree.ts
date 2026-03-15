@@ -6,10 +6,17 @@ import {
   deleteBranch,
   removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
+import { getWorktreeStatusSummary } from "../../infra/git/status.js";
 import type { WorktreeInfo } from "../../domain/worktree.js";
 
 export interface RemoveWorktreeOptions {
   keepBranch?: boolean;
+}
+
+export interface RemoveWorktreePreview {
+  worktree: WorktreeInfo;
+  unpushedCount: number;
+  modifiedCount: number;
 }
 
 export interface RemoveWorktreeResult {
@@ -17,11 +24,13 @@ export interface RemoveWorktreeResult {
   branchDeleted: boolean;
 }
 
-export async function removeWorktree(
+async function resolveRemovalTarget(
   target: string,
-  options: RemoveWorktreeOptions,
-  cwd: string = process.cwd()
-): Promise<RemoveWorktreeResult> {
+  cwd: string
+): Promise<{
+  context: Awaited<ReturnType<typeof requireRepositoryContext>>;
+  worktree: WorktreeInfo;
+}> {
   const context = await requireRepositoryContext(cwd);
   const worktrees = await loadWorktreeInfos(context);
   const result = resolveWorktreeTarget(worktrees, target, {
@@ -35,19 +44,49 @@ export async function removeWorktree(
     );
   }
 
-  await removeGitWorktree(context.repoRoot, result.worktree.path);
+  return {
+    context,
+    worktree: result.worktree,
+  };
+}
+
+export async function inspectRemoveWorktree(
+  target: string,
+  cwd: string = process.cwd()
+): Promise<RemoveWorktreePreview> {
+  const { worktree } = await resolveRemovalTarget(target, cwd);
+  const { unpushedCount, modifiedCount } = await getWorktreeStatusSummary(
+    worktree.path,
+    worktree.branch
+  );
+
+  return {
+    worktree,
+    unpushedCount,
+    modifiedCount,
+  };
+}
+
+export async function removeWorktree(
+  target: string,
+  options: RemoveWorktreeOptions,
+  cwd: string = process.cwd()
+): Promise<RemoveWorktreeResult> {
+  const { context, worktree } = await resolveRemovalTarget(target, cwd);
+
+  await removeGitWorktree(context.repoRoot, worktree.path);
 
   if (options.keepBranch) {
     return {
-      worktree: result.worktree,
+      worktree,
       branchDeleted: false,
     };
   }
 
-  await deleteBranch(context.repoRoot, result.worktree.branch);
+  await deleteBranch(context.repoRoot, worktree.branch);
 
   return {
-    worktree: result.worktree,
+    worktree,
     branchDeleted: true,
   };
 }
