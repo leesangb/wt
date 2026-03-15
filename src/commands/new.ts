@@ -30,7 +30,7 @@ export async function newCommand(
     }
 
     console.log(chalk.green(`\n✓ Worktree created successfully!`));
-    console.log(chalk.dim(`  WT_ID: ${result.shortId}`));
+    console.log(chalk.dim(`  WT_ID: ${result.id}`));
     console.log(chalk.dim(`  WT_PATH: ${result.worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${result.branchName}`));
 

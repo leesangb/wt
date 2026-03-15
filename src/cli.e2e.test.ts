@@ -119,7 +119,10 @@ async function createTestRepo(): Promise<TestRepo> {
 }
 
 function getWorktreePath(repo: TestRepo, worktreeId: string): string {
-  return join(repo.worktreeRoot, `${repo.repoName}-${worktreeId}`);
+  return join(
+    repo.worktreeRoot,
+    `${repo.repoName}-${worktreeId.replaceAll("/", "-")}`
+  );
 }
 
 function updateSettings(
@@ -303,6 +306,40 @@ describe("cli e2e", () => {
 
     expect(cdStatus).toBe(0);
     expect(realpathSync(cdPwd)).toBe(realpathSync(worktreePath));
+  });
+
+  test("keeps slash-based ids while sanitizing the worktree directory name", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/issue-12";
+    const worktreePath = getWorktreePath(repo, branchName);
+
+    const createResult = runCliCapture(["new", branchName, "--no-cd"], repo.repoRoot);
+    assertProcessSuccess(
+      createResult.status,
+      createResult.stderr,
+      createResult.stdout
+    );
+
+    const listResult = runCliCapture(["list"], repo.repoRoot);
+    assertProcessSuccess(listResult.status, listResult.stderr, listResult.stdout);
+
+    expect(existsSync(worktreePath)).toBeTrue();
+    expect(createResult.stdout).toContain(`WT_ID: ${branchName}`);
+    expect(createResult.stdout).toContain(`WT_PATH: ${worktreePath}`);
+    expect(listResult.stdout).toContain(`ID:      ${branchName}`);
+
+    const removeResult = runCliCapture(
+      ["remove", branchName, "--keep-branch"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      removeResult.status,
+      removeResult.stderr,
+      removeResult.stdout
+    );
+
+    expect(removeResult.stdout).toContain(`(${branchName})`);
+    expect(existsSync(worktreePath)).toBeFalse();
   });
 
   test("runs pre and post scripts in sync mode with the expected environment", async () => {

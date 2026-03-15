@@ -6,7 +6,7 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 
 ## 기능
 
-- 🚀 짧은 ID와 저장소 기반 이름으로 worktree 생성
+- 🚀 브랜치 기반 ID와 저장소 기반 이름으로 worktree 생성
 - 🎯 새 worktree로 자동 이동 (shell wrapper 통합)
 - ⚙️ 저장소별로 worktree 기본 디렉토리, 기본 브랜치, 원격 푸시 동작 설정
 - 🔄 worktree 생성 전 최신 변경사항 자동 fetch
@@ -137,15 +137,18 @@ wt new feature-branch --no-cd
 다음을 수행합니다:
 1. 원격에서 최신 변경사항 가져오기 (`git fetch`)
 2. pre 스크립트 실행 (설정된 경우)
-3. `~/.wt/<저장소명-짧은ID>`에 `feature-branch` 브랜치로 worktree 생성
+3. `~/.wt/<저장소명-feature-branch>`에 `feature-branch` 브랜치로 worktree 생성
 4. 새 브랜치를 원격에 upstream 추적과 함께 푸시 (`--no-push`를 사용하지 않는 경우)
 5. 새 worktree에서 post 스크립트 실행 (설정된 경우)
 6. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
 
 post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `<worktree>/.wt/` 아래에 상태/로그 파일(`post-task.json`, `post-task.log`)이 생성됩니다.
 
+기본적으로 `WT_ID`는 브랜치 이름을 사용합니다. 브랜치에 `/`가 있으면 실제 worktree 디렉토리 이름에서는 `-`로 치환하지만, 저장되는 ID 값은 그대로 유지됩니다. 예를 들어 `feature/issue-12`는 `~/.wt/<저장소명-feature-issue-12>` 경로로 생성됩니다.
+
 **옵션:**
 - `--base <branch>` - 생성할 기본 브랜치 (기본값: 설정 또는 `main`)
+- `--id <id>` - 기본 worktree ID 덮어쓰기 (기본값: 브랜치 이름)
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
 
@@ -188,8 +191,8 @@ wt rm <id>
 ```
 
 다음 방법으로 worktree를 제거할 수 있습니다:
-- 짧은 ID (예: `x7k2m9n4`)
-- 레포 prefix가 포함된 전체 ID (예: `myrepo-x7k2m9n4`)
+- ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
+- 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)
 - worktree를 고유하게 식별할 수 있는 경로의 일부
 
 ## 설정
@@ -208,8 +211,8 @@ wt rm <id>
 스크립트는 다음 환경 변수에 접근할 수 있습니다:
 
 - `$WT_PATH` - worktree 디렉토리의 전체 경로
-- `$WT_ID` - worktree의 짧은 ID (예: `x7k2m9n4`)
-- `$WT_FULL_ID` - 레포 prefix가 포함된 전체 ID (예: `myrepo-x7k2m9n4`)
+- `$WT_ID` - worktree ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
+- `$WT_FULL_ID` - 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)
 - `$WT_BRANCH` - 브랜치 이름
 - `$WT_REPO_ROOT` - 저장소 루트 디렉토리의 전체 경로
 
@@ -322,8 +325,7 @@ wt/
 │   ├── utils/
 │   │   ├── git.ts             # 기존 git helper 호환 shim
 │   │   ├── script.ts          # 기존 script helper 호환 shim
-│   │   ├── cd.ts              # shell cd handoff 호환 shim
-│   │   └── id.ts              # 짧은 ID 생성
+│   │   └── cd.ts              # shell cd handoff 호환 shim
 ├── shell/
 │   ├── wt.zsh                 # Zsh wrapper 함수
 │   ├── wt.bash                # Bash wrapper 함수

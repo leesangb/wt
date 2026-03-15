@@ -6,7 +6,7 @@ A CLI tool to manage git worktrees with pre/post script support.
 
 ## Features
 
-- 🚀 Create worktrees with short IDs and repo-based naming
+- 🚀 Create worktrees with branch-based IDs and repo-based naming
 - 🎯 Auto-cd to new worktree (with shell wrapper integration)
 - ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
 - 🔄 Auto-fetch latest changes before creating worktree
@@ -138,15 +138,18 @@ wt new feature-branch --no-cd
 This will:
 1. Fetch the latest changes from remote (`git fetch`)
 2. Run the pre scripts (if configured)
-3. Create a worktree at `~/.wt/<reponame-shortid>` with branch `feature-branch`
+3. Create a worktree at `~/.wt/<reponame-feature-branch>` with branch `feature-branch`
 4. Push the new branch to remote with upstream tracking (unless `--no-push` is used)
 5. Run the post scripts in the new worktree (if configured)
 6. Automatically change to the new worktree directory (with shell wrapper)
 
 When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`).
 
+By default, `WT_ID` uses the branch name. When the branch contains `/`, the worktree directory name replaces it with `-`, while the stored ID remains unchanged. For example, `feature/issue-12` becomes `~/.wt/<reponame-feature-issue-12>`.
+
 **Options:**
 - `--base <branch>` - Base branch to create from (default: from settings or `main`)
+- `--id <id>` - Override the default worktree ID (defaults to the branch name)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
 
@@ -189,8 +192,8 @@ wt rm <id>
 ```
 
 You can remove a worktree using:
-- Short ID (e.g., `x7k2m9n4`)
-- Full ID with repo prefix (e.g., `myrepo-x7k2m9n4`)
+- ID (defaults to the branch name, e.g., `feature/issue-12`)
+- Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)
 - Any part of the path that uniquely identifies the worktree
 
 ## Configuration
@@ -209,8 +212,8 @@ Edit `.wt/settings.json` in your repository:
 Scripts have access to these environment variables:
 
 - `$WT_PATH` - Full path to the worktree directory
-- `$WT_ID` - Short ID of the worktree (e.g., `x7k2m9n4`)
-- `$WT_FULL_ID` - Full ID with repo prefix (e.g., `myrepo-x7k2m9n4`)
+- `$WT_ID` - Worktree ID (defaults to the branch name, e.g., `feature/issue-12`)
+- `$WT_FULL_ID` - Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)
 - `$WT_BRANCH` - Branch name
 - `$WT_REPO_ROOT` - Full path to the repository root directory
 
@@ -322,8 +325,7 @@ wt/
 │   ├── utils/
 │   │   ├── git.ts            # Compatibility shim for legacy git helpers
 │   │   ├── script.ts         # Compatibility shim for script helpers
-│   │   ├── cd.ts             # Compatibility shim for shell cd handoff
-│   │   └── id.ts             # Short ID generation
+│   │   └── cd.ts             # Compatibility shim for shell cd handoff
 ├── shell/
 │   ├── wt.zsh                # Zsh wrapper function
 │   ├── wt.bash               # Bash wrapper function

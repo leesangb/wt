@@ -1,6 +1,9 @@
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
-import { createWorktreeMeta } from "../../domain/worktree.js";
+import {
+  buildWorktreePathName,
+  createWorktreeMeta,
+} from "../../domain/worktree.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
   loadSettings,
@@ -15,7 +18,6 @@ import {
   executeScripts,
   executeScriptsDetached,
 } from "../../infra/scripts/runner.js";
-import { generateShortId } from "../../utils/id.js";
 import { writeWorktreeMeta } from "../../infra/storage/worktree-meta-store.js";
 
 export interface CreateWorktreeOptions {
@@ -26,7 +28,7 @@ export interface CreateWorktreeOptions {
 
 export interface CreateWorktreeResult {
   branchName: string;
-  shortId: string;
+  id: string;
   fullId: string;
   worktreePath: string;
   baseBranch: string;
@@ -42,13 +44,13 @@ export interface CreateWorktreeResult {
 function createScriptEnvironment(
   repoRoot: string,
   worktreePath: string,
-  shortId: string,
+  id: string,
   fullId: string,
   branchName: string
 ): Record<string, string> {
   return {
     WT_PATH: worktreePath,
-    WT_ID: shortId,
+    WT_ID: id,
     WT_FULL_ID: fullId,
     WT_BRANCH: branchName,
     WT_REPO_ROOT: repoRoot,
@@ -64,13 +66,16 @@ export async function createWorktree(
   const settings = await loadSettings(context.repoRoot);
   const baseBranch = options.base ?? settings.baseBranch;
   const pushRemote = options.push ?? settings.pushRemote;
-  const shortId = options.id ?? generateShortId();
-  const fullId = `${context.repoName}-${shortId}`;
+  const id = options.id ?? branchName;
+  const fullId = `${context.repoName}-${id}`;
   const worktreeBaseDir = resolveWorktreeDir(
     settings.worktreeDir,
     context.repoRoot
   );
-  const worktreePath = join(worktreeBaseDir, fullId);
+  const worktreePath = join(
+    worktreeBaseDir,
+    buildWorktreePathName(context.repoName, id)
+  );
 
   if (!existsSync(worktreeBaseDir)) {
     mkdirSync(worktreeBaseDir, { recursive: true });
@@ -82,7 +87,7 @@ export async function createWorktree(
   const scriptEnv = createScriptEnvironment(
     context.repoRoot,
     worktreePath,
-    shortId,
+    id,
     fullId,
     branchName
   );
@@ -101,13 +106,16 @@ export async function createWorktree(
 
   await writeWorktreeMeta(
     worktreePath,
-    createWorktreeMeta(baseBranch, baseCommit)
+    createWorktreeMeta(baseBranch, baseCommit, undefined, {
+      id,
+      fullId,
+    })
   );
 
   if (settings.scripts.post.length === 0) {
     return {
       branchName,
-      shortId,
+      id,
       fullId,
       worktreePath,
       baseBranch,
@@ -129,7 +137,7 @@ export async function createWorktree(
 
     return {
       branchName,
-      shortId,
+      id,
       fullId,
       worktreePath,
       baseBranch,
@@ -147,7 +155,7 @@ export async function createWorktree(
 
   return {
     branchName,
-    shortId,
+    id,
     fullId,
     worktreePath,
     baseBranch,
