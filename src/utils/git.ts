@@ -134,7 +134,7 @@ export async function deleteBranch(branch: string): Promise<void> {
   await $`git branch -D ${branch}`;
 }
 
-async function getDefaultRemoteBranch(): Promise<string | undefined> {
+export async function getDefaultRemoteBranch(): Promise<string | undefined> {
   try {
     const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.text();
     return result.trim().replace("refs/remotes/origin/", "");
@@ -143,26 +143,60 @@ async function getDefaultRemoteBranch(): Promise<string | undefined> {
   }
 }
 
+export async function getMergedRemoteBranches(
+  baseBranch?: string
+): Promise<Set<string>> {
+  try {
+    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
+    if (!mergeBaseBranch) {
+      return new Set();
+    }
+
+    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
+    return new Set(
+      result
+        .trim()
+        .split("\n")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0)
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
   try {
-    const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch());
-    if (!mergeBaseBranch) {
-      return false;
-    }
-
-    await $`git rev-parse --verify origin/${branch}`.quiet();
-
-    const result = await $`git branch -r --merged origin/${mergeBaseBranch}`.text();
-    const mergedBranches = result
-      .trim()
-      .split("\n")
-      .map((b) => b.trim());
-    return mergedBranches.some((b) => b === `origin/${branch}`);
+    const mergedBranches = await getMergedRemoteBranches(baseBranch);
+    return mergedBranches.has(`origin/${branch}`);
   } catch {
     return false;
+  }
+}
+
+export async function getWorktreeStatusSummary(
+  path: string,
+  branch: string
+): Promise<{
+  unpushedCount: number;
+  modifiedCount: number;
+}> {
+  try {
+    const [unpushedCount, result] = await Promise.all([
+      getUnpushedCommitCount(path, branch),
+      $`git -C ${path} status --porcelain`.text(),
+    ]);
+    const modifiedCount = result
+      .trim()
+      .split("\n")
+      .filter((line) => line.length > 0).length;
+
+    return { unpushedCount, modifiedCount };
+  } catch {
+    return { unpushedCount: 0, modifiedCount: 0 };
   }
 }
 
