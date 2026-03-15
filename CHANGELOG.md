@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.1
+
+### Patch Changes
+
+- 784cb10: add autocompletion for rm
+
 ## 0.2.0
 
 ### Minor Changes
