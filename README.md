@@ -96,7 +96,7 @@ wt new feature-branch --no-cd
 
 ## Usage
 
-**Note:** All commands automatically run from the repository root directory, regardless of your current location within the git repository.
+**Note:** You can run `wt` from any directory inside a git repository. Commands resolve the repository root internally, while relative `worktreeDir` values in `.wt/settings.json` are interpreted relative to the repository root.
 
 ### Initialize configuration
 
@@ -274,29 +274,61 @@ Scripts have access to these environment variables:
 }
 ```
 
+## Architecture Overview
+
+The codebase is organized into thin CLI adapters plus layered application modules:
+
+- `src/commands/*`: user-facing command handlers for parsing options and printing output
+- `src/app/*`: use cases and workflow orchestration
+- `src/domain/*`: shared settings/worktree models and pure resolution logic
+- `src/infra/*`: git access, storage, script execution, shell integration, and updater implementations
+- `src/utils/*`: compatibility shims and small shared helpers
+
+This keeps command files small while making git behavior, metadata handling, and update logic easier to test and evolve independently.
+
 ## Project Structure
 
 ```
 wt/
 ├── src/
-│   ├── index.ts              # CLI entry point
+│   ├── index.ts              # Commander CLI entry point
+│   ├── cli/
+│   │   └── command-runtime.ts # Shared command error/exit handling
 │   ├── commands/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
-│   │   ├── list.ts           # wt list
-│   │   └── remove.ts         # wt remove
+│   │   ├── list.ts           # wt list / wt ls
+│   │   ├── remove.ts         # wt remove / wt rm
+│   │   ├── cd.ts             # wt cd
+│   │   └── update.ts         # wt update
+│   ├── app/
+│   │   ├── repository-context.ts # Resolve repo root/name from current cwd
+│   │   ├── worktree-catalog.ts   # Aggregate worktree info and status
+│   │   └── use-cases/            # Command workflows
+│   ├── domain/
+│   │   ├── settings.ts       # Settings schema and normalization
+│   │   ├── worktree.ts       # Worktree models and metadata helpers
+│   │   └── worktree-target.ts # Worktree target resolution rules
+│   ├── infra/
+│   │   ├── git/              # Git repository/worktree/status access
+│   │   ├── storage/          # Settings and metadata persistence
+│   │   ├── scripts/          # Pre/post script execution
+│   │   ├── shell/            # Shell cd handoff and wrapper updates
+│   │   └── update/           # Release lookup and binary replacement
 │   ├── config/
-│   │   └── settings.ts       # Settings management
+│   │   └── settings.ts       # Compatibility exports for settings access
+│   ├── types/
+│   │   └── index.ts          # Re-exported public TypeScript types
 │   ├── utils/
-│   │   ├── git.ts            # Git worktree utilities
-│   │   ├── script.ts         # Script execution
+│   │   ├── git.ts            # Compatibility shim for legacy git helpers
+│   │   ├── script.ts         # Compatibility shim for script helpers
+│   │   ├── cd.ts             # Compatibility shim for shell cd handoff
 │   │   └── id.ts             # Short ID generation
-│   └── types/
-│       └── index.ts          # TypeScript types
 ├── shell/
 │   ├── wt.zsh                # Zsh wrapper function
 │   ├── wt.bash               # Bash wrapper function
 │   └── wt.fish               # Fish wrapper function
+├── .github/workflows/ci.yml  # CI checks
 ├── package.json
 └── tsconfig.json
 ```
