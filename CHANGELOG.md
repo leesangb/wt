@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.0
+
+### Minor Changes
+
+- 3bf5ae0: refactor architecture
+
 ## 0.1.7
 
 ### Patch Changes
