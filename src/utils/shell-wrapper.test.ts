@@ -30,11 +30,13 @@ interface RunWrapperOptions {
 }
 
 const shellDir = fileURLToPath(new URL("../../shell/", import.meta.url));
-const shellCases: ShellCase[] = [
+const shellCases = [
   { name: "bash", scriptName: "wt.bash" },
   { name: "zsh", scriptName: "wt.zsh" },
   { name: "fish", scriptName: "wt.fish" },
-].filter(({ name }) => isShellAvailable(name));
+] satisfies ShellCase[];
+
+const availableShellCases = shellCases.filter(({ name }) => isShellAvailable(name));
 
 function isShellAvailable(shell: ShellName): boolean {
   return spawnSync("sh", ["-lc", `command -v ${shell}`], {
@@ -137,7 +139,7 @@ function assertShellProcess(result: WrapperRunResult): void {
 }
 
 describe("shell wrappers", () => {
-  for (const shellCase of shellCases) {
+  for (const shellCase of availableShellCases) {
     test(`${shellCase.scriptName} changes directory on success`, () => {
       const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
 
