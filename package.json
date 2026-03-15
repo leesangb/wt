@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "build": "bun build src/index.ts --compile --outfile wt",
     "version": "changeset version",
     "changeset": "changeset"
@@ -33,7 +35,8 @@
     "commander": "^14.0.1"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.27.1",
     "@types/bun": "latest",
-    "@changesets/cli": "^2.27.1"
+    "typescript": "^5.9.3"
   }
 }

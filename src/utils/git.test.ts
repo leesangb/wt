@@ -69,6 +69,7 @@ describe("getWorktreeStatusSummary", () => {
     await $`git clone ${originDir} ${repoRoot}`.quiet();
     await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
     await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
     await Bun.write(join(repoRoot, "README.md"), "base\n");
     await $`git -C ${repoRoot} add README.md`.quiet();
     await $`git -C ${repoRoot} commit -m base`.quiet();

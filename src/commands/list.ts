@@ -53,7 +53,7 @@ export async function listCommand(options?: {
           : worktree.baseBranch
           ? chalk.dim(`from ${worktree.baseBranch}`)
           : "";
-      const indicators = [];
+      const indicators: string[] = [];
 
       if (worktree.isMerged) {
         indicators.push(chalk.dim("(merged)"));
