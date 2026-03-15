@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildWorktreePathCollisionSuffix,
   buildWorktreeIdentifiers,
   buildWorktreePathName,
   createWorktreeMeta,
@@ -14,6 +15,21 @@ describe("worktree domain", () => {
   test("builds a repo-prefixed path name from the stored id", () => {
     expect(buildWorktreePathName("repo", "feature/issue-12")).toBe(
       "repo-feature-issue-12"
+    );
+  });
+
+  test("adds an explicit collision suffix when requested", () => {
+    expect(buildWorktreePathName("repo", "feature/issue-12", "abc1234")).toBe(
+      "repo-feature-issue-12-abc1234"
+    );
+  });
+
+  test("builds a deterministic collision suffix", () => {
+    expect(buildWorktreePathCollisionSuffix("feature/issue-12")).toBe(
+      buildWorktreePathCollisionSuffix("feature/issue-12")
+    );
+    expect(buildWorktreePathCollisionSuffix("feature/issue-12")).not.toBe(
+      buildWorktreePathCollisionSuffix("feature-issue-12")
     );
   });
 

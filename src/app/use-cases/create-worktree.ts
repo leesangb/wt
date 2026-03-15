@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import {
+  buildWorktreeIdentifiers,
+  buildWorktreePathCollisionSuffix,
   buildWorktreePathName,
   createWorktreeMeta,
 } from "../../domain/worktree.js";
@@ -18,7 +20,10 @@ import {
   executeScripts,
   executeScriptsDetached,
 } from "../../infra/scripts/runner.js";
-import { writeWorktreeMeta } from "../../infra/storage/worktree-meta-store.js";
+import {
+  readWorktreeMeta,
+  writeWorktreeMeta,
+} from "../../infra/storage/worktree-meta-store.js";
 
 export interface CreateWorktreeOptions {
   base?: string;
@@ -57,6 +62,54 @@ function createScriptEnvironment(
   };
 }
 
+async function canReuseWorktreePath(
+  repoName: string,
+  worktreePath: string,
+  id: string
+): Promise<boolean> {
+  if (!existsSync(worktreePath)) {
+    return true;
+  }
+
+  const meta = await readWorktreeMeta(worktreePath);
+
+  if (!meta) {
+    return false;
+  }
+
+  return buildWorktreeIdentifiers(repoName, worktreePath, meta).id === id;
+}
+
+async function resolveWorktreePath(
+  worktreeBaseDir: string,
+  repoName: string,
+  id: string
+): Promise<string> {
+  const basePath = join(worktreeBaseDir, buildWorktreePathName(repoName, id));
+
+  if (await canReuseWorktreePath(repoName, basePath, id)) {
+    return basePath;
+  }
+
+  const collisionSuffix = buildWorktreePathCollisionSuffix(id);
+  let attempt = 0;
+
+  while (true) {
+    const suffix =
+      attempt === 0 ? collisionSuffix : `${collisionSuffix}-${attempt + 1}`;
+    const candidatePath = join(
+      worktreeBaseDir,
+      buildWorktreePathName(repoName, id, suffix)
+    );
+
+    if (await canReuseWorktreePath(repoName, candidatePath, id)) {
+      return candidatePath;
+    }
+
+    attempt += 1;
+  }
+}
+
 export async function createWorktree(
   branchName: string,
   options: CreateWorktreeOptions,
@@ -72,14 +125,16 @@ export async function createWorktree(
     settings.worktreeDir,
     context.repoRoot
   );
-  const worktreePath = join(
-    worktreeBaseDir,
-    buildWorktreePathName(context.repoName, id)
-  );
 
   if (!existsSync(worktreeBaseDir)) {
     mkdirSync(worktreeBaseDir, { recursive: true });
   }
+
+  const worktreePath = await resolveWorktreePath(
+    worktreeBaseDir,
+    context.repoName,
+    id
+  );
 
   await fetchRemote(context.repoRoot);
 

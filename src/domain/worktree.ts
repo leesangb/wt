@@ -35,8 +35,29 @@ export function toWorktreePathSegment(value: string): string {
   return value.replaceAll("/", "-");
 }
 
-export function buildWorktreePathName(repoName: string, id: string): string {
-  return `${repoName}-${toWorktreePathSegment(id)}`;
+export function buildWorktreePathCollisionSuffix(value: string): string {
+  let hash = 2166136261;
+
+  for (const char of value) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(36).padStart(7, "0").slice(0, 7);
+}
+
+export function buildWorktreePathName(
+  repoName: string,
+  id: string,
+  suffix?: string
+): string {
+  const baseName = `${repoName}-${toWorktreePathSegment(id)}`;
+
+  if (!suffix) {
+    return baseName;
+  }
+
+  return `${baseName}-${suffix}`;
 }
 
 export function buildWorktreeIdentifiers(
