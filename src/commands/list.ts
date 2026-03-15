@@ -68,12 +68,14 @@ export async function listCommand(options?: {
         .filter((branch): branch is string => Boolean(branch))
     ),
   ];
-  const mergedBranchesByBase = new Map(
+  const mergedBranchesByBase = new Map<string, Set<string>>(
     await Promise.all(
-      baseBranches.map(async (baseBranch) => [
-        baseBranch,
-        await getMergedRemoteBranches(baseBranch),
-      ])
+      baseBranches.map(
+        async (baseBranch): Promise<[string, Set<string>]> => [
+          baseBranch,
+          await getMergedRemoteBranches(baseBranch),
+        ]
+      )
     )
   );
   const worktreeStates = await Promise.all(
@@ -106,7 +108,7 @@ export async function listCommand(options?: {
         ? chalk.dim(`from ${wt.baseBranch}`)
         : "";
 
-    const indicators = [];
+    const indicators: string[] = [];
     if (isMerged) indicators.push(chalk.dim("(merged)"));
     if (unpushedCount > 0)
       indicators.push(chalk.yellow(`↑${unpushedCount} commits not pushed`));

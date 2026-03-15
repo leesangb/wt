@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname } from "path";
 import { SHELL_CD_FILE_ENV } from "./cd.js";
 
 export interface DetachedScriptOptions {
@@ -89,7 +89,6 @@ export function executeScriptsDetached(scripts: string[], cwd: string, env: Reco
     stdout: "ignore",
     stderr: "ignore",
     stdin: "ignore",
-    detached: true,
   });
 
   const pid = proc.pid;
