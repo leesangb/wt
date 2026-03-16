@@ -411,6 +411,37 @@ describe("cli e2e", () => {
     ).toBeFalse();
   });
 
+  test("hides the main worktree from completion even inside a linked worktree", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "linked123";
+    const branchName = "feature-linked";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const completionResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      worktreePath
+    );
+    assertProcessSuccess(
+      completionResult.status,
+      completionResult.stderr,
+      completionResult.stdout
+    );
+
+    const suggestions = completionResult.stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    expect(
+      suggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      suggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
+    ).toBeFalse();
+  });
+
   test("asks for confirmation before removing a worktree with local changes", async () => {
     const repo = await createTestRepo();
     const worktreeId = "confirm123";

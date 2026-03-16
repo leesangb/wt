@@ -23,7 +23,7 @@ export async function listWorktreeInfos(
   const context = await requireRepositoryContext(cwd);
   const worktrees = await loadWorktreeInfos(context);
   const visibleWorktrees = options.excludeMainWorktree
-    ? worktrees.filter((worktree) => worktree.path !== context.repoRoot)
+    ? worktrees.filter((worktree) => !worktree.isMain)
     : worktrees;
 
   return {
