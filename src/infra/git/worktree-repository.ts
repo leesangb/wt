@@ -43,6 +43,43 @@ export async function createGitWorktree(
   }
 }
 
+async function localBranchExists(
+  repoRoot: string,
+  branch: string
+): Promise<boolean> {
+  const proc = spawn(
+    ["git", "show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+    {
+      cwd: repoRoot,
+      stdout: "ignore",
+      stderr: "ignore",
+    }
+  );
+
+  return (await proc.exited) === 0;
+}
+
+export async function createOrAttachGitWorktree(
+  repoRoot: string,
+  worktreePath: string,
+  branch: string,
+  baseBranch: string
+): Promise<void> {
+  const addArgs = (await localBranchExists(repoRoot, branch))
+    ? ["git", "worktree", "add", worktreePath, branch]
+    : ["git", "worktree", "add", "-b", branch, worktreePath, baseBranch];
+  const addProc = spawn(addArgs, {
+    cwd: repoRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const addResult = await addProc.exited;
+
+  if (addResult !== 0) {
+    throw new Error(`git worktree add failed with exit code ${addResult}`);
+  }
+}
+
 export async function listGitWorktrees(
   repoRoot: string
 ): Promise<GitWorktreeRef[]> {

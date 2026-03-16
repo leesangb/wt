@@ -91,6 +91,7 @@ If you don't set up the shell wrapper, you can use `--no-cd` flag:
 
 ```bash
 wt new feature-branch --no-cd
+wt pr 123 --no-cd
 # Then manually: cd /path/shown/in/output
 ```
 
@@ -152,6 +153,23 @@ By default, `WT_ID` uses the branch name. When the branch contains `/`, the work
 - `--id <id>` - Override the default worktree ID (defaults to the branch name)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
+
+### Create or navigate to a pull request worktree
+
+```bash
+# Create a new PR worktree or jump to an existing pr-123 worktree
+wt pr 123
+
+# Direct binary usage without auto-cd
+wt pr 123 --no-cd
+```
+
+This command:
+1. Checks whether any existing worktree is already on branch `pr-123`
+2. Navigates to that worktree immediately when it exists
+3. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
+
+`wt pr` requires GitHub CLI (`gh`) only when it needs to create a new PR worktree. Existing `pr-<number>` worktrees can still be reopened without `gh`.
 
 ### Update wt
 
@@ -302,12 +320,14 @@ wt/
 │   ├── commands/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
+│   │   ├── pr.ts             # wt pr
 │   │   ├── list.ts           # wt list / wt ls
 │   │   ├── remove.ts         # wt remove / wt rm
 │   │   ├── cd.ts             # wt cd
 │   │   └── update.ts         # wt update
 │   ├── app/
 │   │   ├── repository-context.ts # Resolve repo root/name from current cwd
+│   │   ├── worktree-creation.ts  # Shared creation helpers and script hooks
 │   │   ├── worktree-catalog.ts   # Aggregate worktree info and status
 │   │   └── use-cases/            # Command workflows
 │   ├── domain/
@@ -316,6 +336,7 @@ wt/
 │   │   └── worktree-target.ts # Worktree target resolution rules
 │   ├── infra/
 │   │   ├── git/              # Git repository/worktree/status access
+│   │   ├── github/           # GitHub CLI integration for PR checkout
 │   │   ├── storage/          # Settings and metadata persistence
 │   │   ├── scripts/          # Pre/post script execution
 │   │   ├── shell/            # Shell cd handoff and wrapper updates

@@ -2,7 +2,7 @@
 # Add this to your ~/.config/fish/config.fish
 
 function wt
-    if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"
+    if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"; or test "$argv[1]" = "pr"
         set -l cd_file (mktemp)
         env WT_SHELL_CD_FILE="$cd_file" /path/to/wt $argv
         set -l exit_code $status

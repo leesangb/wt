@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "fs";
+import { existsSync } from "fs";
 import { join } from "path";
 import {
   buildWorktreeIdentifiers,
@@ -6,6 +6,13 @@ import {
   buildWorktreePathName,
   createWorktreeMeta,
 } from "../../domain/worktree.js";
+import {
+  createScriptEnvironment,
+  ensureWorktreeBaseDir,
+  runPostCreationScripts,
+  runPreCreationScripts,
+  type CreateWorktreeResult,
+} from "../worktree-creation.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
   loadSettings,
@@ -17,10 +24,6 @@ import {
 } from "../../infra/git/worktree-repository.js";
 import { getCommitHash } from "../../infra/git/status.js";
 import {
-  executeScripts,
-  executeScriptsDetached,
-} from "../../infra/scripts/runner.js";
-import {
   readWorktreeMeta,
   writeWorktreeMeta,
 } from "../../infra/storage/worktree-meta-store.js";
@@ -29,37 +32,6 @@ export interface CreateWorktreeOptions {
   base?: string;
   push?: boolean;
   id?: string;
-}
-
-export interface CreateWorktreeResult {
-  branchName: string;
-  id: string;
-  fullId: string;
-  worktreePath: string;
-  baseBranch: string;
-  baseCommit: string;
-  postMode?: "sync" | "async";
-  postTask?: {
-    pid: number;
-    statusFilePath: string;
-    logFilePath: string;
-  };
-}
-
-function createScriptEnvironment(
-  repoRoot: string,
-  worktreePath: string,
-  id: string,
-  fullId: string,
-  branchName: string
-): Record<string, string> {
-  return {
-    WT_PATH: worktreePath,
-    WT_ID: id,
-    WT_FULL_ID: fullId,
-    WT_BRANCH: branchName,
-    WT_REPO_ROOT: repoRoot,
-  };
 }
 
 async function canReuseWorktreePath(
@@ -126,9 +98,7 @@ export async function createWorktree(
     context.repoRoot
   );
 
-  if (!existsSync(worktreeBaseDir)) {
-    mkdirSync(worktreeBaseDir, { recursive: true });
-  }
+  ensureWorktreeBaseDir(worktreeBaseDir);
 
   const worktreePath = await resolveWorktreePath(
     worktreeBaseDir,
@@ -147,9 +117,7 @@ export async function createWorktree(
     branchName
   );
 
-  if (settings.scripts.pre.length > 0) {
-    await executeScripts(settings.scripts.pre, context.repoRoot, scriptEnv);
-  }
+  await runPreCreationScripts(settings, context.repoRoot, scriptEnv);
 
   await createGitWorktree(
     context.repoRoot,
@@ -167,46 +135,11 @@ export async function createWorktree(
     })
   );
 
-  if (settings.scripts.post.length === 0) {
-    return {
-      branchName,
-      id,
-      fullId,
-      worktreePath,
-      baseBranch,
-      baseCommit,
-    };
-  }
-
-  if (settings.scripts.postMode === "async") {
-    const wtDir = join(worktreePath, ".wt");
-    const statusFilePath = join(wtDir, "post-task.json");
-    const logFilePath = join(wtDir, "post-task.log");
-    const pid = executeScriptsDetached(
-      settings.scripts.post,
-      worktreePath,
-      scriptEnv,
-      statusFilePath,
-      logFilePath
-    );
-
-    return {
-      branchName,
-      id,
-      fullId,
-      worktreePath,
-      baseBranch,
-      baseCommit,
-      postMode: "async",
-      postTask: {
-        pid,
-        statusFilePath,
-        logFilePath,
-      },
-    };
-  }
-
-  await executeScripts(settings.scripts.post, worktreePath, scriptEnv);
+  const postScriptResult = await runPostCreationScripts(
+    settings,
+    worktreePath,
+    scriptEnv
+  );
 
   return {
     branchName,
@@ -215,6 +148,6 @@ export async function createWorktree(
     worktreePath,
     baseBranch,
     baseCommit,
-    postMode: "sync",
+    ...postScriptResult,
   };
 }

@@ -27,6 +27,7 @@ interface WrapperRunResult {
 
 interface RunWrapperOptions {
   overrideCd?: boolean;
+  subcommand?: "cd" | "new" | "pr";
 }
 
 interface CompletionRunResult {
@@ -89,12 +90,13 @@ function runWrapper(
       "utf-8"
     );
 
+    const subcommand = options.subcommand ?? "cd";
     const command =
       shellCase.name === "fish"
         ? [
             ...(options.overrideCd ? ["function cd; echo alias-hit; end"] : []),
             'source "$WRAPPER_PATH"',
-            "wt cd demo >/dev/null 2>/dev/null",
+            `wt ${subcommand} demo >/dev/null 2>/dev/null`,
             "set wrapper_status $status",
             'printf \'STATUS=%s\\nPWD=%s\\n\' "$wrapper_status" "$PWD"',
           ].join("\n")
@@ -107,7 +109,7 @@ function runWrapper(
               : []),
             ...(options.overrideCd ? ['alias cd="echo alias-hit"'] : []),
             'source "$WRAPPER_PATH"',
-            "wt cd demo >/dev/null 2>/dev/null",
+            `wt ${subcommand} demo >/dev/null 2>/dev/null`,
             "wrapper_status=$?",
             'printf \'STATUS=%s\\nPWD=%s\\n\' "$wrapper_status" "$PWD"',
           ].join("\n");
@@ -264,6 +266,23 @@ describe("shell wrappers", () => {
         mkdirSync(targetDir, { recursive: true });
 
         const result = runWrapper(shellCase, targetDir);
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on pr success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "worktree");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "pr" });
 
         assertShellProcess(result);
         expect(result.status).toBe(0);
