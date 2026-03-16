@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from "fs";
-import { basename, join } from "path";
+import { join } from "path";
 import type { WtSettings } from "../domain/settings.js";
 import {
   buildWorktreeIdentifiers,
@@ -66,7 +66,6 @@ export function buildWorktreeScriptEnvironment(
 }
 
 export function findReusableWorktree(
-  repoName: string,
   worktrees: WorktreeInfo[],
   id: string,
   branchName: string,
@@ -76,8 +75,7 @@ export function findReusableWorktree(
     return (
       worktree.id === id ||
       worktree.branch === branchName ||
-      worktree.path === worktreePath ||
-      basename(worktree.path) === buildWorktreePathName(repoName, id)
+      worktree.path === worktreePath
     );
   });
 }

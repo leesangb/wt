@@ -582,6 +582,45 @@ describe("cli e2e", () => {
     expect(existsSync(join(repo.repoRoot, ".wt", "meta.json"))).toBeFalse();
   });
 
+  test("does not reuse a worktree whose sanitized path collides with the PR id", async () => {
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-fake-gh-");
+    const collidingWorktreePath = getWorktreePath(repo, "pr/123");
+
+    createFakeGithubCli(fakeBinDir);
+    await publishTestPullRequest(repo, "123", "pr content v1");
+
+    const collidingResult = runCliCapture(
+      ["new", "pr/123", "--no-push", "--no-cd"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(
+      collidingResult.status,
+      collidingResult.stderr,
+      collidingResult.stdout
+    );
+    writeFileSync(join(collidingWorktreePath, "LOCAL_ONLY.txt"), "keep me\n");
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const prWorktreePath = readCliValue(result.stdout, "WT_PATH");
+
+    expect(prWorktreePath).not.toBe(collidingWorktreePath);
+    expect(readFileSync(join(collidingWorktreePath, "LOCAL_ONLY.txt"), "utf-8")).toBe(
+      "keep me\n"
+    );
+    expect(readFileSync(join(prWorktreePath, "PULL_REQUEST.txt"), "utf-8")).toBe(
+      "pr content v1\n"
+    );
+  });
+
   test("keeps slash-based ids while sanitizing the worktree directory name", async () => {
     const repo = await createTestRepo();
     const branchName = "feature/issue-12";

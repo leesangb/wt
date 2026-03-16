@@ -55,7 +55,6 @@ export async function createPullRequestWorktree(
     }
 
     const reusableWorktree = findReusableWorktree(
-      plan.context.repoName,
       existingWorktrees.filter((worktree) => !worktree.isMain),
       plan.id,
       branchName,
