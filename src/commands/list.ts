@@ -12,7 +12,9 @@ export async function listCommand(options?: {
 }): Promise<void> {
   await runCommand(async () => {
     if (options?.completion) {
-      const result = await listWorktreeInfos();
+      const result = await listWorktreeInfos(process.cwd(), {
+        excludeMainWorktree: true,
+      });
 
       for (const worktree of result.worktrees) {
         let description = worktree.branch;
