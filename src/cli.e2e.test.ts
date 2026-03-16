@@ -559,6 +559,29 @@ describe("cli e2e", () => {
     expect(result.stderr).toContain("gh auth login");
   });
 
+  test("refuses to reuse the main worktree when it is already on the PR branch", async () => {
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-fake-gh-");
+    const worktreePath = getWorktreePath(repo, "pr-123");
+
+    createFakeGithubCli(fakeBinDir);
+    await publishTestPullRequest(repo, "123", "pr content v1");
+    await $`git -C ${repo.repoRoot} checkout -B pr-123 main`.quiet();
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "The main worktree is already using branch pr-123."
+    );
+    expect(existsSync(worktreePath)).toBeFalse();
+    expect(existsSync(join(repo.repoRoot, ".wt", "meta.json"))).toBeFalse();
+  });
+
   test("keeps slash-based ids while sanitizing the worktree directory name", async () => {
     const repo = await createTestRepo();
     const branchName = "feature/issue-12";

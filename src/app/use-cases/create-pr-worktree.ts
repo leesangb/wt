@@ -44,9 +44,19 @@ export async function createPullRequestWorktree(
     await ensureGithubCliReady(plan.context.repoRoot);
 
     const existingWorktrees = await loadWorktreeInfos(plan.context);
+    const mainWorktreeConflict = existingWorktrees.find(
+      (worktree) => worktree.isMain && worktree.branch === branchName
+    );
+
+    if (mainWorktreeConflict) {
+      throw new AppError(
+        `The main worktree is already using branch ${branchName}. Switch it to a different branch before running \`wt pr ${pullRequestNumber}\`.`
+      );
+    }
+
     const reusableWorktree = findReusableWorktree(
       plan.context.repoName,
-      existingWorktrees,
+      existingWorktrees.filter((worktree) => !worktree.isMain),
       plan.id,
       branchName,
       plan.worktreePath
