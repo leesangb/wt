@@ -171,6 +171,7 @@ This command:
 4. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
 
 `wt pr` uses the PR's actual head branch name instead of creating a synthetic local branch like `pr-123`, so it always requires GitHub CLI (`gh`) to resolve the PR details first.
+If that head branch name is already being used as a different worktree ID, `wt pr` appends `-1`, `-2`, and so on to keep the new ID unique and prints the adjustment in the CLI output.
 
 ### Update wt
 

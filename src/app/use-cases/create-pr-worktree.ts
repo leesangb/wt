@@ -5,6 +5,7 @@ import {
   resolveFreshWorktreePath,
   runPostCreationScripts,
   runPreCreationScripts,
+  resolveUniqueWorktreeId,
   type CreateWorktreeResult,
 } from "../worktree-creation.js";
 import { requireRepositoryContext } from "../repository-context.js";
@@ -63,7 +64,10 @@ export async function createPrWorktree(
   }
 
   const settings = await loadSettings(context.repoRoot);
-  const id = branchName;
+  const { id, idAdjustedFrom } = resolveUniqueWorktreeId(
+    branchName,
+    worktrees.map((worktree) => worktree.id)
+  );
   const fullId = `${context.repoName}-${id}`;
   const worktreeBaseDir = resolveWorktreeDir(
     settings.worktreeDir,
@@ -117,6 +121,7 @@ export async function createPrWorktree(
     worktreePath,
     baseBranch,
     baseCommit,
+    idAdjustedFrom,
     ...postScriptResult,
   };
 }

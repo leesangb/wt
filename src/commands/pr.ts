@@ -20,6 +20,14 @@ export async function prCommand(
       console.log(chalk.green(`✓ Created PR worktree: ${result.branchName}`));
     }
 
+    if (result.idAdjustedFrom) {
+      console.log(
+        chalk.yellow(
+          `Adjusted WT_ID from ${result.idAdjustedFrom} to ${result.id} because that ID is already in use.`
+        )
+      );
+    }
+
     if (result.postMode === "async" && result.postTask) {
       console.log(chalk.blue("Starting post scripts in background..."));
       console.log(chalk.dim(`  PID: ${result.postTask.pid}`));

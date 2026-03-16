@@ -17,6 +17,7 @@ export interface CreateWorktreeResult {
   worktreePath: string;
   baseBranch: string;
   baseCommit: string;
+  idAdjustedFrom?: string;
   reusedExisting?: boolean;
   postMode?: "sync" | "async";
   postTask?: {
@@ -126,4 +127,26 @@ export function resolveFreshWorktreePath(
 
     attempt += 1;
   }
+}
+
+export function resolveUniqueWorktreeId(
+  preferredId: string,
+  existingIds: string[]
+): Pick<CreateWorktreeResult, "id" | "idAdjustedFrom"> {
+  const usedIds = new Set(existingIds);
+
+  if (!usedIds.has(preferredId)) {
+    return { id: preferredId };
+  }
+
+  let attempt = 1;
+
+  while (usedIds.has(`${preferredId}-${attempt}`)) {
+    attempt += 1;
+  }
+
+  return {
+    id: `${preferredId}-${attempt}`,
+    idAdjustedFrom: preferredId,
+  };
 }

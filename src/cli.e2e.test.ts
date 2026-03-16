@@ -790,7 +790,7 @@ describe("cli e2e", () => {
     expect(existsSync(secondPath)).toBeTrue();
   });
 
-  test("adds a unique suffix when the default pr path is already occupied", async () => {
+  test("adds a numeric suffix when the default pr id is already occupied", async () => {
     const repo = await createTestRepo();
     const headBranch = "feature/pr-123";
     const occupiedResult = runCliCapture(
@@ -812,9 +812,38 @@ describe("cli e2e", () => {
     assertProcessSuccess(prResult.status, prResult.stderr, prResult.stdout);
 
     const prPath = readCliValue(prResult.stdout, "WT_PATH");
+    const prId = readCliValue(prResult.stdout, "WT_ID");
 
     expect(prPath).not.toBe(occupiedPath);
-    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-`);
+    expect(prId).toBe(`${headBranch}-1`);
+    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-1`);
+    expect(prResult.stdout).toContain(
+      `Adjusted WT_ID from ${headBranch} to ${headBranch}-1 because that ID is already in use.`
+    );
+    expect(existsSync(prPath)).toBeTrue();
+  });
+
+  test("increments the pr id suffix until it finds an unused id", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+
+    runCli(["new", "feature-pr-collision-a", "--id", headBranch, "--no-cd"], repo.repoRoot);
+    runCli(
+      ["new", "feature-pr-collision-b", "--id", `${headBranch}-1`, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const prResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch }),
+    });
+
+    assertProcessSuccess(prResult.status, prResult.stderr, prResult.stdout);
+
+    const prPath = readCliValue(prResult.stdout, "WT_PATH");
+    const prId = readCliValue(prResult.stdout, "WT_ID");
+
+    expect(prId).toBe(`${headBranch}-2`);
+    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-2`);
     expect(existsSync(prPath)).toBeTrue();
   });
 
