@@ -7,10 +7,51 @@ export interface DetachedScriptOptions {
   statusFilePath: string;
   logFilePath: string;
   scripts: string[];
+  completionNotification?: DetachedCompletionNotification;
+}
+
+export interface DetachedCompletionNotification {
+  title: string;
+  successMessage: string;
+  successSubtitle?: string;
+  failureMessage: string;
+  failureSubtitle?: string;
 }
 
 export function shellEscapeSingle(value: string): string {
   return value.replace(/'/g, `'"'"'`);
+}
+
+export function escapeAppleScriptString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function buildMacOsNotificationCommand(
+  message: string,
+  title: string,
+  subtitle?: string
+): string {
+  const titleLiteral = escapeAppleScriptString(title);
+  const messageLiteral = escapeAppleScriptString(message);
+  const subtitleClause = subtitle
+    ? ` subtitle "${escapeAppleScriptString(subtitle)}"`
+    : "";
+
+  return `osascript -e '${shellEscapeSingle(
+    `display notification "${messageLiteral}" with title "${titleLiteral}"${subtitleClause}`
+  )}' >/dev/null 2>&1 || true`;
+}
+
+export function buildPostScriptCompletionNotification(
+  target: string
+): DetachedCompletionNotification {
+  return {
+    title: "wt",
+    successMessage: `${target} setup finished`,
+    successSubtitle: "Post scripts completed",
+    failureMessage: `${target} setup failed`,
+    failureSubtitle: "Post scripts failed",
+  };
 }
 
 export function buildDetachedRunnerCommand(
@@ -19,15 +60,41 @@ export function buildDetachedRunnerCommand(
   const statusFile = shellEscapeSingle(options.statusFilePath);
   const logFile = shellEscapeSingle(options.logFilePath);
   const scriptBody = options.scripts.map((script) => `  ${script}`).join("\n");
+  const successNotification = options.completionNotification
+    ? buildMacOsNotificationCommand(
+        options.completionNotification.successMessage,
+        options.completionNotification.title,
+        options.completionNotification.successSubtitle
+      )
+    : undefined;
+  const failureNotification = options.completionNotification
+    ? buildMacOsNotificationCommand(
+        options.completionNotification.failureMessage,
+        options.completionNotification.title,
+        options.completionNotification.failureSubtitle
+      )
+    : undefined;
+  const successCommands = [
+    `printf '{"status":"done","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    successNotification,
+  ]
+    .filter((command): command is string => Boolean(command))
+    .join("\n");
+  const failureCommands = [
+    `printf '{"status":"failed","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    failureNotification,
+  ]
+    .filter((command): command is string => Boolean(command))
+    .join("\n");
 
   return `(
 set -e
 {
 ${scriptBody}
 } >> '${logFile}' 2>&1
-printf '{"status":"done","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'
+${successCommands}
 ) || {
-printf '{"status":"failed","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'
+${failureCommands}
 }`;
 }
 
@@ -82,6 +149,11 @@ export function executeScriptsDetached(
 ): number {
   mkdirSync(dirname(statusFilePath), { recursive: true });
   mkdirSync(dirname(logFilePath), { recursive: true });
+  const target = env?.WT_BRANCH ?? env?.WT_ID ?? "Worktree";
+  const completionNotification =
+    process.platform === "darwin"
+      ? buildPostScriptCompletionNotification(target)
+      : undefined;
 
   writeFileSync(
     statusFilePath,
@@ -105,6 +177,7 @@ export function executeScriptsDetached(
         scripts,
         statusFilePath,
         logFilePath,
+        completionNotification,
       }),
     ],
     {
