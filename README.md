@@ -186,12 +186,12 @@ wt ls
 ### Remove a worktree
 
 ```bash
-wt remove <id>
+wt remove <id...>
 # or
-wt rm <id>
+wt rm <id...>
 ```
 
-If the worktree has modified files or unpushed commits, `wt rm` asks for confirmation before deleting it. Use `wt rm <id> --force` to skip the prompt.
+If the worktree has modified files or unpushed commits, `wt rm` asks for confirmation before deleting it. When you pass multiple worktrees, it prompts separately for each one. Use `wt rm <id...> --force` to skip the prompts.
 
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)

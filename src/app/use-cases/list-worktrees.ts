@@ -1,6 +1,14 @@
-import type { WorktreeInfo, WorktreeState } from "../../domain/worktree.js";
+import type {
+  WorktreeInfo,
+  WorktreeRemovalInfo,
+  WorktreeState,
+} from "../../domain/worktree.js";
 import { requireRepositoryContext } from "../repository-context.js";
-import { loadWorktreeInfos, loadWorktreeStates } from "../worktree-catalog.js";
+import {
+  loadWorktreeInfos,
+  loadWorktreeRemovalInfos,
+  loadWorktreeStates,
+} from "../worktree-catalog.js";
 
 export interface ListWorktreeInfosOptions {
   excludeMainWorktree?: boolean;
@@ -14,6 +22,11 @@ export interface ListWorktreeInfosResult {
 export interface ListWorktreesResult {
   repoName: string;
   worktrees: WorktreeState[];
+}
+
+export interface ListRemoveCompletionWorktreesResult {
+  repoName: string;
+  worktrees: WorktreeRemovalInfo[];
 }
 
 export async function listWorktreeInfos(
@@ -41,5 +54,21 @@ export async function listWorktrees(
   return {
     repoName: context.repoName,
     worktrees,
+  };
+}
+
+export async function listRemoveCompletionWorktrees(
+  cwd: string = process.cwd(),
+  options: ListWorktreeInfosOptions = {}
+): Promise<ListRemoveCompletionWorktreesResult> {
+  const context = await requireRepositoryContext(cwd);
+  const worktrees = await loadWorktreeRemovalInfos(context);
+  const visibleWorktrees = options.excludeMainWorktree
+    ? worktrees.filter((worktree) => !worktree.isMain)
+    : worktrees;
+
+  return {
+    repoName: context.repoName,
+    worktrees: visibleWorktrees,
   };
 }

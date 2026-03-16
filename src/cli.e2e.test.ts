@@ -442,6 +442,68 @@ describe("cli e2e", () => {
     ).toBeFalse();
   });
 
+  test("includes removal metadata in completion output", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "removemeta123";
+    const branchName = "feature-remove-meta";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    writeFileSync(join(worktreePath, "README.md"), "base\nremove-metadata\n");
+    await $`git -C ${worktreePath} add README.md`.quiet();
+    await $`git -C ${worktreePath} commit -m completion-meta`.quiet();
+    await $`git -C ${worktreePath} push origin ${branchName}`.quiet();
+
+    const completionResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      completionResult.status,
+      completionResult.stderr,
+      completionResult.stdout
+    );
+
+    expect(completionResult.stdout).toContain(`${worktreeId}:${branchName} |`);
+    expect(completionResult.stdout).toContain("not merged");
+    expect(completionResult.stdout).toContain("from main@");
+    expect(completionResult.stdout).not.toContain("change");
+    expect(completionResult.stdout).not.toContain("unpushed");
+  });
+
+  test("omits merged status in completion output when merge status is unknown", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "removeunknown123";
+    const branchName = "feature-remove-unknown";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const metaPath = join(worktreePath, ".wt", "meta.json");
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+    meta.baseBranch = "missing-base";
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+
+    const completionResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      completionResult.status,
+      completionResult.stderr,
+      completionResult.stdout
+    );
+
+    const completionLine = completionResult.stdout
+      .split(/\r?\n/)
+      .find(line => line.startsWith(`${worktreeId}:`));
+
+    expect(completionLine).toBeDefined();
+    expect(completionLine).toContain(`${branchName} | from missing-base`);
+    expect(completionLine).not.toContain("not merged");
+    expect(completionLine).not.toContain("merged |");
+  });
+
   test("asks for confirmation before removing a worktree with local changes", async () => {
     const repo = await createTestRepo();
     const worktreeId = "confirm123";
@@ -528,6 +590,78 @@ describe("cli e2e", () => {
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     expect(result.stdout).not.toContain("Remove this worktree anyway? [y/N]");
     expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("removes multiple worktrees in one command", async () => {
+    const repo = await createTestRepo();
+    const firstWorktreeId = "multi123";
+    const secondWorktreeId = "multi456";
+    const firstBranchName = "feature-multi-one";
+    const secondBranchName = "feature-multi-two";
+    const firstWorktreePath = getWorktreePath(repo, firstWorktreeId);
+    const secondWorktreePath = getWorktreePath(repo, secondWorktreeId);
+
+    runCli(
+      ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+    runCli(
+      ["new", secondBranchName, "--id", secondWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const result = runCliCapture(
+      ["remove", firstWorktreeId, secondWorktreeId, "--keep-branch"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain(`(${firstWorktreeId})`);
+    expect(result.stdout).toContain(`(${secondWorktreeId})`);
+    expect(existsSync(firstWorktreePath)).toBeFalse();
+    expect(existsSync(secondWorktreePath)).toBeFalse();
+  });
+
+  test("asks for confirmation for each worktree during batch removal", async () => {
+    const repo = await createTestRepo();
+    const firstWorktreeId = "batchconfirm123";
+    const secondWorktreeId = "batchconfirm456";
+    const firstBranchName = "feature-batch-confirm-one";
+    const secondBranchName = "feature-batch-confirm-two";
+    const firstWorktreePath = getWorktreePath(repo, firstWorktreeId);
+    const secondWorktreePath = getWorktreePath(repo, secondWorktreeId);
+
+    runCli(
+      ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+    runCli(
+      ["new", secondBranchName, "--id", secondWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+    writeFileSync(join(firstWorktreePath, "UNTRACKED.md"), "dirty one\n");
+    writeFileSync(join(secondWorktreePath, "UNTRACKED.md"), "dirty two\n");
+
+    const result = runCliCapture(
+      ["remove", firstWorktreeId, secondWorktreeId],
+      repo.repoRoot,
+      {
+        input: "n\ny\n",
+      }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      `Warning: ${firstBranchName} (${firstWorktreeId}) has 1 local change.`
+    );
+    expect(result.stdout).toContain(
+      `Warning: ${secondBranchName} (${secondWorktreeId}) has 1 local change.`
+    );
+    expect(result.stdout).toContain(
+      `Skipped worktree: ${firstBranchName} (${firstWorktreeId})`
+    );
+    expect(existsSync(firstWorktreePath)).toBeTrue();
+    expect(existsSync(secondWorktreePath)).toBeFalse();
   });
 
   test("adds a unique suffix when sanitized ids would collide", async () => {

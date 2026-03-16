@@ -1,8 +1,14 @@
 import chalk from "chalk";
 import {
+  listRemoveCompletionWorktrees,
   listWorktreeInfos,
   listWorktrees,
 } from "../app/use-cases/list-worktrees.js";
+import type {
+  WorktreeInfo,
+  WorktreeRemovalInfo,
+  WorktreeState,
+} from "../types/index.js";
 import { runCommand } from "../cli/command-runtime.js";
 
 type CompletionFormat = "bash" | "zsh" | "fish";
@@ -13,23 +19,35 @@ export async function listCommand(options?: {
 }): Promise<void> {
   await runCommand(async () => {
     if (options?.completion) {
-      const result = await listWorktreeInfos(process.cwd(), {
-        excludeMainWorktree: options.excludeMainWorktree,
-      });
+      const useRemovalCompletionDescriptions = options.excludeMainWorktree;
 
-      for (const worktree of result.worktrees) {
-        let description = worktree.branch;
+      if (useRemovalCompletionDescriptions) {
+        const result = await listRemoveCompletionWorktrees(process.cwd(), {
+          excludeMainWorktree: options.excludeMainWorktree,
+        });
 
-        if (worktree.baseBranch && worktree.baseCommit) {
-          description += ` from ${worktree.baseBranch}@${worktree.baseCommit.substring(0, 7)}`;
-        } else if (worktree.baseBranch) {
-          description += ` from ${worktree.baseBranch}`;
+        for (const worktree of result.worktrees) {
+          const description = buildRemoveCompletionDescription(worktree);
+
+          if (options.completion === "fish") {
+            console.log(`${worktree.id}\t${description}`);
+          } else {
+            console.log(`${worktree.id}:${description}`);
+          }
         }
+      } else {
+        const result = await listWorktreeInfos(process.cwd(), {
+          excludeMainWorktree: options.excludeMainWorktree,
+        });
 
-        if (options.completion === "fish") {
-          console.log(`${worktree.id}\t${description}`);
-        } else {
-          console.log(`${worktree.id}:${description}`);
+        for (const worktree of result.worktrees) {
+          const description = buildDefaultCompletionDescription(worktree);
+
+          if (options.completion === "fish") {
+            console.log(`${worktree.id}\t${description}`);
+          } else {
+            console.log(`${worktree.id}:${description}`);
+          }
         }
       }
       return;
@@ -87,4 +105,52 @@ export async function listCommand(options?: {
       console.log(chalk.dim("─".repeat(80)));
     }
   });
+}
+
+function buildBaseDescription(
+  worktree: Pick<WorktreeInfo, "baseBranch" | "baseCommit">
+): string | undefined {
+  if (worktree.baseBranch && worktree.baseCommit) {
+    return `from ${worktree.baseBranch}@${worktree.baseCommit.substring(0, 7)}`;
+  }
+
+  if (worktree.baseBranch) {
+    return `from ${worktree.baseBranch}`;
+  }
+
+  return undefined;
+}
+
+function buildDefaultCompletionDescription(worktree: WorktreeInfo): string {
+  const descriptionParts = [worktree.branch];
+  const baseDescription = buildBaseDescription(worktree);
+
+  if (baseDescription) {
+    descriptionParts.push(baseDescription);
+  }
+
+  return descriptionParts.join(" ");
+}
+
+function buildRemoveCompletionDescription(
+  worktree: WorktreeRemovalInfo
+): string {
+  const metadata: string[] = [];
+
+  if (worktree.mergeStatus === "merged") {
+    metadata.push("merged");
+  } else if (worktree.mergeStatus === "not_merged") {
+    metadata.push("not merged");
+  }
+
+  const baseDescription = buildBaseDescription(worktree);
+  if (baseDescription) {
+    metadata.push(baseDescription);
+  }
+
+  if (metadata.length === 0) {
+    return worktree.branch;
+  }
+
+  return `${worktree.branch} | ${metadata.join(" | ")}`;
 }

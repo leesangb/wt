@@ -135,7 +135,8 @@ function runWrapper(
 
 function runCompletion(
   shellCase: ShellCase,
-  subcommand: "cd" | "rm" | "remove"
+  subcommand: "cd" | "rm" | "remove",
+  precedingArgs: string[] = []
 ): CompletionRunResult {
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
 
@@ -185,13 +186,13 @@ function runCompletion(
       shellCase.name === "fish"
         ? [
             'source "$WRAPPER_PATH"',
-            `complete --do-complete "wt ${subcommand} "`,
+            `complete --do-complete "wt ${subcommand}${precedingArgs.length > 0 ? ` ${precedingArgs.join(" ")}` : ""} "`,
           ].join("\n")
         : shellCase.name === "bash"
         ? [
             'source "$WRAPPER_PATH"',
-            `COMP_WORDS=(wt ${subcommand} "")`,
-            "COMP_CWORD=2",
+            `COMP_WORDS=(wt ${subcommand}${precedingArgs.length > 0 ? ` ${precedingArgs.join(" ")}` : ""} "")`,
+            `COMP_CWORD=${precedingArgs.length + 2}`,
             "_wt_completion",
             'printf \'%s\\n\' "${COMPREPLY[@]}"',
           ].join("\n")
@@ -316,6 +317,15 @@ describe("shell wrappers", () => {
 
     test(`${shellCase.scriptName} completes worktree ids for rm`, () => {
       const result = runCompletion(shellCase, "rm");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).not.toContain("main");
+      expect(result.suggestions).toContain("demo");
+      expect(result.suggestions).toContain("sample");
+    });
+
+    test(`${shellCase.scriptName} completes additional worktree ids for rm`, () => {
+      const result = runCompletion(shellCase, "rm", ["demo"]);
 
       assertCompletionProcess(result);
       expect(result.suggestions).not.toContain("main");
