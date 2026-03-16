@@ -9,11 +9,12 @@ type CompletionFormat = "bash" | "zsh" | "fish";
 
 export async function listCommand(options?: {
   completion?: CompletionFormat;
+  excludeMainWorktree?: boolean;
 }): Promise<void> {
   await runCommand(async () => {
     if (options?.completion) {
       const result = await listWorktreeInfos(process.cwd(), {
-        excludeMainWorktree: true,
+        excludeMainWorktree: options.excludeMainWorktree,
       });
 
       for (const worktree of result.worktrees) {

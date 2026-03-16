@@ -361,33 +361,53 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
-  test("excludes the main worktree from completion output", async () => {
+  test("shows the main worktree in completion by default and hides it when requested", async () => {
     const repo = await createTestRepo();
     const worktreeId = "completion123";
     const branchName = "feature-completion";
 
     runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
 
-    const completionResult = runCliCapture(
+    const defaultCompletionResult = runCliCapture(
       ["list", "--completion", "bash"],
       repo.repoRoot
     );
     assertProcessSuccess(
-      completionResult.status,
-      completionResult.stderr,
-      completionResult.stdout
+      defaultCompletionResult.status,
+      defaultCompletionResult.stderr,
+      defaultCompletionResult.stdout
     );
 
-    const suggestions = completionResult.stdout
+    const hiddenMainCompletionWithFlagResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      hiddenMainCompletionWithFlagResult.status,
+      hiddenMainCompletionWithFlagResult.stderr,
+      hiddenMainCompletionWithFlagResult.stdout
+    );
+
+    const defaultSuggestions = defaultCompletionResult.stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    const hiddenMainSuggestions = hiddenMainCompletionWithFlagResult.stdout
       .split(/\r?\n/)
       .map(line => line.trim())
       .filter(Boolean);
 
     expect(
-      suggestions.some(line => line.startsWith(`${worktreeId}:`))
+      defaultSuggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
     ).toBeTrue();
     expect(
-      suggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
+      defaultSuggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      hiddenMainSuggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      hiddenMainSuggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
     ).toBeFalse();
   });
 

@@ -26,7 +26,11 @@ _wt_completion() {
     [ "${COMP_WORDS[1]}" = "rm" ] ||
     [ "${COMP_WORDS[1]}" = "remove" ];
   }; then
-    local items=$(/path/to/wt list --completion bash 2>/dev/null)
+    local extra_args=()
+    if [ "${COMP_WORDS[1]}" = "rm" ] || [ "${COMP_WORDS[1]}" = "remove" ]; then
+      extra_args=(--exclude-main-worktree)
+    fi
+    local items=$(/path/to/wt list --completion bash "${extra_args[@]}" 2>/dev/null)
     local ids=$(echo "$items" | cut -d: -f1)
     COMPREPLY=($(compgen -W "$ids" -- "${COMP_WORDS[2]}"))
   fi

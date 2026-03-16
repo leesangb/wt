@@ -23,4 +23,5 @@ function wt
     end
 end
 
-complete -c wt -n "__fish_seen_subcommand_from cd rm remove" -a "(/path/to/wt list --completion fish 2>/dev/null)" -f
+complete -c wt -n "__fish_seen_subcommand_from cd" -a "(/path/to/wt list --completion fish 2>/dev/null)" -f
+complete -c wt -n "__fish_seen_subcommand_from rm remove" -a "(/path/to/wt list --completion fish --exclude-main-worktree 2>/dev/null)" -f
