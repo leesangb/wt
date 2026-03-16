@@ -2,7 +2,7 @@
 # Add this to your ~/.zshrc
 
 wt() {
-  if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "pr" ] || [ "$1" = "cd" ]; then
     local cd_file target_dir
     cd_file=$(mktemp)
     WT_SHELL_CD_FILE="$cd_file" /path/to/wt "$@"
@@ -32,6 +32,7 @@ _wt_completion() {
     command)
       _values 'command' \
         'new[Create a new worktree]' \
+        'pr[Create a pull request worktree]' \
         'list[List all worktrees]' \
         'ls[List all worktrees]' \
         'remove[Remove a worktree]' \

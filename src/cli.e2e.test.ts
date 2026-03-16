@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -35,6 +36,7 @@ interface CliRunResult {
 
 interface CliRunOptions {
   input?: string;
+  env?: Record<string, string | undefined>;
 }
 
 const tempDirs: string[] = [];
@@ -51,6 +53,18 @@ function isShellAvailable(shell: string): boolean {
   return spawnSync("sh", ["-lc", `command -v ${shell}`], {
     stdio: "ignore",
   }).status === 0;
+}
+
+function findCommandPath(command: string): string {
+  const result = spawnSync("sh", ["-lc", `command -v ${command}`], {
+    encoding: "utf-8",
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Failed to find command: ${command}`);
+  }
+
+  return result.stdout.trim();
 }
 
 function readOutputValue(stdout: string, key: string): string {
@@ -89,7 +103,10 @@ function runCliCapture(
   const result = spawnSync(process.execPath, [cliEntry, ...args], {
     cwd,
     encoding: "utf-8",
-    env: process.env,
+    env: {
+      ...process.env,
+      ...options.env,
+    },
     input: options.input,
   });
 
@@ -103,6 +120,23 @@ function runCliCapture(
 function runCli(args: string[], cwd: string): void {
   const result = runCliCapture(args, cwd);
   assertProcessSuccess(result.status, result.stderr, result.stdout);
+}
+
+async function publishTestPullRequest(
+  repo: TestRepo,
+  pullRequestNumber: string,
+  content: string
+): Promise<void> {
+  const sourceBranch = `wt-test-pr-${pullRequestNumber}`;
+  const prFilePath = join(repo.repoRoot, "PULL_REQUEST.txt");
+
+  await $`git -C ${repo.repoRoot} checkout -B ${sourceBranch} main`.quiet();
+  writeFileSync(prFilePath, `${content}\n`);
+  await $`git -C ${repo.repoRoot} add PULL_REQUEST.txt`.quiet();
+  await $`git -C ${repo.repoRoot} commit -m ${`pr-${pullRequestNumber}-${content}`}`.quiet();
+  await $`git -C ${repo.repoRoot} push --force origin HEAD:refs/wt-test/pr/${pullRequestNumber}`.quiet();
+  await $`git -C ${repo.repoRoot} checkout main`.quiet();
+  await $`git -C ${repo.repoRoot} branch -D ${sourceBranch}`.quiet();
 }
 
 async function createTestRepo(): Promise<TestRepo> {
@@ -168,6 +202,71 @@ function createCliRunner(tempDir: string): string {
   return cliPath;
 }
 
+function createFakeGithubCli(tempDir: string): string {
+  const ghPath = join(tempDir, "gh");
+
+  writeFileSync(
+    ghPath,
+    [
+      "#!/bin/sh",
+      'if [ "$1" = "--version" ]; then',
+      '  echo "gh version 99.0.0-test"',
+      "  exit 0",
+      "fi",
+      'if [ "$1" = "auth" ] && [ "$2" = "status" ]; then',
+      '  if [ "${WT_TEST_GH_AUTH_STATUS:-0}" != "0" ]; then',
+      '    echo "not logged in" >&2',
+      "    exit 1",
+      "  fi",
+      "  exit 0",
+      "fi",
+      'if [ "$1" = "pr" ] && [ "$2" = "checkout" ]; then',
+      '  number="$3"',
+      "  shift 3",
+      '  branch=""',
+      '  force="0"',
+      '  while [ "$#" -gt 0 ]; do',
+      '    case "$1" in',
+      '      -b|--branch)',
+      '        branch="$2"',
+      "        shift 2",
+      "        ;;",
+      '      -f|--force)',
+      '        force="1"',
+      "        shift 1",
+      "        ;;",
+      '      --detach|--recurse-submodules)',
+      "        shift 1",
+      "        ;;",
+      "      *)",
+      "        shift 1",
+      "        ;;",
+      "    esac",
+      "  done",
+      '  if [ -z "$branch" ]; then',
+      '    branch="pr-$number"',
+      "  fi",
+      '  git fetch -q origin "refs/wt-test/pr/$number" || exit 1',
+      '  if git show-ref --verify --quiet "refs/heads/$branch"; then',
+      '    git checkout -q "$branch" || exit 1',
+      '    if [ "$force" = "1" ]; then',
+      '      git reset --hard -q FETCH_HEAD || exit 1',
+      "    fi",
+      "  else",
+      '    git checkout -q -B "$branch" FETCH_HEAD || exit 1',
+      "  fi",
+      "  exit 0",
+      "fi",
+      'echo "unsupported gh command" >&2',
+      "exit 1",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+
+  return ghPath;
+}
+
 function createBashWrapper(tempDir: string, cliPath: string): string {
   const wrapperPath = join(tempDir, "wt.bash");
   const wrapperTemplate = readFileSync(bashWrapperTemplatePath, "utf-8");
@@ -183,7 +282,8 @@ function createBashWrapper(tempDir: string, cliPath: string): string {
 
 function runWrappedBashSession(
   repoRoot: string,
-  commands: string[]
+  commands: string[],
+  env: Record<string, string | undefined> = {}
 ): ShellSessionResult {
   const tempDir = makeTempDir("wt-cli-e2e-");
   const cliPath = createCliRunner(tempDir);
@@ -200,6 +300,7 @@ function runWrappedBashSession(
     encoding: "utf-8",
     env: {
       ...process.env,
+      ...env,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
     },
@@ -325,6 +426,137 @@ describe("cli e2e", () => {
 
     expect(cdStatus).toBe(0);
     expect(realpathSync(cdPwd)).toBe(realpathSync(worktreePath));
+  });
+
+  test("creates a pull request worktree and navigates via the bash wrapper", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-fake-gh-");
+    const worktreePath = getWorktreePath(repo, "pr-123");
+    const fakePath = `${fakeBinDir}:${process.env.PATH ?? ""}`;
+
+    createFakeGithubCli(fakeBinDir);
+    await publishTestPullRequest(repo, "123", "pr content v1");
+
+    const result = runWrappedBashSession(
+      repo.repoRoot,
+      [
+        `export PATH="${fakePath}"`,
+        "wt pr 123",
+        "pr_status=$?",
+        'pr_pwd="$PWD"',
+        'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
+      ]
+    );
+    const branchResult = spawnSync(
+      "git",
+      ["-C", worktreePath, "rev-parse", "--abbrev-ref", "HEAD"],
+      {
+        encoding: "utf-8",
+      }
+    );
+
+    assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+    assertProcessSuccess(
+      branchResult.status,
+      branchResult.stderr,
+      branchResult.stdout
+    );
+
+    const prStatus = Number(readOutputValue(result.stdout, "PR_STATUS"));
+    const prPwd = readOutputValue(result.stdout, "PR_PWD");
+
+    expect(prStatus).toBe(0);
+    expect(realpathSync(prPwd)).toBe(realpathSync(worktreePath));
+    expect(branchResult.stdout.trim()).toBe("pr-123");
+    expect(readFileSync(join(worktreePath, "PULL_REQUEST.txt"), "utf-8")).toBe(
+      "pr content v1\n"
+    );
+  });
+
+  test("refreshes an existing pull request worktree when rerun", async () => {
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-fake-gh-");
+    const worktreePath = getWorktreePath(repo, "pr-123");
+
+    createFakeGithubCli(fakeBinDir);
+    await publishTestPullRequest(repo, "123", "pr content v1");
+
+    const firstResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+
+    assertProcessSuccess(firstResult.status, firstResult.stderr, firstResult.stdout);
+    expect(readFileSync(join(worktreePath, "PULL_REQUEST.txt"), "utf-8")).toBe(
+      "pr content v1\n"
+    );
+
+    await publishTestPullRequest(repo, "123", "pr content v2");
+
+    const secondResult = runCliCapture(
+      ["pr", "123", "--no-cd"],
+      repo.repoRoot,
+      {
+        env: {
+          PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+        },
+      }
+    );
+
+    assertProcessSuccess(
+      secondResult.status,
+      secondResult.stderr,
+      secondResult.stdout
+    );
+    expect(secondResult.stdout).toContain("✓ Refreshed PR worktree: #123");
+    expect(readFileSync(join(worktreePath, "PULL_REQUEST.txt"), "utf-8")).toBe(
+      "pr content v2\n"
+    );
+  });
+
+  test("shows an actionable error when GitHub CLI is missing", async () => {
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-git-only-");
+    const gitPath = findCommandPath("git");
+
+    symlinkSync(gitPath, join(fakeBinDir, "git"));
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        PATH: fakeBinDir,
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Error: GitHub CLI (`gh`) is required for `wt pr`."
+    );
+    expect(result.stderr).toContain("https://cli.github.com/");
+  });
+
+  test("shows an actionable error when GitHub CLI is not authenticated", async () => {
+    const repo = await createTestRepo();
+    const fakeBinDir = makeTempDir("wt-fake-gh-");
+
+    createFakeGithubCli(fakeBinDir);
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+        WT_TEST_GH_AUTH_STATUS: "1",
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Error: GitHub CLI is not authenticated."
+    );
+    expect(result.stderr).toContain("gh auth login");
   });
 
   test("keeps slash-based ids while sanitizing the worktree directory name", async () => {

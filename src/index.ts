@@ -7,6 +7,7 @@ import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
+import { prCommand } from "./commands/pr.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -29,6 +30,12 @@ program
   .option("--no-push", "Skip pushing the new branch to remote")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .action(newCommand);
+
+program
+  .command("pr <number>")
+  .description("Create or refresh a worktree for a pull request")
+  .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .action(prCommand);
 
 program
   .command("list")

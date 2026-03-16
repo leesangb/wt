@@ -7,6 +7,7 @@ A CLI tool to manage git worktrees with pre/post script support.
 ## Features
 
 - 🚀 Create worktrees with branch-based IDs and repo-based naming
+- 🔍 Create dedicated pull request worktrees with `gh pr checkout`
 - 🎯 Auto-cd to new worktree (with shell wrapper integration)
 - ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
 - 🔄 Auto-fetch latest changes before creating worktree
@@ -91,6 +92,7 @@ If you don't set up the shell wrapper, you can use `--no-cd` flag:
 
 ```bash
 wt new feature-branch --no-cd
+wt pr 123 --no-cd
 # Then manually: cd /path/shown/in/output
 ```
 
@@ -152,6 +154,27 @@ By default, `WT_ID` uses the branch name. When the branch contains `/`, the work
 - `--id <id>` - Override the default worktree ID (defaults to the branch name)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
+
+### Check out a pull request in a dedicated worktree
+
+`wt pr` requires GitHub CLI (`gh`) and an authenticated GitHub session.
+
+```bash
+# Create or refresh a PR worktree and auto-cd (requires shell wrapper)
+wt pr 123
+
+# Direct binary usage without auto-cd
+wt pr 123 --no-cd
+```
+
+This will:
+1. Fetch the latest repository state
+2. Create or reuse a worktree at `~/.wt/<reponame-pr-123>`
+3. Check out PR #123 into the local branch `pr-123` using `gh pr checkout`
+4. Run the configured pre/post scripts with the same environment variables as `wt new`
+5. Automatically change to the PR worktree (with shell wrapper)
+
+Re-running `wt pr 123` refreshes the existing `pr-123` worktree instead of creating a duplicate.
 
 ### Update wt
 
@@ -302,6 +325,7 @@ wt/
 │   ├── commands/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
+│   │   ├── pr.ts             # wt pr
 │   │   ├── list.ts           # wt list / wt ls
 │   │   ├── remove.ts         # wt remove / wt rm
 │   │   ├── cd.ts             # wt cd
@@ -315,6 +339,7 @@ wt/
 │   │   ├── worktree.ts       # Worktree models and metadata helpers
 │   │   └── worktree-target.ts # Worktree target resolution rules
 │   ├── infra/
+│   │   ├── github/           # GitHub CLI integration
 │   │   ├── git/              # Git repository/worktree/status access
 │   │   ├── storage/          # Settings and metadata persistence
 │   │   ├── scripts/          # Pre/post script execution

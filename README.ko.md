@@ -7,6 +7,7 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 ## 기능
 
 - 🚀 브랜치 기반 ID와 저장소 기반 이름으로 worktree 생성
+- 🔍 `gh pr checkout` 기반의 전용 PR worktree 생성
 - 🎯 새 worktree로 자동 이동 (shell wrapper 통합)
 - ⚙️ 저장소별로 worktree 기본 디렉토리, 기본 브랜치, 원격 푸시 동작 설정
 - 🔄 worktree 생성 전 최신 변경사항 자동 fetch
@@ -91,6 +92,7 @@ shell wrapper를 설정하지 않은 경우 `--no-cd` 플래그를 사용할 수
 
 ```bash
 wt new feature-branch --no-cd
+wt pr 123 --no-cd
 # 그 다음 수동으로: cd /출력에/표시된/경로
 ```
 
@@ -151,6 +153,27 @@ post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `
 - `--id <id>` - 기본 worktree ID 덮어쓰기 (기본값: 브랜치 이름)
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
+
+### 전용 worktree에서 Pull Request 체크아웃
+
+`wt pr`를 사용하려면 GitHub CLI(`gh`)와 인증된 GitHub 세션이 필요합니다.
+
+```bash
+# PR worktree를 만들거나 새로고침하고 자동 이동 (shell wrapper 필요)
+wt pr 123
+
+# 자동 cd 없이 직접 바이너리 사용
+wt pr 123 --no-cd
+```
+
+다음을 수행합니다:
+1. 저장소의 최신 상태를 fetch
+2. `~/.wt/<저장소명-pr-123>` 경로에 worktree를 새로 만들거나 재사용
+3. `gh pr checkout`으로 PR #123을 로컬 브랜치 `pr-123`에 체크아웃
+4. `wt new`와 같은 환경 변수로 설정된 pre/post 스크립트를 실행
+5. PR worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
+
+`wt pr 123`를 다시 실행하면 중복 worktree를 만들지 않고 기존 `pr-123` worktree를 새로고침합니다.
 
 ### wt 업데이트
 
@@ -302,6 +325,7 @@ wt/
 │   ├── commands/
 │   │   ├── init.ts            # wt init
 │   │   ├── new.ts             # wt new
+│   │   ├── pr.ts              # wt pr
 │   │   ├── list.ts            # wt list / wt ls
 │   │   ├── remove.ts          # wt remove / wt rm
 │   │   ├── cd.ts              # wt cd
@@ -315,6 +339,7 @@ wt/
 │   │   ├── worktree.ts        # worktree 모델과 메타데이터 헬퍼
 │   │   └── worktree-target.ts # worktree 대상 해석 규칙
 │   ├── infra/
+│   │   ├── github/            # GitHub CLI 연동
 │   │   ├── git/               # git 저장소/worktree/status 접근
 │   │   ├── storage/           # 설정 및 메타데이터 저장
 │   │   ├── scripts/           # pre/post 스크립트 실행
