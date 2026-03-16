@@ -55,7 +55,7 @@ export async function listGitWorktrees(
   const entries = result.trim().split("\n\n");
 
   return entries
-    .map((entry) => {
+    .map((entry, index) => {
       const lines = entry.split("\n");
       let path = "";
       let branch = "";
@@ -75,6 +75,7 @@ export async function listGitWorktrees(
       return {
         path,
         branch,
+        isMain: index === 0,
       };
     })
     .filter((entry): entry is GitWorktreeRef => Boolean(entry));

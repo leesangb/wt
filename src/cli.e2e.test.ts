@@ -361,6 +361,87 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
+  test("shows the main worktree in completion by default and hides it when requested", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "completion123";
+    const branchName = "feature-completion";
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const defaultCompletionResult = runCliCapture(
+      ["list", "--completion", "bash"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      defaultCompletionResult.status,
+      defaultCompletionResult.stderr,
+      defaultCompletionResult.stdout
+    );
+
+    const hiddenMainCompletionWithFlagResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      hiddenMainCompletionWithFlagResult.status,
+      hiddenMainCompletionWithFlagResult.stderr,
+      hiddenMainCompletionWithFlagResult.stdout
+    );
+
+    const defaultSuggestions = defaultCompletionResult.stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    const hiddenMainSuggestions = hiddenMainCompletionWithFlagResult.stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    expect(
+      defaultSuggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
+    ).toBeTrue();
+    expect(
+      defaultSuggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      hiddenMainSuggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      hiddenMainSuggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
+    ).toBeFalse();
+  });
+
+  test("hides the main worktree from completion even inside a linked worktree", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "linked123";
+    const branchName = "feature-linked";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const completionResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      worktreePath
+    );
+    assertProcessSuccess(
+      completionResult.status,
+      completionResult.stderr,
+      completionResult.stdout
+    );
+
+    const suggestions = completionResult.stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    expect(
+      suggestions.some(line => line.startsWith(`${worktreeId}:`))
+    ).toBeTrue();
+    expect(
+      suggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
+    ).toBeFalse();
+  });
+
   test("asks for confirmation before removing a worktree with local changes", async () => {
     const repo = await createTestRepo();
     const worktreeId = "confirm123";

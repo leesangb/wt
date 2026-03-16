@@ -42,6 +42,7 @@ export async function loadWorktreeInfos(
         fullId,
         path: worktree.path,
         branch: worktree.branch,
+        isMain: worktree.isMain,
         repoName: context.repoName,
         createdAt:
           meta?.createdAt ?? statSync(worktree.path).birthtime.toISOString(),

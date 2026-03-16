@@ -11,6 +11,7 @@ export interface WorktreeMeta {
 export interface GitWorktreeRef {
   path: string;
   branch: string;
+  isMain: boolean;
 }
 
 export interface WorktreeInfo {
@@ -18,6 +19,7 @@ export interface WorktreeInfo {
   fullId: string;
   path: string;
   branch: string;
+  isMain?: boolean;
   repoName: string;
   createdAt: string;
   baseBranch?: string;

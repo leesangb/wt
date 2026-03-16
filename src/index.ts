@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
@@ -35,6 +35,7 @@ program
   .alias("ls")
   .description("List all worktrees")
   .option("--completion <format>", "Output completion format (bash, zsh, fish)")
+  .addOption(new Option("--exclude-main-worktree").hideHelp())
   .action(listCommand);
 
 program

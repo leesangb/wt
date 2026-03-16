@@ -154,10 +154,18 @@ function runCompletion(
         'if [ "$1" = "list" ] && [ -n "$2" ]; then',
         '  case "$2" in',
         '    --completion)',
-        '      if [ "$3" = "fish" ]; then',
-        '        printf \'%s\\n\' "demo\tDemo branch" "sample\tSample branch"',
+        '      if [ "$4" = "--exclude-main-worktree" ]; then',
+        '        if [ "$3" = "fish" ]; then',
+        '          printf \'%s\\n\' "demo\tDemo branch" "sample\tSample branch"',
+        "        else",
+        '          printf \'%s\\n\' "demo:Demo branch" "sample:Sample branch"',
+        "        fi",
         "      else",
-        '        printf \'%s\\n\' "demo:Demo branch" "sample:Sample branch"',
+        '      if [ "$3" = "fish" ]; then',
+        '        printf \'%s\\n\' "main\tMain branch" "demo\tDemo branch" "sample\tSample branch"',
+        "      else",
+        '        printf \'%s\\n\' "main:Main branch" "demo:Demo branch" "sample:Sample branch"',
+        "      fi",
         "      fi",
         "      ;;",
         "  esac",
@@ -297,10 +305,20 @@ describe("shell wrappers", () => {
       }
     });
 
+    test(`${shellCase.scriptName} completes the main worktree for cd`, () => {
+      const result = runCompletion(shellCase, "cd");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).toContain("main");
+      expect(result.suggestions).toContain("demo");
+      expect(result.suggestions).toContain("sample");
+    });
+
     test(`${shellCase.scriptName} completes worktree ids for rm`, () => {
       const result = runCompletion(shellCase, "rm");
 
       assertCompletionProcess(result);
+      expect(result.suggestions).not.toContain("main");
       expect(result.suggestions).toContain("demo");
       expect(result.suggestions).toContain("sample");
     });
@@ -309,6 +327,7 @@ describe("shell wrappers", () => {
       const result = runCompletion(shellCase, "remove");
 
       assertCompletionProcess(result);
+      expect(result.suggestions).not.toContain("main");
       expect(result.suggestions).toContain("demo");
       expect(result.suggestions).toContain("sample");
     });

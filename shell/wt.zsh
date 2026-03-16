@@ -42,8 +42,12 @@ _wt_completion() {
       ;;
     args)
       case $line[1] in
-        cd|rm|remove)
+        cd)
           suggestions=("${(@f)$(/path/to/wt list --completion zsh 2>/dev/null)}")
+          _describe 'worktree' suggestions
+          ;;
+        rm|remove)
+          suggestions=("${(@f)$(/path/to/wt list --completion zsh --exclude-main-worktree 2>/dev/null)}")
           _describe 'worktree' suggestions
           ;;
       esac
