@@ -8,6 +8,11 @@ interface GithubCommandResult {
   error?: Error;
 }
 
+export interface PullRequestInfo {
+  baseRefName: string;
+  headRefName: string;
+}
+
 function runGithubCommand(
   args: string[],
   cwd: string
@@ -59,12 +64,12 @@ export async function ensureGithubCliReady(cwd: string): Promise<void> {
   }
 }
 
-export async function getPullRequestBaseBranch(
+export async function getPullRequestInfo(
   repoRoot: string,
   pullRequestNumber: string
-): Promise<string> {
+): Promise<PullRequestInfo> {
   const result = runGithubCommand(
-    ["pr", "view", pullRequestNumber, "--json", "baseRefName", "--jq", ".baseRefName"],
+    ["pr", "view", pullRequestNumber, "--json", "baseRefName,headRefName"],
     repoRoot
   );
 
@@ -74,24 +79,29 @@ export async function getPullRequestBaseBranch(
     );
   }
 
-  const baseBranch = result.stdout.trim();
+  let info: Partial<PullRequestInfo>;
 
-  if (!baseBranch) {
-    throw new AppError(`Could not determine the base branch for PR #${pullRequestNumber}`);
+  try {
+    info = JSON.parse(result.stdout) as Partial<PullRequestInfo>;
+  } catch {
+    throw new AppError(`Could not parse PR #${pullRequestNumber} details from GitHub CLI`);
   }
 
-  return baseBranch;
+  if (!info.baseRefName || !info.headRefName) {
+    throw new AppError(`Could not determine branch information for PR #${pullRequestNumber}`);
+  }
+
+  return {
+    baseRefName: info.baseRefName,
+    headRefName: info.headRefName,
+  };
 }
 
 export async function checkoutPullRequest(
   worktreePath: string,
-  pullRequestNumber: string,
-  branchName: string
+  pullRequestNumber: string
 ): Promise<void> {
-  const result = runGithubCommand(
-    ["pr", "checkout", pullRequestNumber, "--branch", branchName],
-    worktreePath
-  );
+  const result = runGithubCommand(["pr", "checkout", pullRequestNumber], worktreePath);
 
   if (result.status !== 0) {
     throw new AppError(

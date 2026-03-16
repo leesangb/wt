@@ -157,7 +157,7 @@ By default, `WT_ID` uses the branch name. When the branch contains `/`, the work
 ### Create or navigate to a pull request worktree
 
 ```bash
-# Create a new PR worktree or jump to an existing pr-123 worktree
+# Create a new PR worktree or jump to an existing worktree for that PR head branch
 wt pr 123
 
 # Direct binary usage without auto-cd
@@ -165,11 +165,12 @@ wt pr 123 --no-cd
 ```
 
 This command:
-1. Checks whether any existing worktree is already on branch `pr-123`
-2. Navigates to that worktree immediately when it exists
-3. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
+1. Loads the PR's base branch and head branch from GitHub CLI
+2. Checks whether any existing worktree is already on that PR head branch
+3. Navigates to that worktree immediately when it exists
+4. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
 
-`wt pr` requires GitHub CLI (`gh`) only when it needs to create a new PR worktree. Existing `pr-<number>` worktrees can still be reopened without `gh`.
+`wt pr` uses the PR's actual head branch name instead of creating a synthetic local branch like `pr-123`, so it always requires GitHub CLI (`gh`) to resolve the PR details first.
 
 ### Update wt
 

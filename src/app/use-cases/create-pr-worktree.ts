@@ -16,7 +16,7 @@ import {
 import {
   checkoutPullRequest,
   ensureGithubCliReady,
-  getPullRequestBaseBranch,
+  getPullRequestInfo,
 } from "../../infra/github/cli.js";
 import {
   createOrAttachGitWorktree,
@@ -41,8 +41,10 @@ export async function createPrWorktree(
   cwd: string = process.cwd()
 ): Promise<CreateWorktreeResult> {
   const prNumber = normalizePullRequestNumber(pullRequestNumber);
-  const branchName = `pr-${prNumber}`;
   const context = await requireRepositoryContext(cwd);
+  await ensureGithubCliReady(context.repoRoot);
+  const pullRequestInfo = await getPullRequestInfo(context.repoRoot, prNumber);
+  const branchName = pullRequestInfo.headRefName;
   const worktrees = await loadWorktreeInfos(context);
   const existingWorktree = worktrees.find(
     (worktree) => worktree.branch === branchName
@@ -69,10 +71,9 @@ export async function createPrWorktree(
   );
 
   ensureWorktreeBaseDir(worktreeBaseDir);
-  await ensureGithubCliReady(context.repoRoot);
   await fetchRemote(context.repoRoot);
 
-  const baseBranch = await getPullRequestBaseBranch(context.repoRoot, prNumber);
+  const baseBranch = pullRequestInfo.baseRefName;
   const baseCommit = await getCommitHash(context.repoRoot, baseBranch);
   const worktreePath = resolveFreshWorktreePath(
     worktreeBaseDir,
@@ -94,7 +95,7 @@ export async function createPrWorktree(
     branchName,
     baseBranch
   );
-  await checkoutPullRequest(worktreePath, prNumber, branchName);
+  await checkoutPullRequest(worktreePath, prNumber);
   await writeWorktreeMeta(
     worktreePath,
     createWorktreeMeta(baseBranch, baseCommit, undefined, {

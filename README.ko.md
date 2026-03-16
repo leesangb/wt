@@ -156,7 +156,7 @@ post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `
 ### Pull request worktree 생성 또는 이동
 
 ```bash
-# 새 PR worktree를 만들거나, 이미 있는 pr-123 worktree로 이동
+# 새 PR worktree를 만들거나, 해당 PR head branch를 이미 체크아웃한 worktree로 이동
 wt pr 123
 
 # 자동 cd 없이 직접 바이너리 사용
@@ -164,11 +164,12 @@ wt pr 123 --no-cd
 ```
 
 이 명령은 다음을 수행합니다:
-1. 기존 worktree 중 `pr-123` 브랜치를 이미 체크아웃한 곳이 있는지 확인
-2. 있으면 그 worktree로 바로 이동
-3. 없으면 새 worktree 경로를 만들고 `gh pr checkout`으로 PR 체크아웃
+1. GitHub CLI에서 PR의 base branch와 head branch를 조회
+2. 기존 worktree 중 그 PR head branch를 이미 체크아웃한 곳이 있는지 확인
+3. 있으면 그 worktree로 바로 이동
+4. 없으면 새 worktree 경로를 만들고 `gh pr checkout`으로 PR 체크아웃
 
-`wt pr`는 새 PR worktree를 만들 때만 GitHub CLI(`gh`)가 필요합니다. 이미 존재하는 `pr-<number>` worktree로 다시 들어갈 때는 `gh`가 없어도 됩니다.
+`wt pr`는 `pr-123` 같은 synthetic 로컬 브랜치를 새로 만들지 않고, PR의 실제 head branch 이름을 그대로 사용합니다. 그래서 PR 정보를 먼저 알아야 하므로 GitHub CLI(`gh`)가 항상 필요합니다.
 
 ### wt 업데이트
 

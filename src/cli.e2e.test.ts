@@ -42,6 +42,7 @@ interface FakeGithubCliOptions {
   authenticated?: boolean;
   available?: boolean;
   baseBranch?: string;
+  headBranch?: string;
   logPath?: string;
 }
 
@@ -199,6 +200,7 @@ function createFakeGithubEnv(
   const binDir = join(tempDir, "bin");
   const ghPath = join(binDir, "gh");
   const baseBranch = options.baseBranch ?? "main";
+  const headBranch = options.headBranch ?? "feature/pr-123";
 
   mkdirSync(binDir, { recursive: true });
 
@@ -236,28 +238,12 @@ function createFakeGithubEnv(
         ...authScript.map((line) => `  ${line}`),
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "view" ]; then',
-        `  printf '%s\\n' "${baseBranch}"`,
+        `  printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}"}'`,
         "  exit 0",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
         "  pr_number=$3",
-        "  branch_name=",
-        "  shift 3",
-        "  while [ $# -gt 0 ]; do",
-        '    case "$1" in',
-        "      --branch)",
-        "        branch_name=$2",
-        "        shift 2",
-        "        ;;",
-        "      *)",
-        "        shift",
-        "        ;;",
-        "    esac",
-        "  done",
-        '  if [ -z "$branch_name" ]; then',
-        '    echo "missing --branch" >&2',
-        "    exit 1",
-        "  fi",
+        `  branch_name="${headBranch}"`,
         '  git checkout "$branch_name" >/dev/null 2>&1 || git checkout -B "$branch_name" >/dev/null 2>&1',
         `  printf 'pr %s\\n' "$pr_number" >> README.md`,
         "  git add README.md",
@@ -428,13 +414,14 @@ describe("cli e2e", () => {
   });
 
   test(
-    "creates a pull request worktree, checks it out without force, and navigates via the bash wrapper",
+    "creates a pull request worktree with the PR head branch and navigates via the bash wrapper",
     async () => {
       if (!isShellAvailable("bash")) {
         return;
       }
 
       const repo = await createTestRepo();
+      const headBranch = "feature/pr-123";
       const result = runWrappedBashSession(
         repo.repoRoot,
         [
@@ -443,7 +430,7 @@ describe("cli e2e", () => {
           'pr_pwd="$PWD"',
           'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
         ],
-        createFakeGithubEnv()
+        createFakeGithubEnv({ headBranch })
       );
 
       assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
@@ -474,21 +461,22 @@ describe("cli e2e", () => {
 
       expect(prStatus).toBe(0);
       expect(realpathSync(prPwd)).toBe(realpathSync(worktreePath));
-      expect(branchResult.stdout.trim()).toBe("pr-123");
+      expect(branchResult.stdout.trim()).toBe(headBranch);
       expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
         "pr 123"
       );
     }
   );
 
-  test("reuses an existing pull request worktree without requiring gh", async () => {
+  test("reuses an existing pull request worktree using the PR head branch", async () => {
     if (!isShellAvailable("bash")) {
       return;
     }
 
     const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
     const createResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
-      env: createFakeGithubEnv(),
+      env: createFakeGithubEnv({ headBranch }),
     });
 
     assertProcessSuccess(
@@ -506,7 +494,7 @@ describe("cli e2e", () => {
         'pr_pwd="$PWD"',
         'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
       ],
-      createFakeGithubEnv({ available: false })
+      createFakeGithubEnv({ headBranch })
     );
 
     assertProcessSuccess(
@@ -519,10 +507,12 @@ describe("cli e2e", () => {
     expect(realpathSync(readOutputValue(reuseResult.stdout, "PR_PWD"))).toBe(
       realpathSync(worktreePath)
     );
-    expect(reuseResult.stdout).toContain("Using existing PR worktree: pr-123");
+    expect(reuseResult.stdout).toContain(
+      `Using existing PR worktree: ${headBranch}`
+    );
   });
 
-  test("reuses an existing pr branch worktree even when its id differs", async () => {
+  test("reuses an existing PR head branch worktree even when its id differs", async () => {
     if (!isShellAvailable("bash")) {
       return;
     }
@@ -530,8 +520,9 @@ describe("cli e2e", () => {
     const repo = await createTestRepo();
     const worktreeId = "review-pr-worktree";
     const worktreePath = getWorktreePath(repo, worktreeId);
+    const headBranch = "feature/pr-123";
 
-    runCli(["new", "pr-123", "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    runCli(["new", headBranch, "--id", worktreeId, "--no-cd"], repo.repoRoot);
 
     const result = runWrappedBashSession(
       repo.repoRoot,
@@ -541,7 +532,7 @@ describe("cli e2e", () => {
         'pr_pwd="$PWD"',
         'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
       ],
-      createFakeGithubEnv({ available: false })
+      createFakeGithubEnv({ headBranch })
     );
 
     assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
@@ -564,7 +555,8 @@ describe("cli e2e", () => {
 
     const ghLog = readFileSync(ghLogPath, "utf-8");
 
-    expect(ghLog).toContain("pr checkout 123 --branch pr-123");
+    expect(ghLog).toContain("pr checkout 123");
+    expect(ghLog).not.toContain("--branch");
     expect(ghLog).not.toContain("--force");
   });
 
@@ -800,8 +792,9 @@ describe("cli e2e", () => {
 
   test("adds a unique suffix when the default pr path is already occupied", async () => {
     const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
     const occupiedResult = runCliCapture(
-      ["new", "feature-pr-collision", "--id", "pr-123", "--no-cd"],
+      ["new", "feature-pr-collision", "--id", headBranch, "--no-cd"],
       repo.repoRoot
     );
 
@@ -813,7 +806,7 @@ describe("cli e2e", () => {
 
     const occupiedPath = readCliValue(occupiedResult.stdout, "WT_PATH");
     const prResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
-      env: createFakeGithubEnv(),
+      env: createFakeGithubEnv({ headBranch }),
     });
 
     assertProcessSuccess(prResult.status, prResult.stderr, prResult.stdout);
@@ -821,7 +814,7 @@ describe("cli e2e", () => {
     const prPath = readCliValue(prResult.stdout, "WT_PATH");
 
     expect(prPath).not.toBe(occupiedPath);
-    expect(prPath).toContain(`${repo.repoName}-pr-123-`);
+    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-`);
     expect(existsSync(prPath)).toBeTrue();
   });
 
