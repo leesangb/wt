@@ -2,7 +2,7 @@
 # Add this to your ~/.bashrc
 
 wt() {
-  if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ]; then
     local cd_file target_dir
     cd_file=$(mktemp)
     WT_SHELL_CD_FILE="$cd_file" /path/to/wt "$@"
@@ -21,19 +21,22 @@ wt() {
 }
 
 _wt_completion() {
-  if [ $COMP_CWORD -eq 2 ] && {
-    [ "${COMP_WORDS[1]}" = "cd" ] ||
-    [ "${COMP_WORDS[1]}" = "rm" ] ||
-    [ "${COMP_WORDS[1]}" = "remove" ];
-  }; then
-    local extra_args=()
-    if [ "${COMP_WORDS[1]}" = "rm" ] || [ "${COMP_WORDS[1]}" = "remove" ]; then
-      extra_args=(--exclude-main-worktree)
-    fi
-    local items=$(/path/to/wt list --completion bash "${extra_args[@]}" 2>/dev/null)
-    local ids=$(echo "$items" | cut -d: -f1)
-    COMPREPLY=($(compgen -W "$ids" -- "${COMP_WORDS[2]}"))
-  fi
+  case "${COMP_WORDS[1]}" in
+    cd)
+      if [ $COMP_CWORD -eq 2 ]; then
+        local items=$(/path/to/wt list --completion bash 2>/dev/null)
+        local ids=$(echo "$items" | cut -d: -f1)
+        COMPREPLY=($(compgen -W "$ids" -- "${COMP_WORDS[2]}"))
+      fi
+      ;;
+    rm|remove)
+      if [ $COMP_CWORD -ge 2 ]; then
+        local items=$(/path/to/wt list --completion bash --exclude-main-worktree 2>/dev/null)
+        local ids=$(echo "$items" | cut -d: -f1)
+        COMPREPLY=($(compgen -W "$ids" -- "${COMP_WORDS[$COMP_CWORD]}"))
+      fi
+      ;;
+  esac
 }
 
 complete -F _wt_completion wt

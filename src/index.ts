@@ -7,6 +7,7 @@ import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
+import { prCommand } from "./commands/pr.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -39,9 +40,9 @@ program
   .action(listCommand);
 
 program
-  .command("remove <id>")
+  .command("remove <ids...>")
   .alias("rm")
-  .description("Remove a worktree by ID")
+  .description("Remove one or more worktrees by ID")
   .option("--keep-branch", "Keep the branch after removing worktree")
   .option("-f, --force", "Skip confirmation for worktrees with pending changes")
   .action(removeCommand);
@@ -50,6 +51,12 @@ program
   .command("cd <target>")
   .description("Change directory to a worktree by ID or branch name")
   .action(cdCommand);
+
+program
+  .command("pr <number>")
+  .description("Create or navigate to a pull request worktree")
+  .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .action(prCommand);
 
 program
   .command("update")

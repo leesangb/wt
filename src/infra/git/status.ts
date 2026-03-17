@@ -6,6 +6,11 @@ export interface WorktreeRemovalStatusSummary {
   hasUnknownLocalCommits: boolean;
 }
 
+export interface MergedRemoteBranchesResult {
+  branches: Set<string>;
+  known: boolean;
+}
+
 export async function getDefaultRemoteBranch(
   repoRoot: string
 ): Promise<string | undefined> {
@@ -18,32 +23,48 @@ export async function getDefaultRemoteBranch(
   }
 }
 
-export async function getMergedRemoteBranches(
+export async function getMergedRemoteBranchesResult(
   repoRoot: string,
   baseBranch?: string
-): Promise<Set<string>> {
+): Promise<MergedRemoteBranchesResult> {
   try {
     const mergeBaseBranch =
       baseBranch ?? (await getDefaultRemoteBranch(repoRoot));
 
     if (!mergeBaseBranch) {
-      return new Set();
+      return {
+        branches: new Set(),
+        known: false,
+      };
     }
 
     const result =
       await $`git -C ${repoRoot} branch -r --merged origin/${mergeBaseBranch}`
         .text();
 
-    return new Set(
-      result
-        .trim()
-        .split("\n")
-        .map((branch) => branch.trim())
-        .filter((branch) => branch.length > 0)
-    );
+    return {
+      branches: new Set(
+        result
+          .trim()
+          .split("\n")
+          .map((branch) => branch.trim())
+          .filter((branch) => branch.length > 0)
+      ),
+      known: true,
+    };
   } catch {
-    return new Set();
+    return {
+      branches: new Set(),
+      known: false,
+    };
   }
+}
+
+export async function getMergedRemoteBranches(
+  repoRoot: string,
+  baseBranch?: string
+): Promise<Set<string>> {
+  return (await getMergedRemoteBranchesResult(repoRoot, baseBranch)).branches;
 }
 
 export async function isBranchMergedToRemote(
@@ -51,8 +72,8 @@ export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
-  const mergedBranches = await getMergedRemoteBranches(repoRoot, baseBranch);
-  return mergedBranches.has(`origin/${branch}`);
+  const result = await getMergedRemoteBranchesResult(repoRoot, baseBranch);
+  return result.known && result.branches.has(`origin/${branch}`);
 }
 
 export async function getWorktreeStatusSummary(
@@ -212,5 +233,18 @@ export async function getCommitHash(
     return result.trim();
   } catch {
     return "";
+  }
+}
+
+export async function isRefAncestor(
+  repoRoot: string,
+  ancestorRef: string,
+  descendantRef: string
+): Promise<boolean> {
+  try {
+    await $`git -C ${repoRoot} merge-base --is-ancestor ${ancestorRef} ${descendantRef}`.quiet();
+    return true;
+  } catch {
+    return false;
   }
 }

@@ -33,6 +33,12 @@ export interface WorktreeState extends WorktreeInfo {
   modifiedCount: number;
 }
 
+export type WorktreeMergeStatus = "merged" | "not_merged" | "unknown";
+
+export interface WorktreeRemovalInfo extends WorktreeInfo {
+  mergeStatus: WorktreeMergeStatus;
+}
+
 export function toWorktreePathSegment(value: string): string {
   return value.replaceAll("/", "-");
 }

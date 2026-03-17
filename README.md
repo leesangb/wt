@@ -91,6 +91,7 @@ If you don't set up the shell wrapper, you can use `--no-cd` flag:
 
 ```bash
 wt new feature-branch --no-cd
+wt pr 123 --no-cd
 # Then manually: cd /path/shown/in/output
 ```
 
@@ -153,6 +154,25 @@ By default, `WT_ID` uses the branch name. When the branch contains `/`, the work
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
 
+### Create or navigate to a pull request worktree
+
+```bash
+# Create a new PR worktree or jump to an existing worktree for that PR head branch
+wt pr 123
+
+# Direct binary usage without auto-cd
+wt pr 123 --no-cd
+```
+
+This command:
+1. Loads the PR's base branch and head branch from GitHub CLI
+2. Checks whether any existing worktree is already on that PR head branch
+3. Navigates to that worktree immediately when it exists
+4. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
+
+`wt pr` uses the PR's actual head branch name instead of creating a synthetic local branch like `pr-123`, so it always requires GitHub CLI (`gh`) to resolve the PR details first.
+If that head branch name is already being used as a different worktree ID, `wt pr` appends `-1`, `-2`, and so on to keep the new ID unique and prints the adjustment in the CLI output.
+
 ### Update wt
 
 Update to the latest release (macOS only for now):
@@ -186,12 +206,12 @@ wt ls
 ### Remove a worktree
 
 ```bash
-wt remove <id>
+wt remove <id...>
 # or
-wt rm <id>
+wt rm <id...>
 ```
 
-If the worktree has modified files or unpushed commits, `wt rm` asks for confirmation before deleting it. Use `wt rm <id> --force` to skip the prompt.
+If the worktree has modified files or unpushed commits, `wt rm` asks for confirmation before deleting it. When you pass multiple worktrees, it prompts separately for each one. Use `wt rm <id...> --force` to skip the prompts.
 
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
@@ -302,12 +322,14 @@ wt/
 │   ├── commands/
 │   │   ├── init.ts           # wt init
 │   │   ├── new.ts            # wt new
+│   │   ├── pr.ts             # wt pr
 │   │   ├── list.ts           # wt list / wt ls
 │   │   ├── remove.ts         # wt remove / wt rm
 │   │   ├── cd.ts             # wt cd
 │   │   └── update.ts         # wt update
 │   ├── app/
 │   │   ├── repository-context.ts # Resolve repo root/name from current cwd
+│   │   ├── worktree-creation.ts  # Shared creation helpers and script hooks
 │   │   ├── worktree-catalog.ts   # Aggregate worktree info and status
 │   │   └── use-cases/            # Command workflows
 │   ├── domain/
@@ -316,6 +338,7 @@ wt/
 │   │   └── worktree-target.ts # Worktree target resolution rules
 │   ├── infra/
 │   │   ├── git/              # Git repository/worktree/status access
+│   │   ├── github/           # GitHub CLI integration for PR checkout
 │   │   ├── storage/          # Settings and metadata persistence
 │   │   ├── scripts/          # Pre/post script execution
 │   │   ├── shell/            # Shell cd handoff and wrapper updates

@@ -91,6 +91,7 @@ shell wrapper를 설정하지 않은 경우 `--no-cd` 플래그를 사용할 수
 
 ```bash
 wt new feature-branch --no-cd
+wt pr 123 --no-cd
 # 그 다음 수동으로: cd /출력에/표시된/경로
 ```
 
@@ -152,6 +153,25 @@ post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
 
+### Pull request worktree 생성 또는 이동
+
+```bash
+# 새 PR worktree를 만들거나, 해당 PR head branch를 이미 체크아웃한 worktree로 이동
+wt pr 123
+
+# 자동 cd 없이 직접 바이너리 사용
+wt pr 123 --no-cd
+```
+
+이 명령은 다음을 수행합니다:
+1. GitHub CLI에서 PR의 base branch와 head branch를 조회
+2. 기존 worktree 중 그 PR head branch를 이미 체크아웃한 곳이 있는지 확인
+3. 있으면 그 worktree로 바로 이동
+4. 없으면 새 worktree 경로를 만들고 `gh pr checkout`으로 PR 체크아웃
+
+`wt pr`는 `pr-123` 같은 synthetic 로컬 브랜치를 새로 만들지 않고, PR의 실제 head branch 이름을 그대로 사용합니다. 그래서 PR 정보를 먼저 알아야 하므로 GitHub CLI(`gh`)가 항상 필요합니다.
+만약 그 head branch 이름이 이미 다른 worktree의 ID로 사용 중이면, `wt pr`는 새 ID에 `-1`, `-2` 같은 suffix를 붙여 고유하게 만들고 그 사실을 CLI 출력으로 알려줍니다.
+
 ### wt 업데이트
 
 최신 릴리스로 업데이트 (현재 macOS만 지원):
@@ -185,12 +205,12 @@ wt ls
 ### worktree 제거
 
 ```bash
-wt remove <id>
+wt remove <id...>
 # 또는
-wt rm <id>
+wt rm <id...>
 ```
 
-worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면, `wt rm`은 삭제 전에 한 번 더 확인합니다. 프롬프트를 건너뛰려면 `wt rm <id> --force`를 사용할 수 있습니다.
+worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면, `wt rm`은 삭제 전에 한 번 더 확인합니다. 여러 worktree를 넘기면 각 대상마다 개별로 확인합니다. 프롬프트를 건너뛰려면 `wt rm <id...> --force`를 사용할 수 있습니다.
 
 다음 방법으로 worktree를 제거할 수 있습니다:
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
@@ -302,12 +322,14 @@ wt/
 │   ├── commands/
 │   │   ├── init.ts            # wt init
 │   │   ├── new.ts             # wt new
+│   │   ├── pr.ts              # wt pr
 │   │   ├── list.ts            # wt list / wt ls
 │   │   ├── remove.ts          # wt remove / wt rm
 │   │   ├── cd.ts              # wt cd
 │   │   └── update.ts          # wt update
 │   ├── app/
 │   │   ├── repository-context.ts # 현재 cwd 기준 repo root/name 해석
+│   │   ├── worktree-creation.ts  # 공통 생성 헬퍼와 스크립트 hook
 │   │   ├── worktree-catalog.ts   # worktree 정보와 상태 집계
 │   │   └── use-cases/            # command 워크플로
 │   ├── domain/
@@ -316,6 +338,7 @@ wt/
 │   │   └── worktree-target.ts # worktree 대상 해석 규칙
 │   ├── infra/
 │   │   ├── git/               # git 저장소/worktree/status 접근
+│   │   ├── github/            # PR checkout용 GitHub CLI 연동
 │   │   ├── storage/           # 설정 및 메타데이터 저장
 │   │   ├── scripts/           # pre/post 스크립트 실행
 │   │   ├── shell/             # shell cd handoff 및 wrapper 업데이트

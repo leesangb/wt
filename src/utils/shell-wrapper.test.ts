@@ -27,6 +27,7 @@ interface WrapperRunResult {
 
 interface RunWrapperOptions {
   overrideCd?: boolean;
+  subcommand?: "cd" | "new" | "pr";
 }
 
 interface CompletionRunResult {
@@ -89,12 +90,13 @@ function runWrapper(
       "utf-8"
     );
 
+    const subcommand = options.subcommand ?? "cd";
     const command =
       shellCase.name === "fish"
         ? [
             ...(options.overrideCd ? ["function cd; echo alias-hit; end"] : []),
             'source "$WRAPPER_PATH"',
-            "wt cd demo >/dev/null 2>/dev/null",
+            `wt ${subcommand} demo >/dev/null 2>/dev/null`,
             "set wrapper_status $status",
             'printf \'STATUS=%s\\nPWD=%s\\n\' "$wrapper_status" "$PWD"',
           ].join("\n")
@@ -107,7 +109,7 @@ function runWrapper(
               : []),
             ...(options.overrideCd ? ['alias cd="echo alias-hit"'] : []),
             'source "$WRAPPER_PATH"',
-            "wt cd demo >/dev/null 2>/dev/null",
+            `wt ${subcommand} demo >/dev/null 2>/dev/null`,
             "wrapper_status=$?",
             'printf \'STATUS=%s\\nPWD=%s\\n\' "$wrapper_status" "$PWD"',
           ].join("\n");
@@ -135,7 +137,8 @@ function runWrapper(
 
 function runCompletion(
   shellCase: ShellCase,
-  subcommand: "cd" | "rm" | "remove"
+  subcommand: "cd" | "rm" | "remove",
+  precedingArgs: string[] = []
 ): CompletionRunResult {
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
 
@@ -185,13 +188,13 @@ function runCompletion(
       shellCase.name === "fish"
         ? [
             'source "$WRAPPER_PATH"',
-            `complete --do-complete "wt ${subcommand} "`,
+            `complete --do-complete "wt ${subcommand}${precedingArgs.length > 0 ? ` ${precedingArgs.join(" ")}` : ""} "`,
           ].join("\n")
         : shellCase.name === "bash"
         ? [
             'source "$WRAPPER_PATH"',
-            `COMP_WORDS=(wt ${subcommand} "")`,
-            "COMP_CWORD=2",
+            `COMP_WORDS=(wt ${subcommand}${precedingArgs.length > 0 ? ` ${precedingArgs.join(" ")}` : ""} "")`,
+            `COMP_CWORD=${precedingArgs.length + 2}`,
             "_wt_completion",
             'printf \'%s\\n\' "${COMPREPLY[@]}"',
           ].join("\n")
@@ -273,6 +276,23 @@ describe("shell wrappers", () => {
       }
     });
 
+    test(`${shellCase.scriptName} changes directory on pr success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "worktree");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "pr" });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     test(`${shellCase.scriptName} returns nonzero when cd fails`, () => {
       const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
 
@@ -316,6 +336,15 @@ describe("shell wrappers", () => {
 
     test(`${shellCase.scriptName} completes worktree ids for rm`, () => {
       const result = runCompletion(shellCase, "rm");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).not.toContain("main");
+      expect(result.suggestions).toContain("demo");
+      expect(result.suggestions).toContain("sample");
+    });
+
+    test(`${shellCase.scriptName} completes additional worktree ids for rm`, () => {
+      const result = runCompletion(shellCase, "rm", ["demo"]);
 
       assertCompletionProcess(result);
       expect(result.suggestions).not.toContain("main");
