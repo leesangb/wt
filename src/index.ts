@@ -39,9 +39,9 @@ program
   .action(listCommand);
 
 program
-  .command("remove <id>")
+  .command("remove <ids...>")
   .alias("rm")
-  .description("Remove a worktree by ID")
+  .description("Remove one or more worktrees by ID")
   .option("--keep-branch", "Keep the branch after removing worktree")
   .option("-f, --force", "Skip confirmation for worktrees with pending changes")
   .action(removeCommand);

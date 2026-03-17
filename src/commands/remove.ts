@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { readFileSync } from "fs";
 import { createInterface } from "readline/promises";
 import { AppError } from "../app/errors.js";
 import {
@@ -6,9 +7,21 @@ import {
   removeWorktree,
 } from "../app/use-cases/remove-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
+
 interface RemoveCommandOptions {
   keepBranch?: boolean;
   force?: boolean;
+}
+
+interface RemovalPrompter {
+  confirmRemoval: (
+    worktreeId: string,
+    branch: string,
+    localChangeCount: number,
+    localCommitCount: number,
+    hasUnknownLocalCommits: boolean
+  ) => Promise<boolean>;
+  close: () => void;
 }
 
 function buildPendingWorkSummary(
@@ -39,78 +52,168 @@ function buildPendingWorkSummary(
   return details.join(" and ");
 }
 
-async function confirmRemoval(
-  worktreeId: string,
-  branch: string,
-  localChangeCount: number,
-  localCommitCount: number,
-  hasUnknownLocalCommits: boolean
-): Promise<boolean> {
-  const summary = buildPendingWorkSummary(
-    localChangeCount,
-    localCommitCount,
-    hasUnknownLocalCommits
-  );
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+function createRemovalPrompter(): RemovalPrompter {
+  let readline: ReturnType<typeof createInterface> | undefined;
+  let bufferedAnswers: string[] | undefined;
 
-  try {
-    console.log(
-      chalk.yellow(
-        `Warning: ${branch} (${worktreeId}) has ${summary}.`
-      )
-    );
-    const answer = await readline.question(
-      chalk.yellow("Remove this worktree anyway? [y/N] ")
-    );
+  const getReadline = () => {
+    if (!readline) {
+      readline = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+    }
 
-    return /^(y|yes)$/i.test(answer.trim());
-  } catch {
-    return false;
-  } finally {
-    readline.close();
-  }
-}
+    return readline;
+  };
 
-export async function removeCommand(id: string, options: RemoveCommandOptions): Promise<void> {
-  await runCommand(async () => {
-    const preview = await inspectRemoveWorktree(id);
-    const hasPendingWork =
-      preview.localChangeCount > 0 ||
-      preview.localCommitCount > 0 ||
-      preview.hasUnknownLocalCommits;
+  const getBufferedAnswers = () => {
+    if (!bufferedAnswers) {
+      bufferedAnswers = readFileSync(0, "utf-8").split(/\r?\n/);
+    }
 
-    if (hasPendingWork && !options.force) {
-      const confirmed = await confirmRemoval(
-        preview.worktree.id,
-        preview.worktree.branch,
-        preview.localChangeCount,
-        preview.localCommitCount,
-        preview.hasUnknownLocalCommits
+    return bufferedAnswers;
+  };
+
+  return {
+    async confirmRemoval(
+      worktreeId: string,
+      branch: string,
+      localChangeCount: number,
+      localCommitCount: number,
+      hasUnknownLocalCommits: boolean
+    ): Promise<boolean> {
+      const summary = buildPendingWorkSummary(
+        localChangeCount,
+        localCommitCount,
+        hasUnknownLocalCommits
       );
 
-      if (!confirmed) {
+      try {
+        console.log(
+          chalk.yellow(
+            `Warning: ${branch} (${worktreeId}) has ${summary}.`
+          )
+        );
+        const prompt = chalk.yellow("Remove this worktree anyway? [y/N] ");
+        const answer = process.stdin.isTTY
+          ? await getReadline().question(prompt)
+          : (() => {
+              process.stdout.write(prompt);
+              return getBufferedAnswers().shift() ?? "";
+            })();
+
+        return /^(y|yes)$/i.test(answer.trim());
+      } catch {
+        return false;
+      }
+    },
+    close() {
+      readline?.close();
+    },
+  };
+}
+
+function hasPendingWork(preview: Awaited<ReturnType<typeof inspectRemoveWorktree>>): boolean {
+  return (
+    preview.localChangeCount > 0 ||
+    preview.localCommitCount > 0 ||
+    preview.hasUnknownLocalCommits
+  );
+}
+
+function logRemovalResult(
+  result: Awaited<ReturnType<typeof removeWorktree>>
+): void {
+  console.log(
+    chalk.blue(
+      `Removing worktree: ${result.worktree.branch} (${result.worktree.id})...`
+    )
+  );
+  console.log(chalk.green(`✓ Worktree removed`));
+
+  if (result.branchDeleted) {
+    console.log(chalk.blue(`Deleting branch: ${result.worktree.branch}...`));
+    console.log(chalk.green(`✓ Branch deleted`));
+    return;
+  }
+
+  console.log(chalk.yellow(`Branch ${result.worktree.branch} kept`));
+}
+
+async function removeSingleWorktree(
+  id: string,
+  options: RemoveCommandOptions,
+  batchMode: boolean,
+  prompter: RemovalPrompter
+): Promise<"removed" | "skipped"> {
+  const preview = await inspectRemoveWorktree(id);
+
+  if (hasPendingWork(preview) && !options.force) {
+    const confirmed = await prompter.confirmRemoval(
+      preview.worktree.id,
+      preview.worktree.branch,
+      preview.localChangeCount,
+      preview.localCommitCount,
+      preview.hasUnknownLocalCommits
+    );
+
+    if (!confirmed) {
+      if (!batchMode) {
         throw new AppError("Removal cancelled");
       }
+
+      console.log(
+        chalk.yellow(
+          `Skipped worktree: ${preview.worktree.branch} (${preview.worktree.id})`
+        )
+      );
+      return "skipped";
     }
+  }
 
-    const result = await removeWorktree(id, options);
+  const result = await removeWorktree(preview.worktree.id, options);
+  logRemovalResult(result);
+  return "removed";
+}
 
-    console.log(
-      chalk.blue(
-        `Removing worktree: ${result.worktree.branch} (${result.worktree.id})...`
-      )
-    );
-    console.log(chalk.green(`✓ Worktree removed`));
+export async function removeCommand(
+  ids: string[],
+  options: RemoveCommandOptions
+): Promise<void> {
+  await runCommand(async () => {
+    const prompter = createRemovalPrompter();
 
-    if (result.branchDeleted) {
-      console.log(chalk.blue(`Deleting branch: ${result.worktree.branch}...`));
-      console.log(chalk.green(`✓ Branch deleted`));
-      return;
+    try {
+      if (ids.length === 1) {
+        await removeSingleWorktree(ids[0], options, false, prompter);
+        return;
+      }
+
+      let hadSkippedOrFailedTargets = false;
+
+      for (const [index, id] of ids.entries()) {
+        if (index > 0) {
+          console.log("");
+        }
+
+        try {
+          const result = await removeSingleWorktree(id, options, true, prompter);
+          if (result === "skipped") {
+            hadSkippedOrFailedTargets = true;
+          }
+        } catch (error) {
+          hadSkippedOrFailedTargets = true;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(chalk.red(`Error removing "${id}": ${message}`));
+        }
+      }
+
+      if (hadSkippedOrFailedTargets) {
+        process.exitCode = 1;
+      }
+    } finally {
+      prompter.close();
     }
-
-    console.log(chalk.yellow(`Branch ${result.worktree.branch} kept`));
   });
 }
