@@ -5,6 +5,7 @@ import type { WorktreeMeta } from "../../domain/worktree.js";
 export const WORKTREE_DIRNAME = ".wt";
 export const WORKTREE_META_FILENAME = "meta.json";
 export const LEGACY_WORKTREE_META_FILENAME = "meta";
+export const WORKTREE_GITIGNORE_CONTENT = ".gitignore\n*\n";
 
 export async function readWorktreeMeta(
   worktreePath: string
@@ -50,5 +51,5 @@ export async function writeWorktreeMeta(
     join(wtDir, WORKTREE_META_FILENAME),
     JSON.stringify(meta, null, 2)
   );
-  writeFileSync(join(wtDir, ".gitignore"), ".gitignore\nmeta.json\n");
+  writeFileSync(join(wtDir, ".gitignore"), WORKTREE_GITIGNORE_CONTENT);
 }
