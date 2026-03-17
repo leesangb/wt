@@ -2,7 +2,7 @@
 # Add this to your ~/.bashrc
 
 wt() {
-  if [ "$1" = "new" ] || [ "$1" = "cd" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ]; then
     local cd_file target_dir
     cd_file=$(mktemp)
     WT_SHELL_CD_FILE="$cd_file" /path/to/wt "$@"

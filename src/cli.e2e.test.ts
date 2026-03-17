@@ -35,6 +35,15 @@ interface CliRunResult {
 
 interface CliRunOptions {
   input?: string;
+  env?: Record<string, string | undefined>;
+}
+
+interface FakeGithubCliOptions {
+  authenticated?: boolean;
+  available?: boolean;
+  baseBranch?: string;
+  headBranch?: string;
+  logPath?: string;
 }
 
 const tempDirs: string[] = [];
@@ -89,7 +98,10 @@ function runCliCapture(
   const result = spawnSync(process.execPath, [cliEntry, ...args], {
     cwd,
     encoding: "utf-8",
-    env: process.env,
+    env: {
+      ...process.env,
+      ...options.env,
+    },
     input: options.input,
   });
 
@@ -181,9 +193,82 @@ function createBashWrapper(tempDir: string, cliPath: string): string {
   return wrapperPath;
 }
 
+function createFakeGithubEnv(
+  options: FakeGithubCliOptions = {}
+): Record<string, string> {
+  const tempDir = makeTempDir("wt-gh-");
+  const binDir = join(tempDir, "bin");
+  const ghPath = join(binDir, "gh");
+  const baseBranch = options.baseBranch ?? "main";
+  const headBranch = options.headBranch ?? "feature/pr-123";
+
+  mkdirSync(binDir, { recursive: true });
+
+  if (options.available === false) {
+    writeFileSync(
+      ghPath,
+      [
+        "#!/bin/sh",
+        'echo "gh: command not found" >&2',
+        "exit 127",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+  } else {
+    const authScript =
+      options.authenticated === false
+        ? ['echo "not logged in" >&2', "exit 1"]
+        : ["exit 0"];
+    const logLine = options.logPath
+      ? `printf '%s\\n' "$*" >> "${options.logPath}"`
+      : ":";
+
+    writeFileSync(
+      ghPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        logLine,
+        'if [ "$1" = "--version" ]; then',
+        '  printf \'%s\\n\' "gh version 9.9.9"',
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "auth" ] && [ "${2:-}" = "status" ]; then',
+        ...authScript.map((line) => `  ${line}`),
+        "fi",
+        'if [ "$1" = "pr" ] && [ "${2:-}" = "view" ]; then',
+        `  printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}"}'`,
+        "  exit 0",
+        "fi",
+        'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
+        "  pr_number=$3",
+        `  branch_name="${headBranch}"`,
+        '  git checkout "$branch_name" >/dev/null 2>&1 || git checkout -B "$branch_name" >/dev/null 2>&1',
+        `  printf 'pr %s\\n' "$pr_number" >> README.md`,
+        "  git add README.md",
+        "  if ! git diff --cached --quiet; then",
+        `    git commit -m "checkout pr $pr_number" >/dev/null 2>&1`,
+        "  fi",
+        "  exit 0",
+        "fi",
+        'echo "unsupported gh args" >&2',
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+  }
+
+  return {
+    PATH: `${binDir}:${process.env.PATH ?? ""}`,
+  };
+}
+
 function runWrappedBashSession(
   repoRoot: string,
-  commands: string[]
+  commands: string[],
+  envOverrides: Record<string, string | undefined> = {}
 ): ShellSessionResult {
   const tempDir = makeTempDir("wt-cli-e2e-");
   const cliPath = createCliRunner(tempDir);
@@ -196,12 +281,13 @@ function runWrappedBashSession(
     ...commands,
   ].join("\n");
 
-  const result = spawnSync("bash", ["-lc", command], {
+  const result = spawnSync("bash", ["-c", command], {
     encoding: "utf-8",
     env: {
       ...process.env,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
+      ...envOverrides,
     },
   });
 
@@ -325,6 +411,153 @@ describe("cli e2e", () => {
 
     expect(cdStatus).toBe(0);
     expect(realpathSync(cdPwd)).toBe(realpathSync(worktreePath));
+  });
+
+  test(
+    "creates a pull request worktree with the PR head branch and navigates via the bash wrapper",
+    async () => {
+      if (!isShellAvailable("bash")) {
+        return;
+      }
+
+      const repo = await createTestRepo();
+      const headBranch = "feature/pr-123";
+      const result = runWrappedBashSession(
+        repo.repoRoot,
+        [
+          "wt pr 123",
+          "pr_status=$?",
+          'pr_pwd="$PWD"',
+          'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
+        ],
+        createFakeGithubEnv({ headBranch })
+      );
+
+      assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+      const prStatus = Number(readOutputValue(result.stdout, "PR_STATUS"));
+      const prPwd = readOutputValue(result.stdout, "PR_PWD");
+
+      if (prStatus !== 0) {
+        throw new Error(
+          `wt pr failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+        );
+      }
+
+      const worktreePath = readCliValue(result.stdout, "WT_PATH");
+      const branchResult = spawnSync(
+        "git",
+        ["-C", worktreePath, "branch", "--show-current"],
+        {
+          encoding: "utf-8",
+        }
+      );
+
+      assertProcessSuccess(
+        branchResult.status,
+        branchResult.stderr,
+        branchResult.stdout
+      );
+
+      expect(prStatus).toBe(0);
+      expect(realpathSync(prPwd)).toBe(realpathSync(worktreePath));
+      expect(branchResult.stdout.trim()).toBe(headBranch);
+      expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
+        "pr 123"
+      );
+    }
+  );
+
+  test("reuses an existing pull request worktree using the PR head branch", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+    const createResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch }),
+    });
+
+    assertProcessSuccess(
+      createResult.status,
+      createResult.stderr,
+      createResult.stdout
+    );
+
+    const worktreePath = readCliValue(createResult.stdout, "WT_PATH");
+    const reuseResult = runWrappedBashSession(
+      repo.repoRoot,
+      [
+        "wt pr 123",
+        "pr_status=$?",
+        'pr_pwd="$PWD"',
+        'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
+      ],
+      createFakeGithubEnv({ headBranch })
+    );
+
+    assertProcessSuccess(
+      reuseResult.processStatus,
+      reuseResult.stderr,
+      reuseResult.stdout
+    );
+
+    expect(Number(readOutputValue(reuseResult.stdout, "PR_STATUS"))).toBe(0);
+    expect(realpathSync(readOutputValue(reuseResult.stdout, "PR_PWD"))).toBe(
+      realpathSync(worktreePath)
+    );
+    expect(reuseResult.stdout).toContain(
+      `Using existing PR worktree: ${headBranch}`
+    );
+  });
+
+  test("reuses an existing PR head branch worktree even when its id differs", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const worktreeId = "review-pr-worktree";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const headBranch = "feature/pr-123";
+
+    runCli(["new", headBranch, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const result = runWrappedBashSession(
+      repo.repoRoot,
+      [
+        "wt pr 123",
+        "pr_status=$?",
+        'pr_pwd="$PWD"',
+        'printf \'PR_STATUS=%s\\nPR_PWD=%s\\n\' "$pr_status" "$pr_pwd"',
+      ],
+      createFakeGithubEnv({ headBranch })
+    );
+
+    assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+    expect(Number(readOutputValue(result.stdout, "PR_STATUS"))).toBe(0);
+    expect(realpathSync(readOutputValue(result.stdout, "PR_PWD"))).toBe(
+      realpathSync(worktreePath)
+    );
+    expect(result.stdout).toContain(`WT_ID: ${worktreeId}`);
+  });
+
+  test("does not pass force when checking out a pull request", async () => {
+    const repo = await createTestRepo();
+    const ghLogPath = join(makeTempDir("wt-gh-log-"), "gh.log");
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ logPath: ghLogPath }),
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const ghLog = readFileSync(ghLogPath, "utf-8");
+
+    expect(ghLog).toContain("pr checkout 123");
+    expect(ghLog).not.toContain("--branch");
+    expect(ghLog).not.toContain("--force");
   });
 
   test("keeps slash-based ids while sanitizing the worktree directory name", async () => {
@@ -689,6 +922,85 @@ describe("cli e2e", () => {
     expect(secondPath).toContain(`${repo.repoName}-feature-foo-`);
     expect(existsSync(firstPath)).toBeTrue();
     expect(existsSync(secondPath)).toBeTrue();
+  });
+
+  test("adds a numeric suffix when the default pr id is already occupied", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+    const occupiedResult = runCliCapture(
+      ["new", "feature-pr-collision", "--id", headBranch, "--no-cd"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(
+      occupiedResult.status,
+      occupiedResult.stderr,
+      occupiedResult.stdout
+    );
+
+    const occupiedPath = readCliValue(occupiedResult.stdout, "WT_PATH");
+    const prResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch }),
+    });
+
+    assertProcessSuccess(prResult.status, prResult.stderr, prResult.stdout);
+
+    const prPath = readCliValue(prResult.stdout, "WT_PATH");
+    const prId = readCliValue(prResult.stdout, "WT_ID");
+
+    expect(prPath).not.toBe(occupiedPath);
+    expect(prId).toBe(`${headBranch}-1`);
+    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-1`);
+    expect(prResult.stdout).toContain(
+      `Adjusted WT_ID from ${headBranch} to ${headBranch}-1 because that ID is already in use.`
+    );
+    expect(existsSync(prPath)).toBeTrue();
+  });
+
+  test("increments the pr id suffix until it finds an unused id", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+
+    runCli(["new", "feature-pr-collision-a", "--id", headBranch, "--no-cd"], repo.repoRoot);
+    runCli(
+      ["new", "feature-pr-collision-b", "--id", `${headBranch}-1`, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const prResult = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch }),
+    });
+
+    assertProcessSuccess(prResult.status, prResult.stderr, prResult.stdout);
+
+    const prPath = readCliValue(prResult.stdout, "WT_PATH");
+    const prId = readCliValue(prResult.stdout, "WT_ID");
+
+    expect(prId).toBe(`${headBranch}-2`);
+    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-2`);
+    expect(existsSync(prPath)).toBeTrue();
+  });
+
+  test("shows an actionable error when gh is unavailable and no pr worktree exists", async () => {
+    const repo = await createTestRepo();
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ available: false }),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("GitHub CLI (`gh`) is not installed");
+  });
+
+  test("shows an actionable error when gh is not authenticated and no pr worktree exists", async () => {
+    const repo = await createTestRepo();
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ authenticated: false }),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "GitHub CLI is not authenticated. Run `gh auth login`."
+    );
   });
 
   test("runs pre and post scripts in sync mode with the expected environment", async () => {
