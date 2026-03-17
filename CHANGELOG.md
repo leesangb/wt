@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.2
+
+### Patch Changes
+
+- efb2a6c: minor update
+
 ## 0.2.1
 
 ### Patch Changes
