@@ -343,6 +343,24 @@ function readLines(path: string): string[] {
   return readFileSync(path, "utf-8").trimEnd().split(/\r?\n/);
 }
 
+async function waitFor(
+  check: () => boolean,
+  timeoutMs: number = 5000,
+  intervalMs: number = 50
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (check()) {
+      return;
+    }
+
+    await Bun.sleep(intervalMs);
+  }
+
+  throw new Error(`Timed out after ${timeoutMs}ms`);
+}
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -1246,6 +1264,75 @@ describe("cli e2e", () => {
     expect(postLines[4]).toBe(branchName);
     expect(realpathSync(postLines[5])).toBe(resolvedRepoRoot);
     expect(postLines[6]).toBe("missing");
+  });
+
+  test("sends a macOS notification when async post scripts finish", async () => {
+    if (process.platform !== "darwin") {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const worktreeId = "notify123";
+    const branchName = "feature-notify";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const fakeBinDir = makeTempDir("wt-fake-bin-");
+    const notificationLogPath = join(fakeBinDir, "osascript.log");
+    const fakeOsascriptPath = join(fakeBinDir, "osascript");
+
+    writeFileSync(
+      fakeOsascriptPath,
+      [
+        "#!/bin/sh",
+        'printf "%s\\n" "$*" >> "$WT_TEST_OSASCRIPT_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.scripts = {
+        pre: [],
+        post: [
+          "sleep 0.1",
+          "printf 'done\\n' > .wt/post-complete.txt",
+        ],
+        postMode: "async",
+      };
+    });
+
+    const result = runCliCapture(
+      ["new", branchName, "--id", worktreeId, "--no-cd"],
+      repo.repoRoot,
+      {
+        env: {
+          PATH: `${fakeBinDir}:${process.env.PATH ?? ""}`,
+          WT_TEST_OSASCRIPT_LOG: notificationLogPath,
+        },
+      }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const statusFilePath = join(worktreePath, ".wt", "post-task.json");
+
+    await waitFor(() => {
+      if (!existsSync(statusFilePath) || !existsSync(notificationLogPath)) {
+        return false;
+      }
+
+      const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
+        status: string;
+      };
+
+      return status.status === "done";
+    });
+
+    const notificationLog = readFileSync(notificationLogPath, "utf-8");
+
+    expect(notificationLog).toContain("display notification");
+    expect(notificationLog).toContain(`${branchName} setup finished`);
+    expect(notificationLog).toContain('with title "wt"');
+    expect(notificationLog).toContain('subtitle "Post scripts completed"');
   });
 
   test("resolves relative worktreeDir from repo root even when invoked in a subdirectory", async () => {
