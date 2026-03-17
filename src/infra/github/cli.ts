@@ -11,6 +11,7 @@ interface GithubCommandResult {
 export interface PullRequestInfo {
   baseRefName: string;
   headRefName: string;
+  headRefOid: string;
 }
 
 function runGithubCommand(
@@ -69,7 +70,13 @@ export async function getPullRequestInfo(
   pullRequestNumber: string
 ): Promise<PullRequestInfo> {
   const result = runGithubCommand(
-    ["pr", "view", pullRequestNumber, "--json", "baseRefName,headRefName"],
+    [
+      "pr",
+      "view",
+      pullRequestNumber,
+      "--json",
+      "baseRefName,headRefName,headRefOid",
+    ],
     repoRoot
   );
 
@@ -87,13 +94,14 @@ export async function getPullRequestInfo(
     throw new AppError(`Could not parse PR #${pullRequestNumber} details from GitHub CLI`);
   }
 
-  if (!info.baseRefName || !info.headRefName) {
+  if (!info.baseRefName || !info.headRefName || !info.headRefOid) {
     throw new AppError(`Could not determine branch information for PR #${pullRequestNumber}`);
   }
 
   return {
     baseRefName: info.baseRefName,
     headRefName: info.headRefName,
+    headRefOid: info.headRefOid,
   };
 }
 

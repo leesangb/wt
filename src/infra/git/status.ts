@@ -235,3 +235,16 @@ export async function getCommitHash(
     return "";
   }
 }
+
+export async function isRefAncestor(
+  repoRoot: string,
+  ancestorRef: string,
+  descendantRef: string
+): Promise<boolean> {
+  try {
+    await $`git -C ${repoRoot} merge-base --is-ancestor ${ancestorRef} ${descendantRef}`.quiet();
+    return true;
+  } catch {
+    return false;
+  }
+}

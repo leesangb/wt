@@ -20,10 +20,13 @@ import {
   getPullRequestInfo,
 } from "../../infra/github/cli.js";
 import {
-  createOrAttachGitWorktree,
+  createDetachedGitWorktree,
+  deleteBranch,
   fetchRemote,
+  localBranchExists,
+  removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
-import { getCommitHash } from "../../infra/git/status.js";
+import { getCommitHash, isRefAncestor } from "../../infra/git/status.js";
 import { writeWorktreeMeta } from "../../infra/storage/worktree-meta-store.js";
 import { AppError } from "../errors.js";
 
@@ -35,6 +38,14 @@ function normalizePullRequestNumber(pullRequestNumber: string): string {
   }
 
   return value;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 export async function createPrWorktree(
@@ -79,6 +90,24 @@ export async function createPrWorktree(
 
   const baseBranch = pullRequestInfo.baseRefName;
   const baseCommit = await getCommitHash(context.repoRoot, baseBranch);
+  const branchExistedBeforeCheckout = await localBranchExists(
+    context.repoRoot,
+    branchName
+  );
+
+  if (
+    branchExistedBeforeCheckout &&
+    !(await isRefAncestor(
+      context.repoRoot,
+      branchName,
+      pullRequestInfo.headRefOid
+    ))
+  ) {
+    throw new AppError(
+      `Local branch ${branchName} already exists but diverges from PR #${prNumber}. Refusing to reset it automatically; delete or rename the local branch, or merge/rebase it manually first.`
+    );
+  }
+
   const worktreePath = resolveFreshWorktreePath(
     worktreeBaseDir,
     context.repoName,
@@ -93,13 +122,46 @@ export async function createPrWorktree(
   );
 
   await runPreCreationScripts(settings, context.repoRoot, scriptEnv);
-  await createOrAttachGitWorktree(
+  await createDetachedGitWorktree(
     context.repoRoot,
     worktreePath,
-    branchName,
-    baseBranch
+    baseCommit
   );
-  await checkoutPullRequest(worktreePath, prNumber);
+
+  try {
+    await checkoutPullRequest(worktreePath, prNumber);
+  } catch (error) {
+    const cleanupErrors: string[] = [];
+
+    try {
+      await removeGitWorktree(context.repoRoot, worktreePath);
+    } catch (cleanupError) {
+      cleanupErrors.push(
+        `remove worktree: ${getErrorMessage(cleanupError)}`
+      );
+    }
+
+    if (!branchExistedBeforeCheckout) {
+      try {
+        if (await localBranchExists(context.repoRoot, branchName)) {
+          await deleteBranch(context.repoRoot, branchName);
+        }
+      } catch (cleanupError) {
+        cleanupErrors.push(
+          `delete branch ${branchName}: ${getErrorMessage(cleanupError)}`
+        );
+      }
+    }
+
+    if (cleanupErrors.length > 0) {
+      throw new AppError(
+        `${getErrorMessage(error)}\nCleanup failed for temporary PR worktree ${worktreePath}: ${cleanupErrors.join("; ")}`
+      );
+    }
+
+    throw error;
+  }
+
   await writeWorktreeMeta(
     worktreePath,
     createWorktreeMeta(baseBranch, baseCommit, undefined, {

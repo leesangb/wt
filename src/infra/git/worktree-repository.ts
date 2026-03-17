@@ -59,6 +59,28 @@ async function localBranchExists(
   return (await proc.exited) === 0;
 }
 
+export { localBranchExists };
+
+export async function createDetachedGitWorktree(
+  repoRoot: string,
+  worktreePath: string,
+  ref: string
+): Promise<void> {
+  const addProc = spawn(
+    ["git", "worktree", "add", "--detach", worktreePath, ref],
+    {
+      cwd: repoRoot,
+      stdout: "inherit",
+      stderr: "inherit",
+    }
+  );
+  const addResult = await addProc.exited;
+
+  if (addResult !== 0) {
+    throw new Error(`git worktree add failed with exit code ${addResult}`);
+  }
+}
+
 export async function createOrAttachGitWorktree(
   repoRoot: string,
   worktreePath: string,

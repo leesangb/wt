@@ -42,7 +42,11 @@ interface FakeGithubCliOptions {
   authenticated?: boolean;
   available?: boolean;
   baseBranch?: string;
+  checkoutCreatesBranchBeforeFail?: boolean;
+  checkoutFailureMessage?: string;
+  checkoutRef?: string;
   headBranch?: string;
+  headRefOid?: string;
   logPath?: string;
 }
 
@@ -200,7 +204,13 @@ function createFakeGithubEnv(
   const binDir = join(tempDir, "bin");
   const ghPath = join(binDir, "gh");
   const baseBranch = options.baseBranch ?? "main";
+  const checkoutCreatesBranchBeforeFail =
+    options.checkoutCreatesBranchBeforeFail === true;
+  const checkoutFailureMessage = options.checkoutFailureMessage ?? "";
+  const checkoutRef = options.checkoutRef ?? "";
   const headBranch = options.headBranch ?? "feature/pr-123";
+  const headRefOid =
+    options.headRefOid ?? "0000000000000000000000000000000000000000";
 
   mkdirSync(binDir, { recursive: true });
 
@@ -238,12 +248,43 @@ function createFakeGithubEnv(
         ...authScript.map((line) => `  ${line}`),
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "view" ]; then',
-        `  printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}"}'`,
+        `  printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}"}'`,
         "  exit 0",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
         "  pr_number=$3",
         `  branch_name="${headBranch}"`,
+        `  checkout_ref="${checkoutRef}"`,
+        `  checkout_failure_message="${checkoutFailureMessage}"`,
+        `  checkout_creates_branch_before_fail="${checkoutCreatesBranchBeforeFail ? "1" : "0"}"`,
+        '  if [ -n "$checkout_failure_message" ]; then',
+        '    if [ "$checkout_creates_branch_before_fail" = "1" ]; then',
+        '      if [ -n "$checkout_ref" ]; then',
+        '        git checkout -B "$branch_name" "$checkout_ref" >/dev/null 2>&1',
+        "      else",
+        '        git checkout -B "$branch_name" >/dev/null 2>&1',
+        "      fi",
+        "    fi",
+        '    echo "$checkout_failure_message" >&2',
+        "    exit 1",
+        "  fi",
+        '  if [ -n "$checkout_ref" ]; then',
+        '    if git show-ref --verify --quiet "refs/heads/$branch_name"; then',
+        '      if [ "$(git branch --show-current)" = "$branch_name" ]; then',
+        '        echo "Already on \'$branch_name\'" >&2',
+        "      fi",
+        '      if ! git merge-base --is-ancestor "$branch_name" "$checkout_ref"; then',
+        '        echo "hint: Diverging branches can\'t be fast-forwarded, you need to either:" >&2',
+        '        echo "fatal: Not possible to fast-forward, aborting." >&2',
+        "        exit 1",
+        "      fi",
+        '      git checkout "$branch_name" >/dev/null 2>&1',
+        '      git merge --ff-only "$checkout_ref" >/dev/null 2>&1',
+        "    else",
+        '      git checkout -B "$branch_name" "$checkout_ref" >/dev/null 2>&1',
+        "    fi",
+        "    exit 0",
+        "  fi",
         '  git checkout "$branch_name" >/dev/null 2>&1 || git checkout -B "$branch_name" >/dev/null 2>&1',
         `  printf 'pr %s\\n' "$pr_number" >> README.md`,
         "  git add README.md",
@@ -468,6 +509,114 @@ describe("cli e2e", () => {
     }
   );
 
+  test(
+    "creates a pull request worktree when the PR head diverges from the current base branch",
+    async () => {
+      const repo = await createTestRepo();
+      const headBranch = "feature/pr-123";
+      const checkoutRef = `refs/wt/pr/${headBranch}`;
+
+      await $`git -C ${repo.repoRoot} checkout -b ${headBranch}`.quiet();
+      writeFileSync(join(repo.repoRoot, "README.md"), "base\npr branch\n");
+      await $`git -C ${repo.repoRoot} add README.md`.quiet();
+      await $`git -C ${repo.repoRoot} commit -m pr-source`.quiet();
+
+      const prHeadCommit = (
+        await $`git -C ${repo.repoRoot} rev-parse HEAD`.text()
+      ).trim();
+
+      await $`git -C ${repo.repoRoot} update-ref ${checkoutRef} ${prHeadCommit}`.quiet();
+      await $`git -C ${repo.repoRoot} checkout main`.quiet();
+
+      writeFileSync(join(repo.repoRoot, "README.md"), "base\nmain advance\n");
+      await $`git -C ${repo.repoRoot} add README.md`.quiet();
+      await $`git -C ${repo.repoRoot} commit -m main-advance`.quiet();
+      await $`git -C ${repo.repoRoot} branch -D ${headBranch}`.quiet();
+
+      const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+        env: createFakeGithubEnv({ headBranch, checkoutRef }),
+      });
+
+      assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+      const worktreePath = readCliValue(result.stdout, "WT_PATH");
+      const branchResult = spawnSync(
+        "git",
+        ["-C", worktreePath, "branch", "--show-current"],
+        {
+          encoding: "utf-8",
+        }
+      );
+
+      assertProcessSuccess(
+        branchResult.status,
+        branchResult.stderr,
+        branchResult.stdout
+      );
+
+      expect(branchResult.stdout.trim()).toBe(headBranch);
+      expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
+        "pr branch"
+      );
+      expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).not.toContain(
+        "main advance"
+      );
+    }
+  );
+
+  test(
+    "shows an actionable error when an existing local PR branch diverges without a matching worktree",
+    async () => {
+      const repo = await createTestRepo();
+      const headBranch = "feature/pr-123";
+      const checkoutRef = `refs/wt/pr/${headBranch}`;
+
+      await $`git -C ${repo.repoRoot} checkout -b ${headBranch}`.quiet();
+      writeFileSync(join(repo.repoRoot, "README.md"), "base\npr branch\n");
+      await $`git -C ${repo.repoRoot} add README.md`.quiet();
+      await $`git -C ${repo.repoRoot} commit -m pr-source`.quiet();
+
+      const prHeadCommit = (
+        await $`git -C ${repo.repoRoot} rev-parse HEAD`.text()
+      ).trim();
+
+      await $`git -C ${repo.repoRoot} update-ref ${checkoutRef} ${prHeadCommit}`.quiet();
+      await $`git -C ${repo.repoRoot} checkout main`.quiet();
+
+      writeFileSync(join(repo.repoRoot, "README.md"), "base\nlocal stale branch\n");
+      await $`git -C ${repo.repoRoot} add README.md`.quiet();
+      await $`git -C ${repo.repoRoot} commit -m local-stale-branch`.quiet();
+      await $`git -C ${repo.repoRoot} branch -f ${headBranch} HEAD`.quiet();
+
+      const worktreePath = getWorktreePath(repo, headBranch);
+      const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+        env: createFakeGithubEnv({ headBranch, checkoutRef, headRefOid: prHeadCommit }),
+      });
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        `Local branch ${headBranch} already exists but diverges from PR #123.`
+      );
+      expect(existsSync(worktreePath)).toBeFalse();
+
+      const branchResult = spawnSync(
+        "git",
+        ["-C", repo.repoRoot, "branch", "--list", headBranch],
+        {
+          encoding: "utf-8",
+        }
+      );
+
+      assertProcessSuccess(
+        branchResult.status,
+        branchResult.stderr,
+        branchResult.stdout
+      );
+
+      expect(branchResult.stdout).toContain(headBranch);
+    }
+  );
+
   test("reuses an existing pull request worktree using the PR head branch", async () => {
     if (!isShellAvailable("bash")) {
       return;
@@ -510,6 +659,41 @@ describe("cli e2e", () => {
     expect(reuseResult.stdout).toContain(
       `Using existing PR worktree: ${headBranch}`
     );
+  });
+
+  test("cleans up a temporary PR worktree when checkout fails", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+    const worktreePath = getWorktreePath(repo, headBranch);
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({
+        headBranch,
+        checkoutFailureMessage: "simulated gh checkout failure",
+        checkoutCreatesBranchBeforeFail: true,
+      }),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("simulated gh checkout failure");
+    expect(existsSync(worktreePath)).toBeFalse();
+
+    const worktreeList = await $`git -C ${repo.repoRoot} worktree list --porcelain`.text();
+    const branchResult = spawnSync(
+      "git",
+      ["-C", repo.repoRoot, "branch", "--list", headBranch],
+      {
+        encoding: "utf-8",
+      }
+    );
+
+    assertProcessSuccess(
+      branchResult.status,
+      branchResult.stderr,
+      branchResult.stdout
+    );
+
+    expect(worktreeList).not.toContain(worktreePath);
+    expect(branchResult.stdout.trim()).toBe("");
   });
 
   test("reuses an existing PR head branch worktree even when its id differs", async () => {
