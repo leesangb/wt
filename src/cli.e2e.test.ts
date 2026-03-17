@@ -1266,6 +1266,58 @@ describe("cli e2e", () => {
     expect(postLines[6]).toBe("missing");
   });
 
+  test("keeps .wt artifacts out of git status after async post scripts finish", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "async-clean";
+    const branchName = "feature-async-clean";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.scripts = {
+        pre: [],
+        post: [
+          "sleep 0.1",
+          "printf 'done\\n' > .wt/post-complete.txt",
+        ],
+        postMode: "async",
+      };
+    });
+
+    const result = runCliCapture(
+      ["new", branchName, "--id", worktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const statusFilePath = join(worktreePath, ".wt", "post-task.json");
+
+    await waitFor(() => {
+      if (!existsSync(statusFilePath)) {
+        return false;
+      }
+
+      const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
+        status: string;
+      };
+
+      return status.status === "done";
+    });
+
+    const gitStatus = spawnSync(
+      "git",
+      ["-C", worktreePath, "status", "--short"],
+      {
+        encoding: "utf-8",
+      }
+    );
+
+    assertProcessSuccess(gitStatus.status, gitStatus.stderr, gitStatus.stdout);
+    expect(gitStatus.stdout.trim()).toBe("");
+    expect(existsSync(join(worktreePath, ".wt", "post-task.log"))).toBeTrue();
+    expect(existsSync(join(worktreePath, ".wt", "post-complete.txt"))).toBeTrue();
+  });
+
   test("sends a macOS notification when async post scripts finish", async () => {
     if (process.platform !== "darwin") {
       return;

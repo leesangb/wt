@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  WORKTREE_GITIGNORE_CONTENT,
   readWorktreeMeta,
   writeWorktreeMeta,
 } from "./worktree-meta-store.js";
@@ -52,7 +53,7 @@ describe("worktree meta store", () => {
     });
     expect(
       readFileSync(join(worktreePath, ".wt", ".gitignore"), "utf-8")
-    ).toBe(".gitignore\nmeta.json\n");
+    ).toBe(WORKTREE_GITIGNORE_CONTENT);
   });
 
   test("reads the legacy meta file for backwards compatibility", async () => {
