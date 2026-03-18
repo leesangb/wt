@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.3
+
+### Patch Changes
+
+- d99b9a1: Mark the main worktree in `wt list` and `wt ls` output.
+
 ## 0.2.2
 
 ### Patch Changes
