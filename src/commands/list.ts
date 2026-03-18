@@ -64,9 +64,19 @@ export async function listCommand(options?: {
     console.log(chalk.dim("─".repeat(80)));
 
     for (const worktree of result.worktrees) {
-      const idLabel = worktree.isCurrent
-        ? `${worktree.id} ${chalk.green("(current)")}`
-        : worktree.id;
+      const idMetadata: string[] = [];
+
+      if (worktree.isMain) {
+        idMetadata.push(chalk.blue("[main]"));
+      }
+      if (worktree.isCurrent) {
+        idMetadata.push(chalk.green("(current)"));
+      }
+
+      const idLabel =
+        idMetadata.length > 0
+          ? `${worktree.id} ${idMetadata.join(" ")}`
+          : worktree.id;
       const timestamp = new Date(worktree.createdAt).toLocaleString();
       const baseInfo =
         worktree.baseBranch && worktree.baseCommit
