@@ -796,6 +796,27 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
+  test("marks the main worktree in list output", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "mainmark123";
+    const branchName = "feature-main-marker";
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(["list"], getWorktreePath(repo, worktreeId));
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const lines = result.stdout
+      .split(/\r?\n/)
+      .map(line => line.trimEnd());
+    const mainWorktreeId = basename(repo.repoRoot);
+    const mainIdLine = lines.find(line => line.startsWith(`ID:      ${mainWorktreeId}`));
+    const linkedIdLine = lines.find(line => line.startsWith(`ID:      ${worktreeId}`));
+
+    expect(mainIdLine).toBe(`ID:      ${mainWorktreeId} [main]`);
+    expect(linkedIdLine).toBe(`ID:      ${worktreeId} (current)`);
+  });
+
   test("shows the main worktree in completion by default and hides it when requested", async () => {
     const repo = await createTestRepo();
     const worktreeId = "completion123";
