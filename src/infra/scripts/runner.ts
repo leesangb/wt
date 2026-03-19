@@ -7,7 +7,14 @@ export interface DetachedScriptOptions {
   statusFilePath: string;
   logFilePath: string;
   scripts: string[];
+  startNotification?: DetachedNotification;
   completionNotification?: DetachedCompletionNotification;
+}
+
+export interface DetachedNotification {
+  title: string;
+  message: string;
+  subtitle?: string;
 }
 
 export interface DetachedCompletionNotification {
@@ -42,6 +49,16 @@ function buildMacOsNotificationCommand(
   )}' >/dev/null 2>&1 || true`;
 }
 
+export function buildPostScriptStartNotification(
+  target: string
+): DetachedNotification {
+  return {
+    title: "wt",
+    message: `${target} setup started`,
+    subtitle: "Post scripts running",
+  };
+}
+
 export function buildPostScriptCompletionNotification(
   target: string
 ): DetachedCompletionNotification {
@@ -60,6 +77,13 @@ export function buildDetachedRunnerCommand(
   const statusFile = shellEscapeSingle(options.statusFilePath);
   const logFile = shellEscapeSingle(options.logFilePath);
   const scriptBody = options.scripts.map((script) => `  ${script}`).join("\n");
+  const startNotification = options.startNotification
+    ? buildMacOsNotificationCommand(
+        options.startNotification.message,
+        options.startNotification.title,
+        options.startNotification.subtitle
+      )
+    : undefined;
   const successNotification = options.completionNotification
     ? buildMacOsNotificationCommand(
         options.completionNotification.successMessage,
@@ -86,9 +110,11 @@ export function buildDetachedRunnerCommand(
   ]
     .filter((command): command is string => Boolean(command))
     .join("\n");
+  const runnerPrologue = startNotification ? `${startNotification}\n` : "";
 
   return `(
 set -e
+${runnerPrologue}
 {
 ${scriptBody}
 } >> '${logFile}' 2>&1
@@ -150,6 +176,10 @@ export function executeScriptsDetached(
   mkdirSync(dirname(statusFilePath), { recursive: true });
   mkdirSync(dirname(logFilePath), { recursive: true });
   const target = env?.WT_BRANCH ?? env?.WT_ID ?? "Worktree";
+  const startNotification =
+    process.platform === "darwin"
+      ? buildPostScriptStartNotification(target)
+      : undefined;
   const completionNotification =
     process.platform === "darwin"
       ? buildPostScriptCompletionNotification(target)
@@ -177,6 +207,7 @@ export function executeScriptsDetached(
         scripts,
         statusFilePath,
         logFilePath,
+        startNotification,
         completionNotification,
       }),
     ],

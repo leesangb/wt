@@ -3,6 +3,7 @@ import { SHELL_CD_FILE_ENV } from "./cd.js";
 import {
   buildDetachedRunnerCommand,
   buildPostScriptCompletionNotification,
+  buildPostScriptStartNotification,
   buildScriptEnv,
   escapeAppleScriptString,
   shellEscapeSingle,
@@ -42,6 +43,16 @@ describe("buildPostScriptCompletionNotification", () => {
   });
 });
 
+describe("buildPostScriptStartNotification", () => {
+  test("builds a start message with branch context", () => {
+    expect(buildPostScriptStartNotification("feature/foo")).toEqual({
+      title: "wt",
+      message: "feature/foo setup started",
+      subtitle: "Post scripts running",
+    });
+  });
+});
+
 describe("buildDetachedRunnerCommand", () => {
   test("includes scripts, log path, and status path", () => {
     const cmd = buildDetachedRunnerCommand({
@@ -58,11 +69,14 @@ describe("buildDetachedRunnerCommand", () => {
     expect(cmd).toContain('"status":"failed"');
   });
 
-  test("includes macOS notifications when provided", () => {
+  test("includes start and completion macOS notifications when provided", () => {
     const cmd = buildDetachedRunnerCommand({
       scripts: ["pnpm install"],
       statusFilePath: "/tmp/post-task.json",
       logFilePath: "/tmp/post-task.log",
+      startNotification: buildPostScriptStartNotification(
+        `feature/o'hare "beta"`
+      ),
       completionNotification: buildPostScriptCompletionNotification(
         `feature/o'hare "beta"`
       ),
@@ -70,11 +84,14 @@ describe("buildDetachedRunnerCommand", () => {
 
     expect(cmd).toContain("osascript -e");
     expect(cmd).toContain("feature/o");
+    expect(cmd).toContain("setup started");
     expect(cmd).toContain("setup finished");
     expect(cmd).toContain("setup failed");
+    expect(cmd).toContain("Post scripts running");
     expect(cmd).toContain('Post scripts completed');
     expect(cmd).toContain('Post scripts failed');
     expect(cmd).toContain(">/dev/null 2>&1 || true");
+    expect(cmd.indexOf("setup started")).toBeLessThan(cmd.indexOf("pnpm install"));
   });
 });
 

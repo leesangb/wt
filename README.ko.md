@@ -143,7 +143,7 @@ wt new feature-branch --no-cd
 5. 새 worktree에서 post 스크립트 실행 (설정된 경우)
 6. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
 
-post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `<worktree>/.wt/` 아래에 상태/로그 파일(`post-task.json`, `post-task.log`)이 생성됩니다. macOS에서는 async 작업이 끝나면 알림 센터 알림도 표시되며, 알림 전송 실패는 무시됩니다.
+post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `<worktree>/.wt/` 아래에 상태/로그 파일(`post-task.json`, `post-task.log`)이 생성됩니다. macOS에서는 async 작업이 시작될 때와 끝날 때 알림 센터 알림도 표시되며, 알림 전송 실패는 무시됩니다.
 
 기본적으로 `WT_ID`는 브랜치 이름을 사용합니다. 브랜치에 `/`가 있으면 실제 worktree 디렉토리 이름에서는 `-`로 치환하지만, 저장되는 ID 값은 그대로 유지됩니다. 예를 들어 `feature/issue-12`는 `~/.wt/<저장소명-feature-issue-12>` 경로로 생성됩니다. 이때 같은 sanitize 결과를 가진 다른 worktree ID가 이미 있으면, 경로 충돌을 피하기 위해 짧은 suffix를 자동으로 덧붙입니다.
 
