@@ -1339,7 +1339,7 @@ describe("cli e2e", () => {
     expect(existsSync(join(worktreePath, ".wt", "post-complete.txt"))).toBeTrue();
   });
 
-  test("sends a macOS notification when async post scripts finish", async () => {
+  test("sends macOS notifications when async post scripts start and finish", async () => {
     if (process.platform !== "darwin") {
       return;
     }
@@ -1403,9 +1403,12 @@ describe("cli e2e", () => {
     const notificationLog = readFileSync(notificationLogPath, "utf-8");
 
     expect(notificationLog).toContain("display notification");
+    expect(notificationLog).toContain(`${branchName} setup started`);
+    expect(notificationLog).toContain('subtitle "Post scripts running"');
     expect(notificationLog).toContain(`${branchName} setup finished`);
     expect(notificationLog).toContain('with title "wt"');
     expect(notificationLog).toContain('subtitle "Post scripts completed"');
+    expect(notificationLog.match(/display notification/g)?.length).toBe(2);
   });
 
   test("resolves relative worktreeDir from repo root even when invoked in a subdirectory", async () => {

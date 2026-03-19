@@ -144,7 +144,7 @@ This will:
 5. Run the post scripts in the new worktree (if configured)
 6. Automatically change to the new worktree directory (with shell wrapper)
 
-When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`). On macOS, `wt` also sends a Notification Center notification when the async task finishes. Notification delivery failures are ignored.
+When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`). On macOS, `wt` also sends Notification Center notifications when the async task starts and when it finishes. Notification delivery failures are ignored.
 
 By default, `WT_ID` uses the branch name. When the branch contains `/`, the worktree directory name replaces it with `-`, while the stored ID remains unchanged. For example, `feature/issue-12` becomes `~/.wt/<reponame-feature-issue-12>`. If that sanitized path is already taken by another worktree ID, `wt` appends a short suffix to keep the directory unique.
 
