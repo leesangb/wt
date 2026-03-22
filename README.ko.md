@@ -167,10 +167,10 @@ wt pr 123 --no-cd
 1. GitHub CLI에서 PR의 base branch와 head branch를 조회
 2. 기존 worktree 중 그 PR head branch를 이미 체크아웃한 곳이 있는지 확인
 3. 있으면 그 worktree로 바로 이동
-4. 없으면 새 worktree 경로를 만들고 `gh pr checkout`으로 PR 체크아웃
+4. 없으면 `pr-<번호>` 기반 ID/경로로 새 worktree를 만들고 `gh pr checkout`으로 PR 체크아웃
 
 `wt pr`는 `pr-123` 같은 synthetic 로컬 브랜치를 새로 만들지 않고, PR의 실제 head branch 이름을 그대로 사용합니다. 그래서 PR 정보를 먼저 알아야 하므로 GitHub CLI(`gh`)가 항상 필요합니다.
-만약 그 head branch 이름이 이미 다른 worktree의 ID로 사용 중이면, `wt pr`는 새 ID에 `-1`, `-2` 같은 suffix를 붙여 고유하게 만들고 그 사실을 CLI 출력으로 알려줍니다.
+대신 worktree ID와 디렉터리 이름은 PR 번호(`pr-123`)를 기준으로 만들고, 그 ID가 이미 사용 중이면 `-1`, `-2` 같은 suffix를 붙여 고유하게 만들며 그 사실을 CLI 출력으로 알려줍니다.
 
 ### wt 업데이트
 

@@ -168,10 +168,10 @@ This command:
 1. Loads the PR's base branch and head branch from GitHub CLI
 2. Checks whether any existing worktree is already on that PR head branch
 3. Navigates to that worktree immediately when it exists
-4. Otherwise creates a fresh worktree path and checks out the PR with `gh pr checkout`
+4. Otherwise creates a fresh worktree with ID/path based on `pr-<number>` and checks out the PR with `gh pr checkout`
 
-`wt pr` uses the PR's actual head branch name instead of creating a synthetic local branch like `pr-123`, so it always requires GitHub CLI (`gh`) to resolve the PR details first.
-If that head branch name is already being used as a different worktree ID, `wt pr` appends `-1`, `-2`, and so on to keep the new ID unique and prints the adjustment in the CLI output.
+`wt pr` still checks out the PR's actual head branch instead of creating a synthetic local branch like `pr-123`, so it always requires GitHub CLI (`gh`) to resolve the PR details first.
+The worktree ID and directory name are based on the PR number (`pr-123`). If that ID is already in use, `wt pr` appends `-1`, `-2`, and so on to keep the new ID unique and prints the adjustment in the CLI output.
 
 ### Update wt
 
