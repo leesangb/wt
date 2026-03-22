@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { runCommand } from "../cli/command-runtime.js";
+import { runWithSpinner } from "../cli/spinner.js";
 import { updateInstallation } from "../app/use-cases/update-installation.js";
 
 interface UpdateOptions {
@@ -8,17 +9,24 @@ interface UpdateOptions {
   removeQuarantine?: boolean;
 }
 
+function buildUpdateSpinnerText(options: UpdateOptions): string {
+  const targetVersion = options.version?.replace(/^v/, "");
+
+  if (targetVersion) {
+    return `Updating wt to version ${targetVersion}`;
+  }
+
+  return "Checking for wt updates";
+}
+
 export async function updateCommand(options: UpdateOptions): Promise<void> {
   await runCommand(async () => {
     const currentVersion = (await import("../../package.json")).default
       .version as string;
-    const targetVersion = options.version?.replace(/^v/, "");
-
-    if (!targetVersion) {
-      console.log(chalk.blue("Checking latest release..."));
-    }
-
-    const result = await updateInstallation(currentVersion, options);
+    const result = await runWithSpinner(
+      buildUpdateSpinnerText(options),
+      () => updateInstallation(currentVersion, options)
+    );
 
     if (!result.updated) {
       if (result.targetVersion && result.targetVersion !== currentVersion) {
@@ -50,7 +58,7 @@ export async function updateCommand(options: UpdateOptions): Promise<void> {
       result.shellScriptsUpdated.length > 0 ||
       result.shellScriptWarnings.length > 0
     ) {
-      console.log(chalk.blue("Updating shell integration scripts..."));
+      console.log(chalk.blue("Shell integration update results:"));
       for (const scriptName of result.shellScriptsUpdated) {
         console.log(chalk.green(`✓ Updated ${scriptName}`));
       }

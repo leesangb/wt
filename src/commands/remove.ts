@@ -7,6 +7,7 @@ import {
   removeWorktree,
 } from "../app/use-cases/remove-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
+import { runWithSpinner } from "../cli/spinner.js";
 
 interface RemoveCommandOptions {
   keepBranch?: boolean;
@@ -126,19 +127,17 @@ function logRemovalResult(
   result: Awaited<ReturnType<typeof removeWorktree>>
 ): void {
   console.log(
-    chalk.blue(
-      `Removing worktree: ${result.worktree.branch} (${result.worktree.id})...`
+    chalk.green(
+      `✓ Worktree removed: ${result.worktree.branch} (${result.worktree.id})`
     )
   );
-  console.log(chalk.green(`✓ Worktree removed`));
 
   if (result.branchDeleted) {
-    console.log(chalk.blue(`Deleting branch: ${result.worktree.branch}...`));
-    console.log(chalk.green(`✓ Branch deleted`));
+    console.log(chalk.green(`✓ Branch deleted: ${result.worktree.branch}`));
     return;
   }
 
-  console.log(chalk.yellow(`Branch ${result.worktree.branch} kept`));
+  console.log(chalk.yellow(`Branch kept: ${result.worktree.branch}`));
 }
 
 async function removeSingleWorktree(
@@ -172,7 +171,10 @@ async function removeSingleWorktree(
     }
   }
 
-  const result = await removeWorktree(preview.worktree.id, options);
+  const result = await runWithSpinner(
+    `Removing worktree ${preview.worktree.branch} (${preview.worktree.id})`,
+    () => removeWorktree(preview.worktree.id, options)
+  );
   logRemovalResult(result);
   return "removed";
 }
