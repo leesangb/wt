@@ -504,6 +504,7 @@ describe("cli e2e", () => {
       }
 
       const worktreePath = readCliValue(result.stdout, "WT_PATH");
+      const worktreeId = readCliValue(result.stdout, "WT_ID");
       const branchResult = spawnSync(
         "git",
         ["-C", worktreePath, "branch", "--show-current"],
@@ -520,6 +521,8 @@ describe("cli e2e", () => {
 
       expect(prStatus).toBe(0);
       expect(realpathSync(prPwd)).toBe(realpathSync(worktreePath));
+      expect(worktreeId).toBe("pr-123");
+      expect(worktreePath).toContain(`${repo.repoName}-pr-123`);
       expect(branchResult.stdout.trim()).toBe(headBranch);
       expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
         "pr 123"
@@ -606,7 +609,7 @@ describe("cli e2e", () => {
       await $`git -C ${repo.repoRoot} commit -m local-stale-branch`.quiet();
       await $`git -C ${repo.repoRoot} branch -f ${headBranch} HEAD`.quiet();
 
-      const worktreePath = getWorktreePath(repo, headBranch);
+      const worktreePath = getWorktreePath(repo, "pr-123");
       const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
         env: createFakeGithubEnv({ headBranch, checkoutRef, headRefOid: prHeadCommit }),
       });
@@ -682,7 +685,7 @@ describe("cli e2e", () => {
   test("cleans up a temporary PR worktree when checkout fails", async () => {
     const repo = await createTestRepo();
     const headBranch = "feature/pr-123";
-    const worktreePath = getWorktreePath(repo, headBranch);
+    const worktreePath = getWorktreePath(repo, "pr-123");
     const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
       env: createFakeGithubEnv({
         headBranch,
@@ -1151,7 +1154,7 @@ describe("cli e2e", () => {
     const repo = await createTestRepo();
     const headBranch = "feature/pr-123";
     const occupiedResult = runCliCapture(
-      ["new", "feature-pr-collision", "--id", headBranch, "--no-cd"],
+      ["new", "feature-pr-collision", "--id", "pr-123", "--no-cd"],
       repo.repoRoot
     );
 
@@ -1172,10 +1175,10 @@ describe("cli e2e", () => {
     const prId = readCliValue(prResult.stdout, "WT_ID");
 
     expect(prPath).not.toBe(occupiedPath);
-    expect(prId).toBe(`${headBranch}-1`);
-    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-1`);
+    expect(prId).toBe("pr-123-1");
+    expect(prPath).toContain(`${repo.repoName}-pr-123-1`);
     expect(prResult.stdout).toContain(
-      `Adjusted WT_ID from ${headBranch} to ${headBranch}-1 because that ID is already in use.`
+      "Adjusted WT_ID from pr-123 to pr-123-1 because that ID is already in use."
     );
     expect(existsSync(prPath)).toBeTrue();
   });
@@ -1184,9 +1187,9 @@ describe("cli e2e", () => {
     const repo = await createTestRepo();
     const headBranch = "feature/pr-123";
 
-    runCli(["new", "feature-pr-collision-a", "--id", headBranch, "--no-cd"], repo.repoRoot);
+    runCli(["new", "feature-pr-collision-a", "--id", "pr-123", "--no-cd"], repo.repoRoot);
     runCli(
-      ["new", "feature-pr-collision-b", "--id", `${headBranch}-1`, "--no-cd"],
+      ["new", "feature-pr-collision-b", "--id", "pr-123-1", "--no-cd"],
       repo.repoRoot
     );
 
@@ -1199,8 +1202,8 @@ describe("cli e2e", () => {
     const prPath = readCliValue(prResult.stdout, "WT_PATH");
     const prId = readCliValue(prResult.stdout, "WT_ID");
 
-    expect(prId).toBe(`${headBranch}-2`);
-    expect(prPath).toContain(`${repo.repoName}-feature-pr-123-2`);
+    expect(prId).toBe("pr-123-2");
+    expect(prPath).toContain(`${repo.repoName}-pr-123-2`);
     expect(existsSync(prPath)).toBeTrue();
   });
 
@@ -1269,6 +1272,59 @@ describe("cli e2e", () => {
 
     expect(newStatus).toBe(0);
     expect(realpathSync(newPwd)).toBe(resolvedWorktreePath);
+
+    expect(realpathSync(preLines[0])).toBe(resolvedRepoRoot);
+    expect(realpathSync(preLines[1])).toBe(resolvedWorktreePath);
+    expect(preLines[2]).toBe(worktreeId);
+    expect(preLines[3]).toBe(expectedFullId);
+    expect(preLines[4]).toBe(branchName);
+    expect(realpathSync(preLines[5])).toBe(resolvedRepoRoot);
+    expect(preLines[6]).toBe("missing");
+
+    expect(realpathSync(postLines[0])).toBe(resolvedWorktreePath);
+    expect(realpathSync(postLines[1])).toBe(resolvedWorktreePath);
+    expect(postLines[2]).toBe(worktreeId);
+    expect(postLines[3]).toBe(expectedFullId);
+    expect(postLines[4]).toBe(branchName);
+    expect(realpathSync(postLines[5])).toBe(resolvedRepoRoot);
+    expect(postLines[6]).toBe("missing");
+  });
+
+  test("runs PR pre and post scripts with a pr-number WT_ID and head-branch WT_BRANCH", async () => {
+    const repo = await createTestRepo();
+    const prNumber = "123";
+    const worktreeId = `pr-${prNumber}`;
+    const branchName = "feature/pr-script-hooks";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const preEnvPath = join(repo.repoRoot, ".wt", "pre-env.txt");
+    const postEnvPath = join(worktreePath, ".wt", "post-env.txt");
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.scripts = {
+        pre: [
+          `printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' "$PWD" "$WT_PATH" "$WT_ID" "$WT_FULL_ID" "$WT_BRANCH" "$WT_REPO_ROOT" "\${WT_SHELL_CD_FILE:-missing}" > .wt/pre-env.txt`,
+        ],
+        post: [
+          `printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' "$PWD" "$WT_PATH" "$WT_ID" "$WT_FULL_ID" "$WT_BRANCH" "$WT_REPO_ROOT" "\${WT_SHELL_CD_FILE:-missing}" > .wt/post-env.txt`,
+        ],
+        postMode: "sync",
+      };
+    });
+
+    const result = runCliCapture(["pr", prNumber, "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch: branchName }),
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const preLines = readLines(preEnvPath);
+    const postLines = readLines(postEnvPath);
+    const expectedFullId = `${repo.repoName}-${worktreeId}`;
+    const resolvedRepoRoot = realpathSync(repo.repoRoot);
+    const resolvedWorktreePath = realpathSync(worktreePath);
+
+    expect(readCliValue(result.stdout, "WT_ID")).toBe(worktreeId);
+    expect(readCliValue(result.stdout, "WT_PATH")).toBe(worktreePath);
 
     expect(realpathSync(preLines[0])).toBe(resolvedRepoRoot);
     expect(realpathSync(preLines[1])).toBe(resolvedWorktreePath);

@@ -53,6 +53,7 @@ export async function createPrWorktree(
   cwd: string = process.cwd()
 ): Promise<CreateWorktreeResult> {
   const prNumber = normalizePullRequestNumber(pullRequestNumber);
+  const preferredId = `pr-${prNumber}`;
   const context = await requireRepositoryContext(cwd);
   await ensureGithubCliReady(context.repoRoot);
   const pullRequestInfo = await getPullRequestInfo(context.repoRoot, prNumber);
@@ -76,7 +77,7 @@ export async function createPrWorktree(
 
   const settings = await loadSettings(context.repoRoot);
   const { id, idAdjustedFrom } = resolveUniqueWorktreeId(
-    branchName,
+    preferredId,
     worktrees.map((worktree) => worktree.id)
   );
   const fullId = `${context.repoName}-${id}`;
