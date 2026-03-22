@@ -27,6 +27,24 @@ export interface RemoveWorktreeResult {
   relocatedToPath?: string;
 }
 
+export class RemoveWorktreeError extends AppError {
+  readonly relocatedToPath?: string;
+
+  constructor(message: string, relocatedToPath?: string) {
+    super(message);
+    this.name = "RemoveWorktreeError";
+    this.relocatedToPath = relocatedToPath;
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
 async function resolveRemovalTarget(
   target: string,
   cwd: string
@@ -125,7 +143,14 @@ export async function removeWorktree(
     };
   }
 
-  await deleteBranch(removalRoot.gitRoot, worktree.branch);
+  try {
+    await deleteBranch(removalRoot.gitRoot, worktree.branch);
+  } catch (error) {
+    throw new RemoveWorktreeError(
+      getErrorMessage(error),
+      removalRoot.relocatedToPath
+    );
+  }
 
   return {
     worktree,

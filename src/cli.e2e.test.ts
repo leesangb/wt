@@ -1119,6 +1119,43 @@ describe("cli e2e", () => {
     }
   );
 
+  test(
+    "returns the shell to the main worktree when branch deletion fails after removing the current worktree",
+    async () => {
+      if (!isShellAvailable("bash")) {
+        return;
+      }
+
+      const repo = await createTestRepo();
+      const worktreeId = "rmbranchfail123";
+      const branchName = "feature-rm-branch-fail";
+      const worktreePath = getWorktreePath(repo, worktreeId);
+      const nestedDir = join(worktreePath, "nested");
+      const lockedWorktreePath = join(repo.worktreeRoot, `${repo.repoName}-branch-lock`);
+
+      runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+      await $`git -C ${repo.repoRoot} worktree add --force ${lockedWorktreePath} ${branchName}`.quiet();
+      mkdirSync(nestedDir, { recursive: true });
+
+      const result = runWrappedBashSession(repo.repoRoot, [
+        `builtin cd "${nestedDir}"`,
+        `wt rm ${worktreeId} >/dev/null 2>/dev/null`,
+        "rm_status=$?",
+        'rm_pwd="$PWD"',
+        'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
+      ]);
+
+      assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+      expect(Number(readOutputValue(result.stdout, "RM_STATUS"))).toBe(1);
+      expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
+        realpathSync(repo.repoRoot)
+      );
+      expect(existsSync(worktreePath)).toBeFalse();
+      expect(existsSync(lockedWorktreePath)).toBeTrue();
+    }
+  );
+
   test("removes multiple worktrees in one command", async () => {
     const repo = await createTestRepo();
     const firstWorktreeId = "multi123";
