@@ -1,5 +1,4 @@
 import { statSync } from "fs";
-import { relative } from "path";
 import type { RepositoryContext } from "./repository-context.js";
 import {
   buildWorktreeIdentifiers,
@@ -8,6 +7,7 @@ import {
   type WorktreeRemovalInfo,
   type WorktreeState,
 } from "../domain/worktree.js";
+import { isPathInside } from "../domain/path.js";
 import { listGitWorktrees } from "../infra/git/worktree-repository.js";
 import {
   getDefaultRemoteBranch,
@@ -15,15 +15,6 @@ import {
   getWorktreeStatusSummary,
 } from "../infra/git/status.js";
 import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
-
-function isPathInside(parentPath: string, childPath: string): boolean {
-  const relPath = relative(parentPath, childPath);
-
-  return (
-    relPath === "" ||
-    (!relPath.startsWith("..") && relPath !== ".." && !relPath.startsWith("../"))
-  );
-}
 
 export async function loadWorktreeInfos(
   context: RepositoryContext

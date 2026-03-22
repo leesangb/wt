@@ -2,7 +2,7 @@
 # Add this to your ~/.zshrc
 
 wt() {
-  if [ "$1" = "new" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ] || [ "$1" = "rm" ] || [ "$1" = "remove" ]; then
     local cd_file target_dir
     cd_file=$(mktemp)
     WT_SHELL_CD_FILE="$cd_file" /path/to/wt "$@"

@@ -1051,6 +1051,40 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
+  test(
+    "removes the current worktree from a nested directory and returns the shell to the main worktree",
+    async () => {
+      if (!isShellAvailable("bash")) {
+        return;
+      }
+
+      const repo = await createTestRepo();
+      const worktreeId = "rmcwd123";
+      const branchName = "feature-rm-current";
+      const worktreePath = getWorktreePath(repo, worktreeId);
+      const nestedDir = join(worktreePath, "nested");
+
+      runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+      mkdirSync(nestedDir, { recursive: true });
+
+      const result = runWrappedBashSession(repo.repoRoot, [
+        `builtin cd "${nestedDir}"`,
+        `wt rm ${worktreeId} --keep-branch`,
+        "rm_status=$?",
+        'rm_pwd="$PWD"',
+        'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
+      ]);
+
+      assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+      expect(Number(readOutputValue(result.stdout, "RM_STATUS"))).toBe(0);
+      expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
+        realpathSync(repo.repoRoot)
+      );
+      expect(existsSync(worktreePath)).toBeFalse();
+    }
+  );
+
   test("removes multiple worktrees in one command", async () => {
     const repo = await createTestRepo();
     const firstWorktreeId = "multi123";

@@ -1,4 +1,5 @@
 import { AppError } from "../errors.js";
+import { isPathInside } from "../../domain/path.js";
 import { resolveWorktreeTarget } from "../../domain/worktree-target.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
@@ -23,6 +24,7 @@ export interface RemoveWorktreePreview {
 export interface RemoveWorktreeResult {
   worktree: WorktreeInfo;
   branchDeleted: boolean;
+  relocatedToPath?: string;
 }
 
 async function resolveRemovalTarget(
@@ -48,6 +50,36 @@ async function resolveRemovalTarget(
   return {
     context,
     worktree: result.worktree,
+  };
+}
+
+async function resolveSafeRemovalRoot(
+  context: Awaited<ReturnType<typeof requireRepositoryContext>>,
+  worktree: WorktreeInfo
+): Promise<{
+  gitRoot: string;
+  relocatedToPath?: string;
+}> {
+  if (!isPathInside(worktree.path, context.cwd)) {
+    return {
+      gitRoot: context.repoRoot,
+    };
+  }
+
+  const worktrees = await loadWorktreeInfos(context);
+  const safeWorktree =
+    worktrees.find((candidate) => candidate.isMain && candidate.path !== worktree.path) ??
+    worktrees.find((candidate) => candidate.path !== worktree.path);
+
+  if (!safeWorktree) {
+    throw new AppError("Could not find another worktree to remove this worktree safely");
+  }
+
+  process.chdir(safeWorktree.path);
+
+  return {
+    gitRoot: safeWorktree.path,
+    relocatedToPath: safeWorktree.path,
   };
 }
 
@@ -81,20 +113,23 @@ export async function removeWorktree(
   cwd: string = process.cwd()
 ): Promise<RemoveWorktreeResult> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
+  const removalRoot = await resolveSafeRemovalRoot(context, worktree);
 
-  await removeGitWorktree(context.repoRoot, worktree.path);
+  await removeGitWorktree(removalRoot.gitRoot, worktree.path);
 
   if (options.keepBranch) {
     return {
       worktree,
       branchDeleted: false,
+      relocatedToPath: removalRoot.relocatedToPath,
     };
   }
 
-  await deleteBranch(context.repoRoot, worktree.branch);
+  await deleteBranch(removalRoot.gitRoot, worktree.branch);
 
   return {
     worktree,
     branchDeleted: true,
+    relocatedToPath: removalRoot.relocatedToPath,
   };
 }

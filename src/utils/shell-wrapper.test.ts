@@ -27,7 +27,7 @@ interface WrapperRunResult {
 
 interface RunWrapperOptions {
   overrideCd?: boolean;
-  subcommand?: "cd" | "new" | "pr";
+  subcommand?: "cd" | "new" | "pr" | "rm" | "remove";
 }
 
 interface CompletionRunResult {
@@ -284,6 +284,40 @@ describe("shell wrappers", () => {
         mkdirSync(targetDir, { recursive: true });
 
         const result = runWrapper(shellCase, targetDir, { subcommand: "pr" });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on rm success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "repo-root");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "rm" });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on remove success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "repo-root");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "remove" });
 
         assertShellProcess(result);
         expect(result.status).toBe(0);

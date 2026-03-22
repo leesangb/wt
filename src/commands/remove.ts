@@ -8,6 +8,7 @@ import {
 } from "../app/use-cases/remove-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
 import { runWithSpinner } from "../cli/spinner.js";
+import { emitShellCd } from "../infra/shell/cd.js";
 
 interface RemoveCommandOptions {
   keepBranch?: boolean;
@@ -134,10 +135,13 @@ function logRemovalResult(
 
   if (result.branchDeleted) {
     console.log(chalk.green(`✓ Branch deleted: ${result.worktree.branch}`));
-    return;
+  } else {
+    console.log(chalk.yellow(`Branch kept: ${result.worktree.branch}`));
   }
 
-  console.log(chalk.yellow(`Branch kept: ${result.worktree.branch}`));
+  if (result.relocatedToPath) {
+    emitShellCd(result.relocatedToPath);
+  }
 }
 
 async function removeSingleWorktree(
