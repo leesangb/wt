@@ -140,6 +140,33 @@ export async function listGitWorktrees(
     .filter((entry): entry is GitWorktreeRef => Boolean(entry));
 }
 
+export async function listGitWorktreePaths(
+  repoRoot: string
+): Promise<Array<{ path: string; isMain: boolean }>> {
+  const result = await $`git -C ${repoRoot} worktree list --porcelain`.text();
+
+  if (!result.trim()) {
+    return [];
+  }
+
+  const entries = result.trim().split("\n\n");
+
+  return entries
+    .map((entry, index) => {
+      const pathLine = entry.split("\n").find((line) => line.startsWith("worktree "));
+
+      if (!pathLine) {
+        return undefined;
+      }
+
+      return {
+        path: pathLine.substring(9),
+        isMain: index === 0,
+      };
+    })
+    .filter((entry): entry is { path: string; isMain: boolean } => Boolean(entry));
+}
+
 export async function removeGitWorktree(
   repoRoot: string,
   worktreePath: string

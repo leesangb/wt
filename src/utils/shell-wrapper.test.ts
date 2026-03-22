@@ -27,7 +27,8 @@ interface WrapperRunResult {
 
 interface RunWrapperOptions {
   overrideCd?: boolean;
-  subcommand?: "cd" | "new" | "pr";
+  subcommand?: "cd" | "new" | "pr" | "rm" | "remove";
+  exitCode?: number;
 }
 
 interface CompletionRunResult {
@@ -120,7 +121,7 @@ function runWrapper(
         ...process.env,
         WRAPPER_PATH: wrapperPath,
         MOCK_TARGET_DIR: targetDir,
-        MOCK_EXIT_CODE: "0",
+        MOCK_EXIT_CODE: String(options.exitCode ?? 0),
       },
     });
 
@@ -287,6 +288,60 @@ describe("shell wrappers", () => {
 
         assertShellProcess(result);
         expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on rm success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "repo-root");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "rm" });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on remove success`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "repo-root");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, { subcommand: "remove" });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(0);
+        expect(result.pwd).toBe(targetDir);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test(`${shellCase.scriptName} changes directory on rm nonzero exit when relocation is present`, () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-target-"));
+
+      try {
+        const targetDir = join(tempDir, "repo-root");
+        mkdirSync(targetDir, { recursive: true });
+
+        const result = runWrapper(shellCase, targetDir, {
+          subcommand: "rm",
+          exitCode: 1,
+        });
+
+        assertShellProcess(result);
+        expect(result.status).toBe(1);
         expect(result.pwd).toBe(targetDir);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });

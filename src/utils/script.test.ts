@@ -92,6 +92,8 @@ describe("buildDetachedRunnerCommand", () => {
     expect(cmd).toContain('Post scripts failed');
     expect(cmd).toContain(">/dev/null 2>&1 || true");
     expect(cmd.indexOf("setup started")).toBeLessThan(cmd.indexOf("pnpm install"));
+    expect(cmd.indexOf('"status":"done"')).toBeLessThan(cmd.indexOf("setup finished"));
+    expect(cmd.indexOf('"status":"failed"')).toBeLessThan(cmd.indexOf("setup failed"));
   });
 });
 

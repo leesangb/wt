@@ -2,16 +2,16 @@
 # Add this to your ~/.config/fish/config.fish
 
 function wt
-    if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"; or test "$argv[1]" = "pr"
+    if test "$argv[1]" = "new"; or test "$argv[1]" = "cd"; or test "$argv[1]" = "pr"; or test "$argv[1]" = "rm"; or test "$argv[1]" = "remove"
         set -l cd_file (mktemp)
         env WT_SHELL_CD_FILE="$cd_file" /path/to/wt $argv
         set -l exit_code $status
         
-        if test $exit_code -eq 0; and test -s "$cd_file"
+        if test -s "$cd_file"
             set -l target_dir (string trim (cat "$cd_file"))
             builtin cd -- $target_dir
             set -l cd_status $status
-            if test $cd_status -ne 0
+            if test $cd_status -ne 0; and test $exit_code -eq 0
                 set exit_code $cd_status
             end
         end
