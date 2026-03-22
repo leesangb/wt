@@ -5,6 +5,7 @@ import { requireRepositoryContext } from "../repository-context.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
 import {
   deleteBranch,
+  listGitWorktreePaths,
   removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
 import { getWorktreeRemovalStatusSummary } from "../../infra/git/status.js";
@@ -84,7 +85,7 @@ async function resolveSafeRemovalRoot(
     };
   }
 
-  const worktrees = await loadWorktreeInfos(context);
+  const worktrees = await listGitWorktreePaths(context.repoRoot);
   const safeWorktree =
     worktrees.find((candidate) => candidate.isMain && candidate.path !== worktree.path) ??
     worktrees.find((candidate) => candidate.path !== worktree.path);
