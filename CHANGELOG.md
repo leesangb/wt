@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.5
+
+### Patch Changes
+
+- 942222f: loading spinner, error handling when rm
+
 ## 0.2.4
 
 ### Patch Changes
