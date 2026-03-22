@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.4
+
+### Patch Changes
+
+- a60d82d: noti before start, wt pr id
+
 ## 0.2.3
 
 ### Patch Changes
