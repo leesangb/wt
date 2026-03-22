@@ -1557,8 +1557,13 @@ describe("cli e2e", () => {
       const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
         status: string;
       };
+      const notificationLog = readFileSync(notificationLogPath, "utf-8");
 
-      return status.status === "done";
+      return (
+        status.status === "done" &&
+        notificationLog.includes(`${branchName} setup finished`) &&
+        (notificationLog.match(/display notification/g)?.length ?? 0) === 2
+      );
     });
 
     const notificationLog = readFileSync(notificationLogPath, "utf-8");

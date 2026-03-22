@@ -99,14 +99,14 @@ export function buildDetachedRunnerCommand(
       )
     : undefined;
   const successCommands = [
-    successNotification,
     `printf '{"status":"done","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    successNotification,
   ]
     .filter((command): command is string => Boolean(command))
     .join("\n");
   const failureCommands = [
-    failureNotification,
     `printf '{"status":"failed","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    failureNotification,
   ]
     .filter((command): command is string => Boolean(command))
     .join("\n");
