@@ -91,6 +91,7 @@ shell wrapper를 설정하지 않은 경우 `--no-cd` 플래그를 사용할 수
 
 ```bash
 wt new feature-branch --no-cd
+wt checkout feature-branch --no-cd
 wt pr 123 --no-cd
 # 그 다음 수동으로: cd /출력에/표시된/경로
 ```
@@ -152,6 +153,27 @@ post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `
 - `--id <id>` - 기본 worktree ID 덮어쓰기 (기본값: 브랜치 이름)
 - `--no-push` - 새 브랜치를 원격에 푸시하지 않음
 - `--no-cd` - cd 명령 출력 안 함 (shell wrapper 없이 직접 바이너리 사용 시)
+
+### 로컬 브랜치 worktree 생성 또는 이동
+
+```bash
+# 기존 로컬 브랜치용 새 worktree를 만들거나, 이미 열려 있는 worktree로 이동
+wt checkout feature-branch
+
+# alias
+wt switch feature-branch
+
+# 자동 cd 없이 직접 바이너리 사용
+wt checkout feature-branch --no-cd
+```
+
+이 명령은 다음을 수행합니다:
+1. 기존 worktree 중 해당 로컬 브랜치를 이미 체크아웃한 곳이 있는지 확인
+2. 있으면 그 worktree로 바로 이동
+3. 없으면 기존 로컬 브랜치를 기준으로 새 worktree를 생성
+
+`wt checkout`은 브랜치가 로컬에 이미 존재해야 합니다. 새 브랜치를 먼저 만들고 싶다면 `wt new <branch>`를 사용하면 됩니다.
+worktree ID 기본값은 브랜치 이름이며, 같은 ID가 이미 다른 worktree에서 사용 중이면 `wt checkout`이 `-1`, `-2` 같은 suffix를 붙여 고유하게 만들고 그 사실을 CLI 출력으로 알려줍니다.
 
 ### Pull request worktree 생성 또는 이동
 

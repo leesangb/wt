@@ -8,6 +8,7 @@ import { removeCommand } from "./commands/remove.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
 import { prCommand } from "./commands/pr.js";
+import { checkoutCommand } from "./commands/checkout.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -57,6 +58,13 @@ program
   .description("Create or navigate to a pull request worktree")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .action(prCommand);
+
+program
+  .command("checkout <branch-name>")
+  .alias("switch")
+  .description("Create or navigate to a local branch worktree")
+  .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .action(checkoutCommand);
 
 program
   .command("update")

@@ -2,7 +2,7 @@
 # Add this to your ~/.bashrc
 
 wt() {
-  if [ "$1" = "new" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ] || [ "$1" = "rm" ] || [ "$1" = "remove" ]; then
+  if [ "$1" = "new" ] || [ "$1" = "checkout" ] || [ "$1" = "switch" ] || [ "$1" = "cd" ] || [ "$1" = "pr" ] || [ "$1" = "rm" ] || [ "$1" = "remove" ]; then
     local cd_file target_dir cd_status
     cd_file=$(mktemp)
     WT_SHELL_CD_FILE="$cd_file" /path/to/wt "$@"

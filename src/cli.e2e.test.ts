@@ -473,6 +473,119 @@ describe("cli e2e", () => {
   });
 
   test(
+    "creates a local branch worktree and navigates via the bash wrapper",
+    async () => {
+      if (!isShellAvailable("bash")) {
+        return;
+      }
+
+      const repo = await createTestRepo();
+      const branchName = "feature/local-checkout";
+
+      await $`git -C ${repo.repoRoot} branch ${branchName}`.quiet();
+
+      const result = runWrappedBashSession(repo.repoRoot, [
+        `wt checkout ${branchName}`,
+        "checkout_status=$?",
+        'checkout_pwd="$PWD"',
+        'printf \'CHECKOUT_STATUS=%s\\nCHECKOUT_PWD=%s\\n\' "$checkout_status" "$checkout_pwd"',
+      ]);
+
+      assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+      const checkoutStatus = Number(
+        readOutputValue(result.stdout, "CHECKOUT_STATUS")
+      );
+      const checkoutPwd = readOutputValue(result.stdout, "CHECKOUT_PWD");
+      const worktreePath = readCliValue(result.stdout, "WT_PATH");
+      const worktreeId = readCliValue(result.stdout, "WT_ID");
+      const branchResult = spawnSync(
+        "git",
+        ["-C", worktreePath, "branch", "--show-current"],
+        {
+          encoding: "utf-8",
+        }
+      );
+
+      assertProcessSuccess(
+        branchResult.status,
+        branchResult.stderr,
+        branchResult.stdout
+      );
+
+      expect(checkoutStatus).toBe(0);
+      expect(realpathSync(checkoutPwd)).toBe(realpathSync(worktreePath));
+      expect(worktreeId).toBe(branchName);
+      expect(worktreePath).toContain(`${repo.repoName}-feature-local-checkout`);
+      expect(branchResult.stdout.trim()).toBe(branchName);
+      expect(existsSync(join(worktreePath, ".wt", "meta.json"))).toBeTrue();
+    }
+  );
+
+  test("reuses an existing local branch worktree via the switch alias", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const branchName = "feature/local-reuse";
+
+    await $`git -C ${repo.repoRoot} branch ${branchName}`.quiet();
+
+    const createResult = runCliCapture(
+      ["checkout", branchName, "--no-cd"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(
+      createResult.status,
+      createResult.stderr,
+      createResult.stdout
+    );
+
+    const worktreePath = readCliValue(createResult.stdout, "WT_PATH");
+    const reuseResult = runWrappedBashSession(repo.repoRoot, [
+      `wt switch ${branchName}`,
+      "switch_status=$?",
+      'switch_pwd="$PWD"',
+      'printf \'SWITCH_STATUS=%s\\nSWITCH_PWD=%s\\n\' "$switch_status" "$switch_pwd"',
+    ]);
+
+    assertProcessSuccess(
+      reuseResult.processStatus,
+      reuseResult.stderr,
+      reuseResult.stdout
+    );
+
+    expect(Number(readOutputValue(reuseResult.stdout, "SWITCH_STATUS"))).toBe(
+      0
+    );
+    expect(realpathSync(readOutputValue(reuseResult.stdout, "SWITCH_PWD"))).toBe(
+      realpathSync(worktreePath)
+    );
+    expect(reuseResult.stdout).toContain(
+      `Using existing worktree: ${branchName}`
+    );
+  });
+
+  test("shows an actionable error when a local branch does not exist", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/missing-branch";
+    const worktreePath = getWorktreePath(repo, branchName);
+    const result = runCliCapture(
+      ["checkout", branchName, "--no-cd"],
+      repo.repoRoot
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `Local branch ${branchName} does not exist.`
+    );
+    expect(result.stderr).toContain(`wt new ${branchName}`);
+    expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test(
     "creates a pull request worktree with the PR head branch and navigates via the bash wrapper",
     async () => {
       if (!isShellAvailable("bash")) {

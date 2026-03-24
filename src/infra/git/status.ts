@@ -236,6 +236,19 @@ export async function getCommitHash(
   }
 }
 
+export async function getMergeBase(
+  repoRoot: string,
+  firstRef: string,
+  secondRef: string
+): Promise<string> {
+  try {
+    const result = await $`git -C ${repoRoot} merge-base ${firstRef} ${secondRef}`.text();
+    return result.trim();
+  } catch {
+    return "";
+  }
+}
+
 export async function isRefAncestor(
   repoRoot: string,
   ancestorRef: string,
