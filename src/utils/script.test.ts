@@ -67,6 +67,8 @@ describe("buildDetachedRunnerCommand", () => {
     expect(cmd).toContain("/tmp/post-task.json");
     expect(cmd).toContain('"status":"done"');
     expect(cmd).toContain('"status":"failed"');
+    expect(cmd).toContain("tmp_status_file='/tmp/post-task.json'.tmp.$$");
+    expect(cmd).toContain('mv "$tmp_status_file"');
   });
 
   test("includes start and completion macOS notifications when provided", () => {
