@@ -35,22 +35,26 @@ function writeJson(path: string, content: unknown): void {
 describe("settings store", () => {
   test("adds the local settings ignore entry to .gitignore", async () => {
     const repoRoot = makeTempDir("wt-settings-store-");
+    const settingsDir = join(repoRoot, ".wt");
 
+    mkdirSync(settingsDir, { recursive: true });
     await expect(ensureLocalSettingsIgnored(repoRoot)).resolves.toBe(true);
-    expect(readFileSync(join(repoRoot, ".gitignore"), "utf-8")).toBe(
+    expect(readFileSync(join(settingsDir, ".gitignore"), "utf-8")).toBe(
       `${LOCAL_SETTINGS_GITIGNORE_ENTRY}\n`
     );
   });
 
   test("does not duplicate the local settings ignore entry", async () => {
     const repoRoot = makeTempDir("wt-settings-store-");
-    const gitignorePath = join(repoRoot, ".gitignore");
+    const settingsDir = join(repoRoot, ".wt");
+    const gitignorePath = join(settingsDir, ".gitignore");
 
-    writeFileSync(gitignorePath, "node_modules/\n.wt/settings.local.json\n");
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(gitignorePath, "settings.json\nsettings.local.json\n");
 
     await expect(ensureLocalSettingsIgnored(repoRoot)).resolves.toBe(false);
     expect(readFileSync(gitignorePath, "utf-8")).toBe(
-      "node_modules/\n.wt/settings.local.json\n"
+      "settings.json\nsettings.local.json\n"
     );
   });
 

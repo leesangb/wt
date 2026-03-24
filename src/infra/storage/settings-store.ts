@@ -7,10 +7,10 @@ import {
   type WtSettingsInput,
 } from "../../domain/settings.js";
 
-export const LOCAL_SETTINGS_GITIGNORE_ENTRY = ".wt/settings.local.json";
+export const LOCAL_SETTINGS_GITIGNORE_ENTRY = "settings.local.json";
 const LOCAL_SETTINGS_GITIGNORE_ALIASES = new Set([
   LOCAL_SETTINGS_GITIGNORE_ENTRY,
-  "/.wt/settings.local.json",
+  "/settings.local.json",
 ]);
 
 export async function getSettingsPath(repoRoot: string): Promise<string> {
@@ -44,7 +44,13 @@ export async function loadSettings(repoRoot: string): Promise<WtSettings> {
 export async function ensureLocalSettingsIgnored(
   repoRoot: string
 ): Promise<boolean> {
-  const gitignorePath = join(repoRoot, ".gitignore");
+  const settingsDir = join(repoRoot, ".wt");
+  const gitignorePath = join(settingsDir, ".gitignore");
+
+  if (!existsSync(settingsDir)) {
+    mkdirSync(settingsDir, { recursive: true });
+  }
+
   const currentContent = existsSync(gitignorePath)
     ? readFileSync(gitignorePath, "utf-8")
     : "";
