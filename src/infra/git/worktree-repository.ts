@@ -81,6 +81,23 @@ export async function createDetachedGitWorktree(
   }
 }
 
+export async function attachGitWorktree(
+  repoRoot: string,
+  worktreePath: string,
+  branch: string
+): Promise<void> {
+  const addProc = spawn(["git", "worktree", "add", worktreePath, branch], {
+    cwd: repoRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const addResult = await addProc.exited;
+
+  if (addResult !== 0) {
+    throw new Error(`git worktree add failed with exit code ${addResult}`);
+  }
+}
+
 export async function createOrAttachGitWorktree(
   repoRoot: string,
   worktreePath: string,

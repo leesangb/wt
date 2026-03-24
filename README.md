@@ -91,6 +91,7 @@ If you don't set up the shell wrapper, you can use `--no-cd` flag:
 
 ```bash
 wt new feature-branch --no-cd
+wt checkout feature-branch --no-cd
 wt pr 123 --no-cd
 # Then manually: cd /path/shown/in/output
 ```
@@ -153,6 +154,27 @@ By default, `WT_ID` uses the branch name. When the branch contains `/`, the work
 - `--id <id>` - Override the default worktree ID (defaults to the branch name)
 - `--no-push` - Skip pushing the new branch to remote
 - `--no-cd` - Don't output cd command (for direct binary usage without shell wrapper)
+
+### Create or navigate to a local branch worktree
+
+```bash
+# Create a new worktree for an existing local branch or jump to one that's already open
+wt checkout feature-branch
+
+# Alias
+wt switch feature-branch
+
+# Direct binary usage without auto-cd
+wt checkout feature-branch --no-cd
+```
+
+This command:
+1. Checks whether any existing worktree is already on that local branch
+2. Navigates to that worktree immediately when it exists
+3. Otherwise creates a fresh worktree for the existing local branch
+
+`wt checkout` requires the branch to already exist locally. If you want to create a new branch first, use `wt new <branch>`.
+The worktree ID defaults to the branch name. If that ID is already in use by another worktree, `wt checkout` appends `-1`, `-2`, and so on to keep the new ID unique and prints the adjustment in the CLI output.
 
 ### Create or navigate to a pull request worktree
 
