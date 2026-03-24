@@ -3,3 +3,4 @@ dist/
 wt
 *.log
 .DS_Store
+.wt/settings.local.json

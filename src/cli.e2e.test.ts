@@ -121,7 +121,7 @@ function runCli(args: string[], cwd: string): void {
   assertProcessSuccess(result.status, result.stderr, result.stdout);
 }
 
-async function createTestRepo(): Promise<TestRepo> {
+async function createGitRepo(): Promise<TestRepo> {
   const originDir = makeTempDir("wt-origin-");
   const repoRoot = makeTempDir("wt-repo-");
   const worktreeRoot = makeTempDir("wt-worktrees-");
@@ -138,19 +138,25 @@ async function createTestRepo(): Promise<TestRepo> {
   await $`git -C ${repoRoot} push -u origin main`.quiet();
   await $`git -C ${repoRoot} remote set-head origin main`.quiet();
 
-  runCli(["init"], repoRoot);
-
-  const settingsPath = join(repoRoot, ".wt", "settings.json");
-  const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-  settings.worktreeDir = worktreeRoot;
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-
   return {
     originDir,
     repoName,
     repoRoot,
     worktreeRoot,
   };
+}
+
+async function createTestRepo(): Promise<TestRepo> {
+  const repo = await createGitRepo();
+
+  runCli(["init"], repo.repoRoot);
+
+  const settingsPath = join(repo.repoRoot, ".wt", "settings.json");
+  const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+  settings.worktreeDir = repo.worktreeRoot;
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+  return repo;
 }
 
 function getWorktreePath(repo: TestRepo, worktreeId: string): string {
@@ -368,6 +374,35 @@ afterEach(() => {
 });
 
 describe("cli e2e", () => {
+  test("init adds the local settings ignore entry without duplicating it", async () => {
+    const repo = await createGitRepo();
+
+    const initResult = runCliCapture(["init"], repo.repoRoot);
+    assertProcessSuccess(
+      initResult.status,
+      initResult.stderr,
+      initResult.stdout
+    );
+
+    const gitignorePath = join(repo.repoRoot, ".gitignore");
+    expect(readFileSync(gitignorePath, "utf-8")).toBe(
+      ".wt/settings.local.json\n"
+    );
+
+    const rerunResult = runCliCapture(["init"], repo.repoRoot);
+    assertProcessSuccess(
+      rerunResult.status,
+      rerunResult.stderr,
+      rerunResult.stdout
+    );
+
+    expect(
+      readFileSync(gitignorePath, "utf-8")
+        .split(/\r?\n/)
+        .filter((line) => line === ".wt/settings.local.json")
+    ).toHaveLength(1);
+  });
+
   test(
     "creates a worktree, pushes it to a local remote, and navigates via the bash wrapper",
     async () => {

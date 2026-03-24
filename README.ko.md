@@ -80,7 +80,7 @@ source ~/.wt/shell/wt.fish
 # - shell 설정 파일에서 source 라인 제거
 ```
 
-**참고:** 제거 스크립트는 worktree나 저장소별 `.wt/settings.json` 파일을 제거하지 않습니다. 완전히 정리하려면 수동으로 실행하세요:
+**참고:** 제거 스크립트는 worktree나 저장소별 `.wt/settings.json` / `.wt/settings.local.json` 파일을 제거하지 않습니다. 완전히 정리하려면 수동으로 실행하세요:
 ```bash
 rm -rf ~/.wt/  # 모든 worktree와 shell 스크립트 제거
 ```
@@ -98,7 +98,7 @@ wt pr 123 --no-cd
 
 ## 사용법
 
-**참고:** `wt`는 git 저장소 내부 어느 디렉터리에서나 실행할 수 있습니다. 명령어는 내부적으로 저장소 루트를 기준으로 컨텍스트를 해석하며, `.wt/settings.json`의 상대 `worktreeDir` 값도 저장소 루트를 기준으로 해석됩니다.
+**참고:** `wt`는 git 저장소 내부 어느 디렉터리에서나 실행할 수 있습니다. 명령어는 내부적으로 저장소 루트를 기준으로 컨텍스트를 해석하며, `.wt/settings.json`과 `.wt/settings.local.json`의 상대 `worktreeDir` 값도 저장소 루트를 기준으로 해석됩니다.
 
 ### 설정 초기화
 
@@ -115,10 +115,13 @@ wt init
   "pushRemote": true,
   "scripts": {
     "pre": [],
-    "post": []
+    "post": [],
+    "postMode": "async"
   }
 }
 ```
+
+`wt init`는 local override 파일이 기본적으로 추적되지 않도록 저장소 `.gitignore`에 `.wt/settings.local.json`도 추가합니다.
 
 ### 새 worktree 생성
 
@@ -249,6 +252,19 @@ worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면,
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 - **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
+
+사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `scripts.*` 필드도 병합되므로 `scripts` 전체를 다시 쓰지 않고 `scripts.postMode`만 바꿀 수 있습니다.
+
+예시 `.wt/settings.local.json`:
+
+```json
+{
+  "baseBranch": "develop",
+  "scripts": {
+    "postMode": "sync"
+  }
+}
+```
 
 ### 환경 변수
 

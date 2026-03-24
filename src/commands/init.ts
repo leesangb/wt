@@ -8,10 +8,16 @@ export async function initCommand(): Promise<void> {
 
     if (!result.created) {
       console.log(chalk.yellow("Warning: .wt/settings.json already exists"));
+      if (result.gitignoreUpdated) {
+        console.log(chalk.dim("Added .wt/settings.local.json to .gitignore"));
+      }
       return;
     }
 
     console.log(chalk.green("✓ Initialized wt configuration at .wt/settings.json"));
+    if (result.gitignoreUpdated) {
+      console.log(chalk.dim("Added .wt/settings.local.json to .gitignore"));
+    }
     console.log(chalk.dim("\nEdit .wt/settings.json to customize:"));
     console.log(chalk.dim("  - worktreeDir: Base directory for worktrees"));
     console.log(chalk.dim("  - baseBranch: Default base branch (default: main)"));
@@ -19,5 +25,6 @@ export async function initCommand(): Promise<void> {
     console.log(chalk.dim("  - scripts.pre: Array of commands to run before creating worktree"));
     console.log(chalk.dim("  - scripts.post: Array of commands to run after creating worktree"));
     console.log(chalk.dim("  - scripts.postMode: 'sync' | 'async' (default: async)"));
+    console.log(chalk.dim("  - optional local overrides: .wt/settings.local.json"));
   });
 }
