@@ -121,7 +121,7 @@ wt init
 }
 ```
 
-`wt init`는 local override 파일이 기본적으로 추적되지 않도록 저장소 `.gitignore`에 `.wt/settings.local.json`도 추가합니다.
+`wt init`는 저장소 루트 `.gitignore`를 건드리지 않고, local override 파일이 기본적으로 추적되지 않도록 `.wt/.gitignore`에 `settings.local.json`을 기록합니다.
 
 ### 새 worktree 생성
 

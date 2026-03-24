@@ -384,10 +384,11 @@ describe("cli e2e", () => {
       initResult.stdout
     );
 
-    const gitignorePath = join(repo.repoRoot, ".gitignore");
+    const gitignorePath = join(repo.repoRoot, ".wt", ".gitignore");
     expect(readFileSync(gitignorePath, "utf-8")).toBe(
-      ".wt/settings.local.json\n"
+      "settings.local.json\n"
     );
+    expect(existsSync(join(repo.repoRoot, ".gitignore"))).toBeFalse();
 
     const rerunResult = runCliCapture(["init"], repo.repoRoot);
     assertProcessSuccess(
@@ -399,7 +400,7 @@ describe("cli e2e", () => {
     expect(
       readFileSync(gitignorePath, "utf-8")
         .split(/\r?\n/)
-        .filter((line) => line === ".wt/settings.local.json")
+        .filter((line) => line === "settings.local.json")
     ).toHaveLength(1);
   });
 

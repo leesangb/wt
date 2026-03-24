@@ -9,14 +9,14 @@ export async function initCommand(): Promise<void> {
     if (!result.created) {
       console.log(chalk.yellow("Warning: .wt/settings.json already exists"));
       if (result.gitignoreUpdated) {
-        console.log(chalk.dim("Added .wt/settings.local.json to .gitignore"));
+        console.log(chalk.dim("Added settings.local.json to .wt/.gitignore"));
       }
       return;
     }
 
     console.log(chalk.green("✓ Initialized wt configuration at .wt/settings.json"));
     if (result.gitignoreUpdated) {
-      console.log(chalk.dim("Added .wt/settings.local.json to .gitignore"));
+      console.log(chalk.dim("Added settings.local.json to .wt/.gitignore"));
     }
     console.log(chalk.dim("\nEdit .wt/settings.json to customize:"));
     console.log(chalk.dim("  - worktreeDir: Base directory for worktrees"));

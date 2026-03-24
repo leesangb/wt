@@ -121,7 +121,7 @@ This creates `.wt/settings.json` in your repository:
 }
 ```
 
-`wt init` also adds `.wt/settings.local.json` to the repository `.gitignore` so local overrides stay untracked by default.
+`wt init` also writes `settings.local.json` to `.wt/.gitignore` so local overrides stay untracked by default without touching the repository root `.gitignore`.
 
 ### Create a new worktree
 
