@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.6
+
+### Patch Changes
+
+- 9d35105: add local setting override, wt checkout
+
 ## 0.2.5
 
 ### Patch Changes
