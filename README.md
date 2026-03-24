@@ -80,7 +80,7 @@ source ~/.wt/shell/wt.fish
 # - Remove source lines from shell config files
 ```
 
-**Note:** The uninstallation script does not remove worktrees or repository-specific `.wt/settings.json` files. To fully clean up, manually run:
+**Note:** The uninstallation script does not remove worktrees or repository-specific `.wt/settings.json` / `.wt/settings.local.json` files. To fully clean up, manually run:
 ```bash
 rm -rf ~/.wt/  # Remove all worktrees and shell scripts
 ```
@@ -98,7 +98,7 @@ wt pr 123 --no-cd
 
 ## Usage
 
-**Note:** You can run `wt` from any directory inside a git repository. Commands resolve the repository root internally, while relative `worktreeDir` values in `.wt/settings.json` are interpreted relative to the repository root.
+**Note:** You can run `wt` from any directory inside a git repository. Commands resolve the repository root internally, while relative `worktreeDir` values in `.wt/settings.json` and `.wt/settings.local.json` are interpreted relative to the repository root.
 
 ### Initialize configuration
 
@@ -120,6 +120,8 @@ This creates `.wt/settings.json` in your repository:
   }
 }
 ```
+
+`wt init` also adds `.wt/settings.local.json` to the repository `.gitignore` so local overrides stay untracked by default.
 
 ### Create a new worktree
 
@@ -250,6 +252,19 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
+
+You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `scripts.*` fields are merged, so you can override only `scripts.postMode` without copying the rest of `scripts`.
+
+Example `.wt/settings.local.json`:
+
+```json
+{
+  "baseBranch": "develop",
+  "scripts": {
+    "postMode": "sync"
+  }
+}
+```
 
 ### Environment Variables
 

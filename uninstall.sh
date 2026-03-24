@@ -100,7 +100,7 @@ fi
 
 echo -e "${BLUE}Note: This script does not remove:${NC}"
 echo -e "  - Worktrees created by wt (usually in ~/.wt/)"
-echo -e "  - Repository .wt/settings.json files"
+echo -e "  - Repository .wt/settings.json and .wt/settings.local.json files"
 echo ""
 echo -e "${YELLOW}To completely remove all traces, manually delete:${NC}"
 echo -e "  - ${GREEN}rm -rf ~/.wt/${NC} (your worktrees)"

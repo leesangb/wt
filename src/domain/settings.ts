@@ -28,6 +28,29 @@ export const DEFAULT_WT_SETTINGS: WtSettings = {
   },
 };
 
+export function mergeSettingsInputs(
+  base?: WtSettingsInput | null,
+  override?: WtSettingsInput | null
+): WtSettingsInput | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  const mergedScripts =
+    base?.scripts || override?.scripts
+      ? {
+          ...base?.scripts,
+          ...override?.scripts,
+        }
+      : undefined;
+
+  return {
+    ...base,
+    ...override,
+    ...(mergedScripts ? { scripts: mergedScripts } : {}),
+  };
+}
+
 export function normalizeSettings(
   input?: WtSettingsInput | null
 ): WtSettings {

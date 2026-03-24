@@ -1,6 +1,7 @@
 import { DEFAULT_WT_SETTINGS } from "../../domain/settings.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
+  ensureLocalSettingsIgnored,
   getSettingsPath,
   saveSettings,
   settingsExist,
@@ -8,6 +9,7 @@ import {
 
 export interface InitSettingsResult {
   created: boolean;
+  gitignoreUpdated: boolean;
   settingsPath: string;
 }
 
@@ -19,16 +21,21 @@ export async function initSettings(
   const settingsPath = await getSettingsPath(context.repoRoot);
 
   if (existing) {
+    const gitignoreUpdated = await ensureLocalSettingsIgnored(context.repoRoot);
+
     return {
       created: false,
+      gitignoreUpdated,
       settingsPath,
     };
   }
 
   await saveSettings(context.repoRoot, DEFAULT_WT_SETTINGS);
+  const gitignoreUpdated = await ensureLocalSettingsIgnored(context.repoRoot);
 
   return {
     created: true,
+    gitignoreUpdated,
     settingsPath,
   };
 }
