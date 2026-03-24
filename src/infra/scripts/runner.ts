@@ -98,14 +98,19 @@ export function buildDetachedRunnerCommand(
         options.completionNotification.failureSubtitle
       )
     : undefined;
+  const buildStatusUpdateCommand = (status: "done" | "failed"): string => [
+    `tmp_status_file='${statusFile}'.tmp.$$`,
+    `printf '{"status":"${status}","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$tmp_status_file"`,
+    `mv "$tmp_status_file" '${statusFile}'`,
+  ].join("\n");
   const successCommands = [
-    `printf '{"status":"done","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    buildStatusUpdateCommand("done"),
     successNotification,
   ]
     .filter((command): command is string => Boolean(command))
     .join("\n");
   const failureCommands = [
-    `printf '{"status":"failed","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > '${statusFile}'`,
+    buildStatusUpdateCommand("failed"),
     failureNotification,
   ]
     .filter((command): command is string => Boolean(command))
