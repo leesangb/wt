@@ -229,11 +229,29 @@ export async function getCommitHash(
   ref: string
 ): Promise<string> {
   try {
-    const result = await $`git -C ${repoRoot} rev-parse ${ref}`.text();
+    const result = await $`git -C ${repoRoot} rev-parse --verify ${ref}^{commit}`.text();
     return result.trim();
   } catch {
     return "";
   }
+}
+
+export async function resolveCommitHash(
+  repoRoot: string,
+  refs: string[]
+): Promise<{ commitHash: string; resolvedRef: string } | undefined> {
+  for (const ref of refs) {
+    const commitHash = await getCommitHash(repoRoot, ref);
+
+    if (commitHash) {
+      return {
+        commitHash,
+        resolvedRef: ref,
+      };
+    }
+  }
+
+  return undefined;
 }
 
 export async function getMergeBase(

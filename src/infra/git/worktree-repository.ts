@@ -6,6 +6,28 @@ export async function fetchRemote(repoRoot: string): Promise<void> {
   await $`git -C ${repoRoot} fetch`;
 }
 
+export async function fetchRemoteBranch(
+  repoRoot: string,
+  branch: string,
+  remote: string = "origin"
+): Promise<boolean> {
+  const fetchProc = spawn(
+    [
+      "git",
+      "fetch",
+      remote,
+      `refs/heads/${branch}:refs/remotes/${remote}/${branch}`,
+    ],
+    {
+      cwd: repoRoot,
+      stdout: "ignore",
+      stderr: "ignore",
+    }
+  );
+
+  return (await fetchProc.exited) === 0;
+}
+
 export async function createGitWorktree(
   repoRoot: string,
   worktreePath: string,

@@ -735,6 +735,54 @@ describe("cli e2e", () => {
   );
 
   test(
+    "creates a pull request worktree after fetching a missing remote base branch",
+    async () => {
+      const repo = await createTestRepo();
+      const headBranch = "feature/pr-123";
+      const baseBranch = "release/1.0";
+
+      await $`git -C ${repo.repoRoot} checkout -b ${baseBranch}`.quiet();
+      writeFileSync(join(repo.repoRoot, "README.md"), "base\nrelease branch\n");
+      await $`git -C ${repo.repoRoot} add README.md`.quiet();
+      await $`git -C ${repo.repoRoot} commit -m release-base`.quiet();
+      await $`git -C ${repo.repoRoot} push -u origin ${baseBranch}`.quiet();
+      await $`git -C ${repo.repoRoot} checkout main`.quiet();
+      await $`git -C ${repo.repoRoot} branch -D ${baseBranch}`.quiet();
+      await $`git -C ${repo.repoRoot} update-ref -d refs/remotes/origin/${baseBranch}`.quiet();
+      await $`git -C ${repo.repoRoot} config remote.origin.fetch +refs/heads/main:refs/remotes/origin/main`.quiet();
+
+      const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+        env: createFakeGithubEnv({ headBranch, baseBranch }),
+      });
+
+      assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+      const worktreePath = readCliValue(result.stdout, "WT_PATH");
+
+      expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
+        "release branch"
+      );
+      expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toContain(
+        "pr 123"
+      );
+    }
+  );
+
+  test("shows an actionable error when the PR base branch cannot be resolved", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/pr-123";
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch, baseBranch: "release/missing" }),
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Could not resolve PR base branch release/missing from origin."
+    );
+    expect(result.stderr).not.toContain("fatal: invalid reference:");
+  });
+
+  test(
     "shows an actionable error when an existing local PR branch diverges without a matching worktree",
     async () => {
       const repo = await createTestRepo();

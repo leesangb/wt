@@ -23,10 +23,14 @@ import {
   createDetachedGitWorktree,
   deleteBranch,
   fetchRemote,
+  fetchRemoteBranch,
   localBranchExists,
   removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
-import { getCommitHash, isRefAncestor } from "../../infra/git/status.js";
+import {
+  isRefAncestor,
+  resolveCommitHash,
+} from "../../infra/git/status.js";
 import { writeWorktreeMeta } from "../../infra/storage/worktree-meta-store.js";
 import { AppError } from "../errors.js";
 
@@ -46,6 +50,37 @@ function getErrorMessage(error: unknown): string {
   }
 
   return String(error);
+}
+
+async function resolvePrBaseCommit(
+  repoRoot: string,
+  baseBranch: string
+): Promise<string> {
+  const initialResolution = await resolveCommitHash(repoRoot, [
+    baseBranch,
+    `origin/${baseBranch}`,
+    `refs/remotes/origin/${baseBranch}`,
+  ]);
+
+  if (initialResolution) {
+    return initialResolution.commitHash;
+  }
+
+  await fetchRemoteBranch(repoRoot, baseBranch);
+
+  const fetchedResolution = await resolveCommitHash(repoRoot, [
+    `origin/${baseBranch}`,
+    `refs/remotes/origin/${baseBranch}`,
+    baseBranch,
+  ]);
+
+  if (fetchedResolution) {
+    return fetchedResolution.commitHash;
+  }
+
+  throw new AppError(
+    `Could not resolve PR base branch ${baseBranch} from origin. Fetch it manually or confirm the branch still exists.`
+  );
 }
 
 export async function createPrWorktree(
@@ -90,7 +125,7 @@ export async function createPrWorktree(
   await fetchRemote(context.repoRoot);
 
   const baseBranch = pullRequestInfo.baseRefName;
-  const baseCommit = await getCommitHash(context.repoRoot, baseBranch);
+  const baseCommit = await resolvePrBaseCommit(context.repoRoot, baseBranch);
   const branchExistedBeforeCheckout = await localBranchExists(
     context.repoRoot,
     branchName
