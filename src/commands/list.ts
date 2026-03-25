@@ -1,4 +1,6 @@
 import chalk from "chalk";
+import { AppError } from "../app/errors.js";
+import { getWorktreeBranchLabel } from "../domain/worktree.js";
 import {
   listRemoveCompletionWorktrees,
   listWorktreeInfos,
@@ -13,12 +15,27 @@ import { runCommand } from "../cli/command-runtime.js";
 
 type CompletionFormat = "bash" | "zsh" | "fish";
 
+const COMPLETION_FORMATS = new Set<CompletionFormat>(["bash", "zsh", "fish"]);
+
+function assertCompletionFormat(
+  value: string
+): asserts value is CompletionFormat {
+  if (COMPLETION_FORMATS.has(value as CompletionFormat)) {
+    return;
+  }
+
+  throw new AppError(
+    `Unsupported completion format "${value}". Expected one of: bash, zsh, fish.`
+  );
+}
+
 export async function listCommand(options?: {
-  completion?: CompletionFormat;
+  completion?: string;
   excludeMainWorktree?: boolean;
 }): Promise<void> {
   await runCommand(async () => {
     if (options?.completion) {
+      assertCompletionFormat(options.completion);
       const useRemovalCompletionDescriptions = options.excludeMainWorktree;
 
       if (useRemovalCompletionDescriptions) {
@@ -96,11 +113,11 @@ export async function listCommand(options?: {
       }
       if (worktree.modifiedCount > 0) {
         indicators.push(
-          chalk.red(`!${worktree.modifiedCount} files not tracked`)
+          chalk.red(`!${worktree.modifiedCount} paths with local changes`)
         );
       }
 
-      const branchParts = [worktree.branch];
+      const branchParts = [getWorktreeBranchLabel(worktree)];
       if (baseInfo) {
         branchParts.push(baseInfo);
       }
@@ -132,7 +149,7 @@ function buildBaseDescription(
 }
 
 function buildDefaultCompletionDescription(worktree: WorktreeInfo): string {
-  const descriptionParts = [worktree.branch];
+  const descriptionParts = [getWorktreeBranchLabel(worktree)];
   const baseDescription = buildBaseDescription(worktree);
 
   if (baseDescription) {
@@ -159,8 +176,8 @@ function buildRemoveCompletionDescription(
   }
 
   if (metadata.length === 0) {
-    return worktree.branch;
+    return getWorktreeBranchLabel(worktree);
   }
 
-  return `${worktree.branch} | ${metadata.join(" | ")}`;
+  return `${getWorktreeBranchLabel(worktree)} | ${metadata.join(" | ")}`;
 }

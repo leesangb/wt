@@ -78,7 +78,7 @@ export async function isBranchMergedToRemote(
 
 export async function getWorktreeStatusSummary(
   worktreePath: string,
-  branch: string
+  branch?: string
 ): Promise<{
   unpushedCount: number;
   modifiedCount: number;
@@ -146,10 +146,19 @@ async function getRevisionRangeCount(
 export async function getWorktreeRemovalStatusSummary(
   repoRoot: string,
   worktreePath: string,
-  branch: string,
+  branch?: string,
   baseBranch?: string
 ): Promise<WorktreeRemovalStatusSummary> {
   const localChangeCount = await countStatusEntries(worktreePath);
+
+  if (!branch) {
+    return {
+      localCommitCount: 0,
+      localChangeCount,
+      hasUnknownLocalCommits: true,
+    };
+  }
+
   const branchRemoteRef = `refs/remotes/origin/${branch}`;
 
   if (await refExists(worktreePath, branchRemoteRef)) {
@@ -210,8 +219,12 @@ export async function getWorktreeRemovalStatusSummary(
 
 export async function getUnpushedCommitCount(
   worktreePath: string,
-  branch: string
+  branch?: string
 ): Promise<number> {
+  if (!branch) {
+    return 0;
+  }
+
   try {
     const result =
       await $`git -C ${worktreePath} rev-list --count origin/${branch}..${branch}`

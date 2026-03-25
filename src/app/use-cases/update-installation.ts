@@ -30,10 +30,20 @@ export interface UpdateInstallationResult {
   shellScriptsSkipped: boolean;
 }
 
+function assertVersionFormat(version: string, label: string): void {
+  try {
+    compareVersions(version, version);
+  } catch {
+    throw new AppError(`Invalid ${label} version "${version}"`);
+  }
+}
+
 export async function updateInstallation(
   currentVersion: string,
   options: UpdateInstallationOptions
 ): Promise<UpdateInstallationResult> {
+  assertVersionFormat(currentVersion, "current");
+
   if (process.platform !== "darwin") {
     throw new AppError(
       "Update command currently supports only macOS (darwin)."
@@ -57,6 +67,8 @@ export async function updateInstallation(
       throw new AppError("Could not determine latest version");
     }
 
+    assertVersionFormat(targetVersion, "release");
+
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
       return {
         currentVersion,
@@ -79,6 +91,8 @@ export async function updateInstallation(
 
     downloadUrl = asset.browserDownloadUrl;
   } else {
+    assertVersionFormat(targetVersion, "requested");
+
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
       return {
         currentVersion,

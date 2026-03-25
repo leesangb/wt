@@ -480,6 +480,42 @@ describe("cli e2e", () => {
     }
   );
 
+  test("cleans up a partially created worktree when push fails", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "pushfail123";
+    const branchName = "feature-push-fail";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    await $`git -C ${repo.repoRoot} remote remove origin`.quiet();
+
+    const result = runCliCapture(
+      ["new", branchName, "--id", worktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("git push failed");
+    expect(result.stderr).toContain("Cleaned up the partially created worktree");
+    expect(existsSync(worktreePath)).toBeFalse();
+
+    const branchResult = spawnSync(
+      "git",
+      [
+        "-C",
+        repo.repoRoot,
+        "show-ref",
+        "--verify",
+        "--quiet",
+        `refs/heads/${branchName}`,
+      ],
+      {
+        encoding: "utf-8",
+      }
+    );
+
+    expect(branchResult.status).toBe(1);
+  });
+
   test("navigates to a worktree by branch name via the bash wrapper", async () => {
     if (!isShellAvailable("bash")) {
       return;
@@ -1017,6 +1053,21 @@ describe("cli e2e", () => {
     expect(linkedIdLine).toBe(`ID:      ${worktreeId} (current)`);
   });
 
+  test("lists a detached main worktree instead of hiding it", async () => {
+    const repo = await createGitRepo();
+
+    await $`git -C ${repo.repoRoot} checkout --detach`.quiet();
+
+    const result = runCliCapture(["list"], repo.repoRoot);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).not.toContain("No worktrees found");
+    expect(result.stdout).toContain(
+      `ID:      ${basename(repo.repoRoot)} [main] (current)`
+    );
+    expect(result.stdout).toContain("Branch:  (detached) @ ");
+  });
+
   test("shows the main worktree in completion by default and hides it when requested", async () => {
     const repo = await createTestRepo();
     const worktreeId = "completion123";
@@ -1067,6 +1118,20 @@ describe("cli e2e", () => {
     ).toBeFalse();
   });
 
+  test("rejects unsupported completion formats", async () => {
+    const repo = await createTestRepo();
+
+    const result = runCliCapture(
+      ["list", "--completion", "bogus"],
+      repo.repoRoot
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Unsupported completion format "bogus". Expected one of: bash, zsh, fish.'
+    );
+  });
+
   test("hides the main worktree from completion even inside a linked worktree", async () => {
     const repo = await createTestRepo();
     const worktreeId = "linked123";
@@ -1096,6 +1161,25 @@ describe("cli e2e", () => {
     expect(
       suggestions.some(line => line.startsWith(`${basename(repo.repoRoot)}:`))
     ).toBeFalse();
+  });
+
+  test("ignores prunable worktree entries in list output", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "prunable123";
+    const branchName = "feature-prunable";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    rmSync(worktreePath, { recursive: true, force: true });
+
+    const result = runCliCapture(["list"], repo.repoRoot);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).toContain(
+      `ID:      ${basename(repo.repoRoot)} [main] (current)`
+    );
+    expect(result.stdout).not.toContain(worktreeId);
+    expect(result.stderr).toBe("");
   });
 
   test("includes removal metadata in completion output", async () => {

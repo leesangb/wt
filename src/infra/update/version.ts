@@ -1,6 +1,14 @@
+function parseVersion(version: string): number[] {
+  if (!/^\d+(?:\.\d+)*$/.test(version)) {
+    throw new Error(`Invalid version format: ${version}`);
+  }
+
+  return version.split(".").map((part) => parseInt(part, 10));
+}
+
 export function compareVersions(a: string, b: string): number {
-  const left = a.split(".").map((part) => parseInt(part, 10));
-  const right = b.split(".").map((part) => parseInt(part, 10));
+  const left = parseVersion(a);
+  const right = parseVersion(b);
   const length = Math.max(left.length, right.length);
 
   for (let index = 0; index < length; index++) {

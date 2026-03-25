@@ -4,6 +4,7 @@ import {
   buildWorktreeIdentifiers,
   buildWorktreePathName,
   createWorktreeMeta,
+  getWorktreeBranchLabel,
   toWorktreePathSegment,
 } from "./worktree.js";
 
@@ -57,5 +58,13 @@ describe("worktree domain", () => {
       id: "legacy-id",
       fullId: "repo-legacy-id",
     });
+  });
+
+  test("formats detached worktrees using the head commit", () => {
+    expect(
+      getWorktreeBranchLabel({
+        head: "abc1234567890",
+      })
+    ).toBe("(detached) @ abc1234");
   });
 });

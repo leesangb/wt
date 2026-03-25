@@ -144,6 +144,14 @@ export async function removeWorktree(
     };
   }
 
+  if (!worktree.branch) {
+    return {
+      worktree,
+      branchDeleted: false,
+      relocatedToPath: removalRoot.relocatedToPath,
+    };
+  }
+
   try {
     await deleteBranch(removalRoot.gitRoot, worktree.branch);
   } catch (error) {

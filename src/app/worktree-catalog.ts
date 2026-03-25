@@ -16,6 +16,21 @@ import {
 } from "../infra/git/status.js";
 import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
 
+function resolveCreatedAt(
+  worktreePath: string,
+  createdAt?: string
+): string {
+  if (createdAt) {
+    return createdAt;
+  }
+
+  try {
+    return statSync(worktreePath).birthtime.toISOString();
+  } catch {
+    return new Date(0).toISOString();
+  }
+}
+
 export async function loadWorktreeInfos(
   context: RepositoryContext
 ): Promise<WorktreeInfo[]> {
@@ -36,9 +51,10 @@ export async function loadWorktreeInfos(
         path: worktree.path,
         branch: worktree.branch,
         isMain: worktree.isMain,
+        isDetached: worktree.isDetached,
+        head: worktree.head,
         repoName: context.repoName,
-        createdAt:
-          meta?.createdAt ?? statSync(worktree.path).birthtime.toISOString(),
+        createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
         baseBranch: meta?.baseBranch,
         baseCommit: meta?.baseCommit,
       };
@@ -144,6 +160,10 @@ function resolveWorktreeMergeStatus(
     >;
   }
 ): WorktreeMergeStatus {
+  if (worktree.isDetached || !worktree.branch) {
+    return "unknown";
+  }
+
   const mergeBaseBranch =
     worktree.baseBranch ?? mergeMetadata.defaultRemoteBaseBranch;
 
