@@ -6,6 +6,14 @@ export async function fetchRemote(repoRoot: string): Promise<void> {
   await $`git -C ${repoRoot} fetch`;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
 export async function fetchRemoteBranch(
   repoRoot: string,
   branch: string,
@@ -61,7 +69,29 @@ export async function createGitWorktree(
   const pushResult = await pushProc.exited;
 
   if (pushResult !== 0) {
-    throw new Error(`git push failed with exit code ${pushResult}`);
+    const cleanupErrors: string[] = [];
+
+    try {
+      await removeGitWorktree(repoRoot, worktreePath);
+    } catch (error) {
+      cleanupErrors.push(`remove worktree: ${getErrorMessage(error)}`);
+    }
+
+    try {
+      await deleteBranch(repoRoot, branch);
+    } catch (error) {
+      cleanupErrors.push(`delete branch ${branch}: ${getErrorMessage(error)}`);
+    }
+
+    if (cleanupErrors.length > 0) {
+      throw new Error(
+        `git push failed with exit code ${pushResult}. Cleanup failed: ${cleanupErrors.join("; ")}`
+      );
+    }
+
+    throw new Error(
+      `git push failed with exit code ${pushResult}. Cleaned up the partially created worktree.`
+    );
   }
 }
 
@@ -153,27 +183,38 @@ export async function listGitWorktrees(
   const entries = result.trim().split("\n\n");
 
   return entries
-    .map((entry, index) => {
+    .map((entry, index): GitWorktreeRef | undefined => {
       const lines = entry.split("\n");
       let path = "";
-      let branch = "";
+      let branch: string | undefined;
+      let head: string | undefined;
+      let isDetached = false;
+      let isPrunable = false;
 
       for (const line of lines) {
         if (line.startsWith("worktree ")) {
           path = line.substring(9);
         } else if (line.startsWith("branch ")) {
           branch = line.substring(7).replace("refs/heads/", "");
+        } else if (line.startsWith("HEAD ")) {
+          head = line.substring(5);
+        } else if (line === "detached") {
+          isDetached = true;
+        } else if (line.startsWith("prunable")) {
+          isPrunable = true;
         }
       }
 
-      if (!path || !branch) {
+      if (!path || isPrunable) {
         return undefined;
       }
 
       return {
         path,
-        branch,
         isMain: index === 0,
+        isDetached,
+        head,
+        ...(branch ? { branch } : {}),
       };
     })
     .filter((entry): entry is GitWorktreeRef => Boolean(entry));
@@ -191,10 +232,12 @@ export async function listGitWorktreePaths(
   const entries = result.trim().split("\n\n");
 
   return entries
-    .map((entry, index) => {
-      const pathLine = entry.split("\n").find((line) => line.startsWith("worktree "));
+    .map((entry, index): { path: string; isMain: boolean } | undefined => {
+      const lines = entry.split("\n");
+      const pathLine = lines.find((line) => line.startsWith("worktree "));
+      const isPrunable = lines.some((line) => line.startsWith("prunable"));
 
-      if (!pathLine) {
+      if (!pathLine || isPrunable) {
         return undefined;
       }
 

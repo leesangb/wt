@@ -1,5 +1,7 @@
 import { basename } from "path";
 
+export const DETACHED_WORKTREE_LABEL = "(detached)";
+
 export interface WorktreeMeta {
   baseBranch: string;
   baseCommit: string;
@@ -10,16 +12,20 @@ export interface WorktreeMeta {
 
 export interface GitWorktreeRef {
   path: string;
-  branch: string;
+  branch?: string;
   isMain: boolean;
+  isDetached?: boolean;
+  head?: string;
 }
 
 export interface WorktreeInfo {
   id: string;
   fullId: string;
   path: string;
-  branch: string;
+  branch?: string;
   isMain?: boolean;
+  isDetached?: boolean;
+  head?: string;
   repoName: string;
   createdAt: string;
   baseBranch?: string;
@@ -37,6 +43,21 @@ export type WorktreeMergeStatus = "merged" | "not_merged" | "unknown";
 
 export interface WorktreeRemovalInfo extends WorktreeInfo {
   mergeStatus: WorktreeMergeStatus;
+}
+
+export function getWorktreeBranchLabel(worktree: {
+  branch?: string;
+  head?: string;
+}): string {
+  if (worktree.branch) {
+    return worktree.branch;
+  }
+
+  if (worktree.head) {
+    return `${DETACHED_WORKTREE_LABEL} @ ${worktree.head.substring(0, 7)}`;
+  }
+
+  return DETACHED_WORKTREE_LABEL;
 }
 
 export function toWorktreePathSegment(value: string): string {
