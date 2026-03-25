@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.2.7
+
+### Patch Changes
+
+- 5772f7c: fix wt pr
+
 ## 0.2.6
 
 ### Patch Changes
