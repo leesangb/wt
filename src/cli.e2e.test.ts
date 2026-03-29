@@ -409,6 +409,8 @@ describe("cli e2e", () => {
     const shellDir = join(tempDir, "shell");
     const binaryPath = join(tempDir, "bin", "wt");
     const wrapperPath = join(shellDir, "wt.bash");
+    const appendCommand =
+      `printf '\\nsource "${wrapperPath}"\\n' >> ~/.bashrc`;
     const result = runCliCapture(
       [
         "shell",
@@ -427,7 +429,7 @@ describe("cli e2e", () => {
       renderShellWrapper("bash", binaryPath)
     );
     expect(result.stdout).toContain(wrapperPath);
-    expect(result.stdout).toContain(`source "${wrapperPath}"`);
+    expect(result.stdout).toContain(appendCommand);
   });
 
   test("shell install defaults to the current launch command", () => {
@@ -441,6 +443,26 @@ describe("cli e2e", () => {
     expect(wrapper).toContain(`"${process.execPath}" "${cliEntry}" "$@"`);
     expect(wrapper).toContain(
       `"${process.execPath}" "${cliEntry}" list --completion bash 2>/dev/null`
+    );
+  });
+
+  test("shell install prints tilde-based copy-paste commands for home paths", () => {
+    const tempHome = makeTempDir("wt-shell-home-");
+    const wrapperPath = join(tempHome, ".wt", "shell", "wt.zsh");
+    const result = runCliCapture(["shell", "install", "zsh"], tempHome, {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(wrapperPath, "utf-8")).toContain(
+      `"${process.execPath}" "${cliEntry}" "$@"`
+    );
+    expect(result.stdout).toContain("~/.wt/shell/wt.zsh");
+    expect(result.stdout).toContain(
+      `printf '\\nsource ~/.wt/shell/wt.zsh\\n' >> ~/.zshrc`
     );
   });
 
