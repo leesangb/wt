@@ -13,6 +13,7 @@ import { tmpdir } from "os";
 import { basename, join } from "path";
 import { fileURLToPath } from "url";
 import { $ } from "bun";
+import { renderShellWrapper } from "./infra/shell/installer.js";
 
 interface TestRepo {
   originDir: string;
@@ -52,7 +53,6 @@ interface FakeGithubCliOptions {
 
 const tempDirs: string[] = [];
 const cliEntry = fileURLToPath(new URL("./index.ts", import.meta.url));
-const bashWrapperTemplatePath = fileURLToPath(new URL("../shell/wt.bash", import.meta.url));
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -177,7 +177,7 @@ function updateSettings(
 }
 
 function createCliRunner(tempDir: string): string {
-  const cliPath = join(tempDir, "wt-cli");
+  const cliPath = join(tempDir, "wt");
   writeFileSync(
     cliPath,
     [
@@ -190,13 +190,11 @@ function createCliRunner(tempDir: string): string {
   return cliPath;
 }
 
-function createBashWrapper(tempDir: string, cliPath: string): string {
+function createBashWrapper(tempDir: string, binaryPath: string): string {
   const wrapperPath = join(tempDir, "wt.bash");
-  const wrapperTemplate = readFileSync(bashWrapperTemplatePath, "utf-8");
-
   writeFileSync(
     wrapperPath,
-    wrapperTemplate.replaceAll("/path/to/wt", cliPath),
+    renderShellWrapper("bash", binaryPath),
     "utf-8"
   );
 
@@ -320,6 +318,7 @@ function runWrappedBashSession(
   const tempDir = makeTempDir("wt-cli-e2e-");
   const cliPath = createCliRunner(tempDir);
   const wrapperPath = createBashWrapper(tempDir, cliPath);
+  const mergedPath = [envOverrides.PATH, process.env.PATH].filter(Boolean).join(":");
   const command = [
     "shopt -s expand_aliases",
     'alias cd="echo alias-hit"',
@@ -332,9 +331,10 @@ function runWrappedBashSession(
     encoding: "utf-8",
     env: {
       ...process.env,
+      ...envOverrides,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
-      ...envOverrides,
+      PATH: mergedPath,
     },
   });
 
@@ -402,6 +402,68 @@ describe("cli e2e", () => {
         .split(/\r?\n/)
         .filter((line) => line === "settings.local.json")
     ).toHaveLength(1);
+  });
+
+  test("shell install writes a wrapper with the requested binary path", () => {
+    const tempDir = makeTempDir("wt-shell-install-");
+    const shellDir = join(tempDir, "shell");
+    const binaryPath = join(tempDir, "bin", "wt");
+    const wrapperPath = join(shellDir, "wt.bash");
+    const appendCommand =
+      `printf '\\nsource "${wrapperPath}"\\n' >> ~/.bashrc`;
+    const result = runCliCapture(
+      [
+        "shell",
+        "install",
+        "bash",
+        "--binary-path",
+        binaryPath,
+        "--shell-dir",
+        shellDir,
+      ],
+      tempDir
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(wrapperPath, "utf-8")).toBe(
+      renderShellWrapper("bash", binaryPath)
+    );
+    expect(result.stdout).toContain(wrapperPath);
+    expect(result.stdout).toContain(appendCommand);
+  });
+
+  test("shell install defaults to the current launch command", () => {
+    const tempDir = makeTempDir("wt-shell-install-default-");
+    const shellDir = join(tempDir, "shell");
+    const wrapperPath = join(shellDir, "wt.bash");
+    const result = runCliCapture(["shell", "install", "bash", "--shell-dir", shellDir], tempDir);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const wrapper = readFileSync(wrapperPath, "utf-8");
+    expect(wrapper).toContain(`"${process.execPath}" "${cliEntry}" "$@"`);
+    expect(wrapper).toContain(
+      `"${process.execPath}" "${cliEntry}" list --completion bash 2>/dev/null`
+    );
+  });
+
+  test("shell install prints tilde-based copy-paste commands for home paths", () => {
+    const tempHome = makeTempDir("wt-shell-home-");
+    const wrapperPath = join(tempHome, ".wt", "shell", "wt.zsh");
+    const result = runCliCapture(["shell", "install", "zsh"], tempHome, {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(wrapperPath, "utf-8")).toContain(
+      `"${process.execPath}" "${cliEntry}" "$@"`
+    );
+    expect(result.stdout).toContain("~/.wt/shell/wt.zsh");
+    expect(result.stdout).toContain(
+      `printf '\\nsource ~/.wt/shell/wt.zsh\\n' >> ~/.zshrc`
+    );
   });
 
   test(

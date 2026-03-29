@@ -35,7 +35,7 @@ The installation script will:
 - Check if Bun is installed
 - Run `bun install` and `bun run build` automatically
 - Install the `wt` binary to `~/.local/bin/wt`
-- Copy shell wrapper scripts to `~/.wt/shell/`
+- Generate shell wrapper scripts in `~/.wt/shell/`
 - Automatically add shell wrapper source lines to your shell config files (`.zshrc`, `.bashrc`, or `config.fish`)
 - Set up auto-cd functionality
 
@@ -46,27 +46,31 @@ source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
 
 ### Manual Shell Integration (Optional)
 
-If you prefer manual setup or if the installation script didn't automatically configure your shell, you can manually source the wrapper scripts that are installed at `~/.wt/shell/`:
+If you prefer manual setup or want to regenerate shell integration for a specific binary path, run `wt shell install <shell>` and source the generated wrapper from `~/.wt/shell/`:
 
 #### Zsh (~/.zshrc)
 
 ```bash
+wt shell install zsh
 source ~/.wt/shell/wt.zsh
 ```
 
 #### Bash (~/.bashrc)
 
 ```bash
+wt shell install bash
 source ~/.wt/shell/wt.bash
 ```
 
 #### Fish (~/.config/fish/config.fish)
 
 ```fish
+wt shell install fish
 source ~/.wt/shell/wt.fish
 ```
 
-**Note:** The shell wrapper scripts are automatically installed to `~/.wt/shell/` during installation.
+**Note:** `wt shell install <shell>` writes a wrapper to `~/.wt/shell/` and embeds the command used to launch `wt`.
+If you want to pin a specific executable path, pass `--binary-path <path>`. If that path changes later, run the command again to regenerate the wrapper.
 
 ### Uninstallation
 
@@ -363,6 +367,7 @@ wt/
 │   │   ├── list.ts           # wt list / wt ls
 │   │   ├── remove.ts         # wt remove / wt rm
 │   │   ├── cd.ts             # wt cd
+│   │   ├── shell.ts          # wt shell install
 │   │   └── update.ts         # wt update
 │   ├── app/
 │   │   ├── repository-context.ts # Resolve repo root/name from current cwd
@@ -371,6 +376,7 @@ wt/
 │   │   └── use-cases/            # Command workflows
 │   ├── domain/
 │   │   ├── settings.ts       # Settings schema and normalization
+│   │   ├── shell.ts          # Supported shell types
 │   │   ├── worktree.ts       # Worktree models and metadata helpers
 │   │   └── worktree-target.ts # Worktree target resolution rules
 │   ├── infra/
@@ -378,7 +384,7 @@ wt/
 │   │   ├── github/           # GitHub CLI integration for PR checkout
 │   │   ├── storage/          # Settings and metadata persistence
 │   │   ├── scripts/          # Pre/post script execution
-│   │   ├── shell/            # Shell cd handoff and wrapper updates
+│   │   ├── shell/            # Shell cd handoff and wrapper generation
 │   │   └── update/           # Release lookup and binary replacement
 │   ├── config/
 │   │   └── settings.ts       # Compatibility exports for settings access
@@ -388,10 +394,6 @@ wt/
 │   │   ├── git.ts            # Compatibility shim for legacy git helpers
 │   │   ├── script.ts         # Compatibility shim for script helpers
 │   │   └── cd.ts             # Compatibility shim for shell cd handoff
-├── shell/
-│   ├── wt.zsh                # Zsh wrapper function
-│   ├── wt.bash               # Bash wrapper function
-│   └── wt.fish               # Fish wrapper function
 ├── .github/workflows/ci.yml  # CI checks
 ├── package.json
 └── tsconfig.json

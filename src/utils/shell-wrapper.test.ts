@@ -3,13 +3,12 @@ import { describe, expect, test } from "bun:test";
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { fileURLToPath } from "url";
+import { renderShellWrapper } from "../infra/shell/installer.js";
 
 type ShellName = "bash" | "zsh" | "fish";
 
@@ -42,7 +41,6 @@ interface ShellProcessResult {
   stderr: string;
 }
 
-const shellDir = fileURLToPath(new URL("../../shell/", import.meta.url));
 const shellCases = [
   { name: "bash", scriptName: "wt.bash" },
   { name: "zsh", scriptName: "wt.zsh" },
@@ -65,10 +63,6 @@ function runWrapper(
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-wrapper-"));
 
   try {
-    const wrapperTemplate = readFileSync(
-      join(shellDir, shellCase.scriptName),
-      "utf-8"
-    );
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
 
@@ -87,7 +81,7 @@ function runWrapper(
 
     writeFileSync(
       wrapperPath,
-      wrapperTemplate.replaceAll("/path/to/wt", mockWtPath),
+      renderShellWrapper(shellCase.name, mockWtPath),
       "utf-8"
     );
 
@@ -144,10 +138,6 @@ function runCompletion(
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
 
   try {
-    const wrapperTemplate = readFileSync(
-      join(shellDir, shellCase.scriptName),
-      "utf-8"
-    );
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
 
@@ -181,7 +171,7 @@ function runCompletion(
 
     writeFileSync(
       wrapperPath,
-      wrapperTemplate.replaceAll("/path/to/wt", mockWtPath),
+      renderShellWrapper(shellCase.name, mockWtPath),
       "utf-8"
     );
 

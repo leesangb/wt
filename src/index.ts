@@ -9,6 +9,7 @@ import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
 import { prCommand } from "./commands/pr.js";
 import { checkoutCommand } from "./commands/checkout.js";
+import { shellInstallCommand } from "./commands/shell.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -76,5 +77,14 @@ program
     "Do not remove macOS quarantine attribute after download"
   )
   .action(updateCommand);
+
+program
+  .command("shell")
+  .description("Manage shell integration")
+  .command("install <shell>")
+  .description("Install shell integration for bash, zsh, or fish")
+  .option("--binary-path <path>", "Binary path to embed in the shell wrapper")
+  .option("--shell-dir <path>", "Directory to install shell wrappers into")
+  .action(shellInstallCommand);
 
 await program.parseAsync();

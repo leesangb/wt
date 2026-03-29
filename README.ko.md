@@ -35,7 +35,7 @@ cd wt
 - Bun 설치 여부 확인
 - `bun install` 및 `bun run build` 자동 실행
 - `wt` 바이너리를 `~/.local/bin/wt`에 설치
-- shell wrapper 스크립트를 `~/.wt/shell/`로 복사
+- `~/.wt/shell/`에 shell wrapper 스크립트 생성
 - shell 설정 파일(`.zshrc`, `.bashrc`, 또는 `config.fish`)에 shell wrapper source 라인 자동 추가
 - 자동 cd 기능 설정
 
@@ -46,27 +46,31 @@ source ~/.zshrc  # 또는 ~/.bashrc 또는 ~/.config/fish/config.fish
 
 ### 수동 Shell 통합 (선택사항)
 
-수동 설정을 선호하거나 설치 스크립트가 자동으로 shell을 구성하지 않은 경우, `~/.wt/shell/`에 설치된 wrapper 스크립트를 수동으로 source할 수 있습니다:
+수동 설정을 선호하거나 특정 바이너리 경로 기준으로 shell 통합을 다시 만들고 싶다면, `wt shell install <shell>`을 실행한 뒤 `~/.wt/shell/`에 생성된 wrapper를 source하면 됩니다:
 
 #### Zsh (~/.zshrc)
 
 ```bash
+wt shell install zsh
 source ~/.wt/shell/wt.zsh
 ```
 
 #### Bash (~/.bashrc)
 
 ```bash
+wt shell install bash
 source ~/.wt/shell/wt.bash
 ```
 
 #### Fish (~/.config/fish/config.fish)
 
 ```fish
+wt shell install fish
 source ~/.wt/shell/wt.fish
 ```
 
-**참고:** shell wrapper 스크립트는 설치 시 `~/.wt/shell/`에 자동으로 설치됩니다.
+**참고:** `wt shell install <shell>`은 `wt`를 실행한 현재 launch command를 wrapper 안에 기록해 `~/.wt/shell/`에 저장합니다.
+특정 실행 파일 경로를 고정하고 싶다면 `--binary-path <path>`를 사용하세요. 그 경로가 바뀌면 이 명령을 다시 실행해 wrapper를 재생성하면 됩니다.
 
 ### 제거
 
@@ -364,6 +368,7 @@ wt/
 │   │   ├── list.ts            # wt list / wt ls
 │   │   ├── remove.ts          # wt remove / wt rm
 │   │   ├── cd.ts              # wt cd
+│   │   ├── shell.ts           # wt shell install
 │   │   └── update.ts          # wt update
 │   ├── app/
 │   │   ├── repository-context.ts # 현재 cwd 기준 repo root/name 해석
@@ -372,6 +377,7 @@ wt/
 │   │   └── use-cases/            # command 워크플로
 │   ├── domain/
 │   │   ├── settings.ts        # 설정 스키마와 정규화
+│   │   ├── shell.ts           # 지원하는 shell 타입
 │   │   ├── worktree.ts        # worktree 모델과 메타데이터 헬퍼
 │   │   └── worktree-target.ts # worktree 대상 해석 규칙
 │   ├── infra/
@@ -379,7 +385,7 @@ wt/
 │   │   ├── github/            # PR checkout용 GitHub CLI 연동
 │   │   ├── storage/           # 설정 및 메타데이터 저장
 │   │   ├── scripts/           # pre/post 스크립트 실행
-│   │   ├── shell/             # shell cd handoff 및 wrapper 업데이트
+│   │   ├── shell/             # shell cd handoff 및 wrapper 생성
 │   │   └── update/            # 릴리스 조회 및 바이너리 교체
 │   ├── config/
 │   │   └── settings.ts        # 설정 접근용 호환 export
@@ -389,10 +395,6 @@ wt/
 │   │   ├── git.ts             # 기존 git helper 호환 shim
 │   │   ├── script.ts          # 기존 script helper 호환 shim
 │   │   └── cd.ts              # shell cd handoff 호환 shim
-├── shell/
-│   ├── wt.zsh                 # Zsh wrapper 함수
-│   ├── wt.bash                # Bash wrapper 함수
-│   └── wt.fish                # Fish wrapper 함수
 ├── .github/workflows/ci.yml   # CI 체크
 ├── package.json
 └── tsconfig.json

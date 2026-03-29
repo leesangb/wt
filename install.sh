@@ -70,26 +70,25 @@ if [ ! -d "$INSTALL_DIR" ]; then
   mkdir -p "$INSTALL_DIR"
 fi
 
-# Create shell script directory
-echo -e "${BLUE}Creating shell script directory at ${SHELL_DIR}...${NC}"
-mkdir -p "$SHELL_DIR"
-
-# Copy shell wrapper scripts
-echo -e "${BLUE}Copying shell wrapper scripts...${NC}"
-for shell_file in "${SCRIPT_DIR}/shell/"*.{zsh,bash,fish}; do
-  if [ -f "$shell_file" ]; then
-    # Replace /path/to/wt with actual binary path and copy
-    filename=$(basename "$shell_file")
-    sed "s|/path/to/wt|${BINARY_PATH}|g" "$shell_file" > "${SHELL_DIR}/${filename}"
-    echo -e "${GREEN}✓ Copied ${filename}${NC}"
-  fi
-done
-
 # Install binary
 echo -e "${BLUE}Installing wt binary to ${BINARY_PATH}...${NC}"
 cp "${SCRIPT_DIR}/wt" "$BINARY_PATH"
 chmod +x "$BINARY_PATH"
 echo -e "${GREEN}✓ Binary installed${NC}\n"
+
+# Create shell script directory
+echo -e "${BLUE}Creating shell script directory at ${SHELL_DIR}...${NC}"
+mkdir -p "$SHELL_DIR"
+
+# Generate shell wrapper scripts using the installed binary
+echo -e "${BLUE}Generating shell wrapper scripts...${NC}"
+for shell_name in zsh bash fish; do
+  "${BINARY_PATH}" shell install "$shell_name" \
+    --binary-path "${BINARY_PATH}" \
+    --shell-dir "${SHELL_DIR}" > /dev/null
+  echo -e "${GREEN}✓ Generated wt.${shell_name}${NC}"
+done
+echo ""
 
 # Check if INSTALL_DIR is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
@@ -109,7 +108,7 @@ add_source_to_config() {
     touch "$config_file"
   fi
   
-  local source_line="source ${wrapper_path}"
+  local source_line="source \"${wrapper_path}\""
   
   # Check if source line already exists
   if grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file" && [ $FORCE_INSTALL -eq 0 ]; then
