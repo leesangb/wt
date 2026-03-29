@@ -318,6 +318,9 @@ function runWrappedBashSession(
   const tempDir = makeTempDir("wt-cli-e2e-");
   createCliRunner(tempDir);
   const wrapperPath = createBashWrapper(tempDir);
+  const mergedPath = [tempDir, envOverrides.PATH, process.env.PATH]
+    .filter(Boolean)
+    .join(":");
   const command = [
     "shopt -s expand_aliases",
     'alias cd="echo alias-hit"',
@@ -330,10 +333,10 @@ function runWrappedBashSession(
     encoding: "utf-8",
     env: {
       ...process.env,
+      ...envOverrides,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
-      PATH: `${tempDir}:${process.env.PATH ?? ""}`,
-      ...envOverrides,
+      PATH: mergedPath,
     },
   });
 
