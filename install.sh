@@ -78,9 +78,8 @@ mkdir -p "$SHELL_DIR"
 echo -e "${BLUE}Copying shell wrapper scripts...${NC}"
 for shell_file in "${SCRIPT_DIR}/shell/"*.{zsh,bash,fish}; do
   if [ -f "$shell_file" ]; then
-    # Replace /path/to/wt with actual binary path and copy
     filename=$(basename "$shell_file")
-    sed "s|/path/to/wt|${BINARY_PATH}|g" "$shell_file" > "${SHELL_DIR}/${filename}"
+    cp "$shell_file" "${SHELL_DIR}/${filename}"
     echo -e "${GREEN}✓ Copied ${filename}${NC}"
   fi
 done

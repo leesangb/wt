@@ -177,7 +177,7 @@ function updateSettings(
 }
 
 function createCliRunner(tempDir: string): string {
-  const cliPath = join(tempDir, "wt-cli");
+  const cliPath = join(tempDir, "wt");
   writeFileSync(
     cliPath,
     [
@@ -190,13 +190,11 @@ function createCliRunner(tempDir: string): string {
   return cliPath;
 }
 
-function createBashWrapper(tempDir: string, cliPath: string): string {
+function createBashWrapper(tempDir: string): string {
   const wrapperPath = join(tempDir, "wt.bash");
-  const wrapperTemplate = readFileSync(bashWrapperTemplatePath, "utf-8");
-
   writeFileSync(
     wrapperPath,
-    wrapperTemplate.replaceAll("/path/to/wt", cliPath),
+    readFileSync(bashWrapperTemplatePath, "utf-8"),
     "utf-8"
   );
 
@@ -318,8 +316,8 @@ function runWrappedBashSession(
   envOverrides: Record<string, string | undefined> = {}
 ): ShellSessionResult {
   const tempDir = makeTempDir("wt-cli-e2e-");
-  const cliPath = createCliRunner(tempDir);
-  const wrapperPath = createBashWrapper(tempDir, cliPath);
+  createCliRunner(tempDir);
+  const wrapperPath = createBashWrapper(tempDir);
   const command = [
     "shopt -s expand_aliases",
     'alias cd="echo alias-hit"',
@@ -334,6 +332,7 @@ function runWrappedBashSession(
       ...process.env,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
+      PATH: `${tempDir}:${process.env.PATH ?? ""}`,
       ...envOverrides,
     },
   });

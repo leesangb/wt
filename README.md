@@ -67,6 +67,7 @@ source ~/.wt/shell/wt.fish
 ```
 
 **Note:** The shell wrapper scripts are automatically installed to `~/.wt/shell/` during installation.
+They call `wt` via your `PATH`, so they usually do not need to be rewritten when the binary is updated in place.
 
 ### Uninstallation
 

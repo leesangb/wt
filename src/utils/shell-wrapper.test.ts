@@ -65,12 +65,9 @@ function runWrapper(
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-wrapper-"));
 
   try {
-    const wrapperTemplate = readFileSync(
-      join(shellDir, shellCase.scriptName),
-      "utf-8"
-    );
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
+    const pathWt = join(tempDir, "wt");
 
     writeFileSync(
       mockWtPath,
@@ -85,9 +82,13 @@ function runWrapper(
       { mode: 0o755 }
     );
 
+    writeFileSync(pathWt, `#!/bin/sh\nexec "${mockWtPath}" "$@"\n`, {
+      mode: 0o755,
+    });
+
     writeFileSync(
       wrapperPath,
-      wrapperTemplate.replaceAll("/path/to/wt", mockWtPath),
+      readFileSync(join(shellDir, shellCase.scriptName), "utf-8"),
       "utf-8"
     );
 
@@ -122,6 +123,7 @@ function runWrapper(
         WRAPPER_PATH: wrapperPath,
         MOCK_TARGET_DIR: targetDir,
         MOCK_EXIT_CODE: String(options.exitCode ?? 0),
+        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
       },
     });
 
@@ -144,12 +146,9 @@ function runCompletion(
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
 
   try {
-    const wrapperTemplate = readFileSync(
-      join(shellDir, shellCase.scriptName),
-      "utf-8"
-    );
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
+    const pathWt = join(tempDir, "wt");
 
     writeFileSync(
       mockWtPath,
@@ -179,9 +178,13 @@ function runCompletion(
       { mode: 0o755 }
     );
 
+    writeFileSync(pathWt, `#!/bin/sh\nexec "${mockWtPath}" "$@"\n`, {
+      mode: 0o755,
+    });
+
     writeFileSync(
       wrapperPath,
-      wrapperTemplate.replaceAll("/path/to/wt", mockWtPath),
+      readFileSync(join(shellDir, shellCase.scriptName), "utf-8"),
       "utf-8"
     );
 
@@ -219,6 +222,7 @@ function runCompletion(
       env: {
         ...process.env,
         WRAPPER_PATH: wrapperPath,
+        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
       },
     });
 

@@ -1,7 +1,4 @@
-import { homedir } from "os";
-import { join } from "path";
 import { AppError } from "../errors.js";
-import { updateInstalledShellWrappers } from "../../infra/shell/integration.js";
 import {
   downloadBinary,
   removeMacosQuarantine,
@@ -25,9 +22,6 @@ export interface UpdateInstallationResult {
   targetVersion?: string;
   updated: boolean;
   assetName?: string;
-  shellScriptsUpdated: string[];
-  shellScriptWarnings: string[];
-  shellScriptsSkipped: boolean;
 }
 
 function assertVersionFormat(version: string, label: string): void {
@@ -75,9 +69,6 @@ export async function updateInstallation(
         targetVersion,
         updated: false,
         assetName,
-        shellScriptsUpdated: [],
-        shellScriptWarnings: [],
-        shellScriptsSkipped: false,
       };
     }
 
@@ -99,9 +90,6 @@ export async function updateInstallation(
         targetVersion,
         updated: false,
         assetName,
-        shellScriptsUpdated: [],
-        shellScriptWarnings: [],
-        shellScriptsSkipped: false,
       };
     }
 
@@ -116,20 +104,10 @@ export async function updateInstallation(
     await removeMacosQuarantine(execPath);
   }
 
-  const shellDir = join(homedir(), ".wt", "shell");
-  const shellUpdate = await updateInstalledShellWrappers({
-    version: targetVersion,
-    binaryPath: execPath,
-    shellDir,
-  });
-
   return {
     currentVersion,
     targetVersion,
     updated: true,
     assetName,
-    shellScriptsUpdated: shellUpdate.updatedScripts,
-    shellScriptWarnings: shellUpdate.warnings,
-    shellScriptsSkipped: shellUpdate.skipped,
   };
 }
