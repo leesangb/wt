@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.3.0
+
+### Minor Changes
+
+- 8e51125: update installation
+
 ## 0.2.7
 
 ### Patch Changes
