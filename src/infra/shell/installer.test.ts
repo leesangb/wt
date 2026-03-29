@@ -23,7 +23,7 @@ describe("shell installer", () => {
     try {
       const result = installShellWrapper({
         shell: "zsh",
-        binaryPath: "/tmp/wt-bin",
+        command: "/tmp/wt-bin",
         shellDir,
       });
 
@@ -35,5 +35,13 @@ describe("shell installer", () => {
     } finally {
       rmSync(shellDir, { recursive: true, force: true });
     }
+  });
+
+  test("renders fish completion helpers with the command kept as one token", () => {
+    const wrapper = renderShellWrapper("fish", "/tmp/wt bin");
+
+    expect(wrapper).toContain('function __wt_complete_cd');
+    expect(wrapper).toContain('"/tmp/wt bin" list --completion fish 2>/dev/null');
+    expect(wrapper).toContain('complete -c wt -n "__fish_seen_subcommand_from cd" -a "(__wt_complete_cd)" -f');
   });
 });

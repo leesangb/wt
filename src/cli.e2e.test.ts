@@ -430,6 +430,20 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(`source "${wrapperPath}"`);
   });
 
+  test("shell install defaults to the current launch command", () => {
+    const tempDir = makeTempDir("wt-shell-install-default-");
+    const shellDir = join(tempDir, "shell");
+    const wrapperPath = join(shellDir, "wt.bash");
+    const result = runCliCapture(["shell", "install", "bash", "--shell-dir", shellDir], tempDir);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const wrapper = readFileSync(wrapperPath, "utf-8");
+    expect(wrapper).toContain(`"${process.execPath}" "${cliEntry}" "$@"`);
+    expect(wrapper).toContain(
+      `"${process.execPath}" "${cliEntry}" list --completion bash 2>/dev/null`
+    );
+  });
+
   test(
     "creates a worktree, pushes it to a local remote, and navigates via the bash wrapper",
     async () => {

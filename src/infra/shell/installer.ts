@@ -4,7 +4,7 @@ import type { SupportedShell } from "../../domain/shell.js";
 
 export interface InstallShellWrapperOptions {
   shell: SupportedShell;
-  binaryPath: string;
+  command: string | readonly string[];
   shellDir: string;
 }
 
@@ -20,6 +20,18 @@ function escapeDoubleQuotedShell(value: string): string {
     .replaceAll('"', '\\"')
     .replaceAll("$", "\\$")
     .replaceAll("`", "\\`");
+}
+
+function normalizeShellCommand(
+  command: string | readonly string[]
+): readonly string[] {
+  return typeof command === "string" ? [command] : command;
+}
+
+function renderShellCommand(command: string | readonly string[]): string {
+  return normalizeShellCommand(command)
+    .map((part) => `"${escapeDoubleQuotedShell(part)}"`)
+    .join(" ");
 }
 
 export function getShellWrapperFileName(shell: SupportedShell): string {
@@ -41,8 +53,8 @@ export function getShellSourceLine(
   return `source "${escapeDoubleQuotedShell(wrapperPath)}"`;
 }
 
-function renderBashWrapper(binaryPath: string): string {
-  const escapedBinaryPath = escapeDoubleQuotedShell(binaryPath);
+function renderBashWrapper(command: string | readonly string[]): string {
+  const renderedCommand = renderShellCommand(command);
 
   return `# wt shell wrapper for bash
 # Add this to your ~/.bashrc
@@ -50,7 +62,7 @@ function renderBashWrapper(binaryPath: string): string {
 wt() {
   local cd_file target_dir cd_status
   cd_file=$(mktemp)
-  WT_SHELL_CD_FILE="$cd_file" "${escapedBinaryPath}" "$@"
+  WT_SHELL_CD_FILE="$cd_file" ${renderedCommand} "$@"
   local exit_code=$?
 
   if [ -s "$cd_file" ]; then
@@ -70,14 +82,14 @@ _wt_completion() {
   case "\${COMP_WORDS[1]}" in
     cd)
       if [ $COMP_CWORD -eq 2 ]; then
-        local items=$("${escapedBinaryPath}" list --completion bash 2>/dev/null)
+        local items=$(${renderedCommand} list --completion bash 2>/dev/null)
         local ids=$(echo "$items" | cut -d: -f1)
         COMPREPLY=($(compgen -W "$ids" -- "\${COMP_WORDS[2]}"))
       fi
       ;;
     rm|remove)
       if [ $COMP_CWORD -ge 2 ]; then
-        local items=$("${escapedBinaryPath}" list --completion bash --exclude-main-worktree 2>/dev/null)
+        local items=$(${renderedCommand} list --completion bash --exclude-main-worktree 2>/dev/null)
         local ids=$(echo "$items" | cut -d: -f1)
         COMPREPLY=($(compgen -W "$ids" -- "\${COMP_WORDS[$COMP_CWORD]}"))
       fi
@@ -89,8 +101,8 @@ complete -F _wt_completion wt
 `;
 }
 
-function renderZshWrapper(binaryPath: string): string {
-  const escapedBinaryPath = escapeDoubleQuotedShell(binaryPath);
+function renderZshWrapper(command: string | readonly string[]): string {
+  const renderedCommand = renderShellCommand(command);
 
   return `# wt shell wrapper for zsh
 # Add this to your ~/.zshrc
@@ -98,7 +110,7 @@ function renderZshWrapper(binaryPath: string): string {
 wt() {
   local cd_file target_dir cd_status
   cd_file=$(mktemp)
-  WT_SHELL_CD_FILE="$cd_file" "${escapedBinaryPath}" "$@"
+  WT_SHELL_CD_FILE="$cd_file" ${renderedCommand} "$@"
   local exit_code=$?
 
   if [ -s "$cd_file" ]; then
@@ -141,11 +153,11 @@ _wt_completion() {
     args)
       case $line[1] in
         cd)
-          suggestions=("\${(@f)$("${escapedBinaryPath}" list --completion zsh 2>/dev/null)}")
+          suggestions=("\${(@f)$(${renderedCommand} list --completion zsh 2>/dev/null)}")
           _describe 'worktree' suggestions
           ;;
         rm|remove)
-          suggestions=("\${(@f)$("${escapedBinaryPath}" list --completion zsh --exclude-main-worktree 2>/dev/null)}")
+          suggestions=("\${(@f)$(${renderedCommand} list --completion zsh --exclude-main-worktree 2>/dev/null)}")
           _describe 'worktree' suggestions
           ;;
       esac
@@ -157,15 +169,15 @@ compdef _wt_completion wt
 `;
 }
 
-function renderFishWrapper(binaryPath: string): string {
-  const escapedBinaryPath = escapeDoubleQuotedShell(binaryPath);
+function renderFishWrapper(command: string | readonly string[]): string {
+  const renderedCommand = renderShellCommand(command);
 
   return `# wt shell wrapper for fish
 # Add this to your ~/.config/fish/config.fish
 
 function wt
     set -l cd_file (mktemp)
-    env WT_SHELL_CD_FILE="$cd_file" "${escapedBinaryPath}" $argv
+    env WT_SHELL_CD_FILE="$cd_file" ${renderedCommand} $argv
     set -l exit_code $status
 
     if test -s "$cd_file"
@@ -181,22 +193,30 @@ function wt
     return $exit_code
 end
 
-complete -c wt -n "__fish_seen_subcommand_from cd" -a "("${escapedBinaryPath}" list --completion fish 2>/dev/null)" -f
-complete -c wt -n "__fish_seen_subcommand_from rm remove" -a "("${escapedBinaryPath}" list --completion fish --exclude-main-worktree 2>/dev/null)" -f
+function __wt_complete_cd
+    ${renderedCommand} list --completion fish 2>/dev/null
+end
+
+function __wt_complete_remove
+    ${renderedCommand} list --completion fish --exclude-main-worktree 2>/dev/null
+end
+
+complete -c wt -n "__fish_seen_subcommand_from cd" -a "(__wt_complete_cd)" -f
+complete -c wt -n "__fish_seen_subcommand_from rm remove" -a "(__wt_complete_remove)" -f
 `;
 }
 
 export function renderShellWrapper(
   shell: SupportedShell,
-  binaryPath: string
+  command: string | readonly string[]
 ): string {
   switch (shell) {
     case "bash":
-      return renderBashWrapper(binaryPath);
+      return renderBashWrapper(command);
     case "zsh":
-      return renderZshWrapper(binaryPath);
+      return renderZshWrapper(command);
     case "fish":
-      return renderFishWrapper(binaryPath);
+      return renderFishWrapper(command);
   }
 }
 
@@ -208,7 +228,7 @@ export function installShellWrapper(
   const wrapperPath = getShellWrapperPath(options.shell, options.shellDir);
   writeFileSync(
     wrapperPath,
-    renderShellWrapper(options.shell, options.binaryPath),
+    renderShellWrapper(options.shell, options.command),
     "utf-8"
   );
 

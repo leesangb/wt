@@ -69,8 +69,8 @@ wt shell install fish
 source ~/.wt/shell/wt.fish
 ```
 
-**참고:** `wt shell install <shell>`은 실행 시점의 바이너리 경로를 wrapper 안에 기록해 `~/.wt/shell/`에 저장합니다.
-설치된 바이너리 경로가 바뀌면 이 명령을 다시 실행해 wrapper를 재생성하세요.
+**참고:** `wt shell install <shell>`은 `wt`를 실행한 현재 launch command를 wrapper 안에 기록해 `~/.wt/shell/`에 저장합니다.
+특정 실행 파일 경로를 고정하고 싶다면 `--binary-path <path>`를 사용하세요. 그 경로가 바뀌면 이 명령을 다시 실행해 wrapper를 재생성하면 됩니다.
 
 ### 제거
 

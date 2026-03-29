@@ -69,8 +69,8 @@ wt shell install fish
 source ~/.wt/shell/wt.fish
 ```
 
-**Note:** `wt shell install <shell>` writes a wrapper to `~/.wt/shell/` and embeds the binary path used when you run the command.
-If the installed binary path changes, run the command again to regenerate the wrapper.
+**Note:** `wt shell install <shell>` writes a wrapper to `~/.wt/shell/` and embeds the command used to launch `wt`.
+If you want to pin a specific executable path, pass `--binary-path <path>`. If that path changes later, run the command again to regenerate the wrapper.
 
 ### Uninstallation
 
