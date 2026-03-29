@@ -1,3 +1,4 @@
+import { realpathSync } from "fs";
 import { spawnSync } from "node:child_process";
 import { AppError } from "../../app/errors.js";
 
@@ -10,6 +11,7 @@ const HOMEBREW_PREFIXES = [
 export interface HomebrewProcessInfo {
   argv0?: string;
   execPath?: string;
+  resolvePath?: (path: string) => string | undefined;
 }
 
 export interface HomebrewUpdatePlan {
@@ -41,6 +43,14 @@ function normalizeExecutablePath(path: string): string {
   return path.replaceAll("\\", "/");
 }
 
+function defaultResolvePath(path: string): string | undefined {
+  try {
+    return normalizeExecutablePath(realpathSync(path));
+  } catch {
+    return undefined;
+  }
+}
+
 function looksLikePath(value: string | undefined): value is string {
   if (!value) {
     return false;
@@ -49,16 +59,38 @@ function looksLikePath(value: string | undefined): value is string {
   return value.includes("/") || value.includes("\\");
 }
 
-function isHomebrewExecutablePath(path: string): boolean {
-  const normalizedPath = normalizeExecutablePath(path);
-
+function isHomebrewManagedTargetPath(normalizedPath: string): boolean {
   return HOMEBREW_PREFIXES.some((prefix) => {
     return (
-      normalizedPath === `${prefix}/bin/wt` ||
       normalizedPath.startsWith(`${prefix}/Cellar/wt/`) ||
       normalizedPath.startsWith(`${prefix}/opt/wt/`)
     );
   });
+}
+
+function isHomebrewLinkedBinPath(normalizedPath: string): boolean {
+  return HOMEBREW_PREFIXES.some(
+    (prefix) => normalizedPath === `${prefix}/bin/wt`
+  );
+}
+
+function isHomebrewExecutablePath(
+  path: string,
+  resolvePath: (path: string) => string | undefined = defaultResolvePath
+): boolean {
+  const normalizedPath = normalizeExecutablePath(path);
+
+  if (isHomebrewManagedTargetPath(normalizedPath)) {
+    return true;
+  }
+
+  if (!isHomebrewLinkedBinPath(normalizedPath)) {
+    return false;
+  }
+
+  const resolvedPath = resolvePath(path);
+
+  return Boolean(resolvedPath && isHomebrewManagedTargetPath(resolvedPath));
 }
 
 export function isHomebrewManagedInstallation(
@@ -67,12 +99,15 @@ export function isHomebrewManagedInstallation(
     execPath: process.execPath,
   }
 ): boolean {
+  const resolvePath = processInfo.resolvePath ?? defaultResolvePath;
   const candidates = [
     processInfo.execPath,
     looksLikePath(processInfo.argv0) ? processInfo.argv0 : undefined,
   ].filter((value): value is string => Boolean(value));
 
-  return candidates.some(isHomebrewExecutablePath);
+  return candidates.some((candidate) =>
+    isHomebrewExecutablePath(candidate, resolvePath)
+  );
 }
 
 export function buildHomebrewUpdatePlan(

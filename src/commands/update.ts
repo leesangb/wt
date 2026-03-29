@@ -2,14 +2,10 @@ import chalk from "chalk";
 import { runCommand } from "../cli/command-runtime.js";
 import { runWithSpinner } from "../cli/spinner.js";
 import {
+  getUpdateStrategy,
   updateInstallation,
   type UpdateInstallationOptions,
 } from "../app/use-cases/update-installation.js";
-import {
-  buildHomebrewUpdatePlan,
-  isHomebrewManagedInstallation,
-  runHomebrewUpdate,
-} from "../infra/update/homebrew.js";
 
 function buildUpdateSpinnerText(options: UpdateInstallationOptions): string {
   const targetVersion = options.version?.replace(/^v/, "");
@@ -25,23 +21,29 @@ export async function updateCommand(
   options: UpdateInstallationOptions
 ): Promise<void> {
   await runCommand(async () => {
-    if (isHomebrewManagedInstallation()) {
-      const plan = buildHomebrewUpdatePlan(options);
+    const currentVersion = (await import("../../package.json")).default
+      .version as string;
+    const strategy = getUpdateStrategy();
 
-      console.log(
-        chalk.dim(`Homebrew installation detected. Running: ${plan.displayCommand}`)
-      );
-
-      runHomebrewUpdate(plan);
+    if (strategy === "homebrew") {
+      await updateInstallation(currentVersion, options, {
+        onBeforeHomebrewUpdate: (command) => {
+          console.log(
+            chalk.dim(`Homebrew installation detected. Running: ${command}`)
+          );
+        },
+      });
       return;
     }
 
-    const currentVersion = (await import("../../package.json")).default
-      .version as string;
     const result = await runWithSpinner(
       buildUpdateSpinnerText(options),
       () => updateInstallation(currentVersion, options)
     );
+
+    if (result.strategy !== "standalone") {
+      return;
+    }
 
     if (!result.updated) {
       if (result.targetVersion && result.targetVersion !== currentVersion) {

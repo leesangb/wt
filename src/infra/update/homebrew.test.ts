@@ -12,6 +12,7 @@ describe("homebrew update support", () => {
       isHomebrewManagedInstallation({
         argv0: "wt",
         execPath: "/opt/homebrew/bin/wt",
+        resolvePath: () => "/opt/homebrew/Cellar/wt/0.3.0/bin/wt",
       })
     ).toBeTrue();
   });
@@ -21,6 +22,7 @@ describe("homebrew update support", () => {
       isHomebrewManagedInstallation({
         argv0: "/opt/homebrew/bin/wt",
         execPath: "/opt/homebrew/Cellar/wt/0.3.0/bin/wt",
+        resolvePath: () => "/opt/homebrew/Cellar/wt/0.3.0/bin/wt",
       })
     ).toBeTrue();
   });
@@ -30,6 +32,16 @@ describe("homebrew update support", () => {
       isHomebrewManagedInstallation({
         argv0: "/Users/test/.local/bin/wt",
         execPath: "/Users/test/.local/bin/wt",
+      })
+    ).toBeFalse();
+  });
+
+  test("does not classify a plain /usr/local/bin install as Homebrew-managed", () => {
+    expect(
+      isHomebrewManagedInstallation({
+        argv0: "/usr/local/bin/wt",
+        execPath: "/usr/local/bin/wt",
+        resolvePath: () => "/usr/local/bin/wt",
       })
     ).toBeFalse();
   });

@@ -9,6 +9,13 @@ import {
   getReleaseAssetDownloadUrl,
   getSupportedMacosAssetName,
 } from "../../infra/update/github-release-provider.js";
+import {
+  buildHomebrewUpdatePlan,
+  isHomebrewManagedInstallation,
+  runHomebrewUpdate,
+  type HomebrewProcessInfo,
+  type HomebrewUpdatePlan,
+} from "../../infra/update/homebrew.js";
 import { compareVersions } from "../../infra/update/version.js";
 
 export interface UpdateInstallationOptions {
@@ -17,11 +24,29 @@ export interface UpdateInstallationOptions {
   removeQuarantine?: boolean;
 }
 
-export interface UpdateInstallationResult {
+export interface StandaloneUpdateInstallationResult {
+  strategy: "standalone";
   currentVersion: string;
   targetVersion?: string;
   updated: boolean;
   assetName?: string;
+}
+
+export interface HomebrewDelegatedUpdateResult {
+  strategy: "homebrew";
+  delegatedCommand: string;
+}
+
+export type UpdateInstallationResult =
+  | StandaloneUpdateInstallationResult
+  | HomebrewDelegatedUpdateResult;
+
+export type UpdateStrategy = "standalone" | "homebrew";
+
+export interface UpdateInstallationContext {
+  processInfo?: HomebrewProcessInfo;
+  onBeforeHomebrewUpdate?: (command: string) => void;
+  runHomebrewUpdate?: (plan: HomebrewUpdatePlan) => void;
 }
 
 function assertVersionFormat(version: string, label: string): void {
@@ -32,12 +57,16 @@ function assertVersionFormat(version: string, label: string): void {
   }
 }
 
-export async function updateInstallation(
+export function getUpdateStrategy(
+  processInfo?: HomebrewProcessInfo
+): UpdateStrategy {
+  return isHomebrewManagedInstallation(processInfo) ? "homebrew" : "standalone";
+}
+
+async function updateStandaloneInstallation(
   currentVersion: string,
   options: UpdateInstallationOptions
-): Promise<UpdateInstallationResult> {
-  assertVersionFormat(currentVersion, "current");
-
+): Promise<StandaloneUpdateInstallationResult> {
   if (process.platform !== "darwin") {
     throw new AppError(
       "Update command currently supports only macOS (darwin)."
@@ -65,6 +94,7 @@ export async function updateInstallation(
 
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
       return {
+        strategy: "standalone",
         currentVersion,
         targetVersion,
         updated: false,
@@ -86,6 +116,7 @@ export async function updateInstallation(
 
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
       return {
+        strategy: "standalone",
         currentVersion,
         targetVersion,
         updated: false,
@@ -105,9 +136,32 @@ export async function updateInstallation(
   }
 
   return {
+    strategy: "standalone",
     currentVersion,
     targetVersion,
     updated: true,
     assetName,
   };
+}
+
+export async function updateInstallation(
+  currentVersion: string,
+  options: UpdateInstallationOptions,
+  context: UpdateInstallationContext = {}
+): Promise<UpdateInstallationResult> {
+  assertVersionFormat(currentVersion, "current");
+
+  if (getUpdateStrategy(context.processInfo) === "homebrew") {
+    const plan = buildHomebrewUpdatePlan(options);
+
+    context.onBeforeHomebrewUpdate?.(plan.displayCommand);
+    (context.runHomebrewUpdate ?? runHomebrewUpdate)(plan);
+
+    return {
+      strategy: "homebrew",
+      delegatedCommand: plan.displayCommand,
+    };
+  }
+
+  return updateStandaloneInstallation(currentVersion, options);
 }
