@@ -17,6 +17,18 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 
 ## 설치
 
+### Homebrew로 설치
+
+```bash
+brew install leesangb/cli/wt
+```
+
+Homebrew 설치에서도 선택적으로 shell integration을 추가할 수 있습니다:
+
+```bash
+wt shell install zsh
+```
+
 ### 소스에서 빌드
 
 ```bash
@@ -203,22 +215,36 @@ wt pr 123 --no-cd
 
 ### wt 업데이트
 
-최신 릴리스로 업데이트 (현재 macOS만 지원):
+`wt`를 Homebrew로 설치한 경우 `wt update`는 자동으로 Homebrew에 위임됩니다:
+
+```bash
+wt update
+# 내부적으로: brew upgrade wt
+```
+
+Homebrew 설치에서 `--force`는 재설치로 동작합니다:
+
+```bash
+wt update --force
+# 내부적으로: brew reinstall wt
+```
+
+Standalone 바이너리 설치는 최신 릴리스로 직접 업데이트합니다 (현재 macOS만 지원):
 ```bash
 wt update
 ```
 
-현재 버전을 강제로 다시 다운로드:
+Standalone 바이너리 설치는 현재 버전을 강제로 다시 다운로드할 수도 있습니다:
 ```bash
 wt update --force
 ```
 
-특정 버전 설치:
+특정 버전 설치는 Standalone 바이너리 설치에서만 지원합니다:
 ```bash
 wt update --version 0.1.2
 ```
 
-quarantine 속성 제거를 건너뛰기:
+quarantine 속성 제거 건너뛰기도 Standalone 바이너리 설치에서만 지원합니다:
 ```bash
 wt update --no-remove-quarantine
 ```

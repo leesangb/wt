@@ -69,12 +69,18 @@ program
 
 program
   .command("update")
-  .description("Update wt to the latest (or specified) released version")
-  .option("-v, --version <version>", "Specific version to install (e.g. 0.3.1)")
-  .option("-f, --force", "Force re-download even if version is not newer")
+  .description("Update wt using the active installation method")
+  .option(
+    "-v, --version <version>",
+    "Specific version to install for standalone binary installs (e.g. 0.3.1)"
+  )
+  .option(
+    "-f, --force",
+    "Force re-download or reinstall even if the current version is already installed"
+  )
   .option(
     "--no-remove-quarantine",
-    "Do not remove macOS quarantine attribute after download"
+    "Do not remove macOS quarantine attribute after download for standalone binary installs"
   )
   .action(updateCommand);
 

@@ -3,6 +3,7 @@ import { AppError } from "../../app/errors.js";
 interface GithubReleaseApiAsset {
   name?: string;
   browser_download_url?: string;
+  digest?: string;
 }
 
 interface GithubReleaseApiResponse {
@@ -13,6 +14,7 @@ interface GithubReleaseApiResponse {
 export interface GithubReleaseAsset {
   name: string;
   browserDownloadUrl: string;
+  digest?: string;
 }
 
 export interface GithubRelease {
@@ -20,9 +22,9 @@ export interface GithubRelease {
   assets: GithubReleaseAsset[];
 }
 
-export async function fetchLatestRelease(): Promise<GithubRelease> {
+async function fetchRelease(path: string): Promise<GithubRelease> {
   const response = await fetch(
-    "https://api.github.com/repos/leesangb/wt/releases/latest",
+    `https://api.github.com/repos/leesangb/wt/releases/${path}`,
     {
       headers: {
         Accept: "application/vnd.github+json",
@@ -49,8 +51,17 @@ export async function fetchLatestRelease(): Promise<GithubRelease> {
       .map((asset) => ({
         name: asset.name,
         browserDownloadUrl: asset.browser_download_url,
+        digest: asset.digest,
       })),
   };
+}
+
+export async function fetchLatestRelease(): Promise<GithubRelease> {
+  return fetchRelease("latest");
+}
+
+export async function fetchReleaseByTag(version: string): Promise<GithubRelease> {
+  return fetchRelease(`tags/v${version.replace(/^v/, "")}`);
 }
 
 export function getSupportedMacosAssetName(

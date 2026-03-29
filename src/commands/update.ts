@@ -1,15 +1,13 @@
 import chalk from "chalk";
 import { runCommand } from "../cli/command-runtime.js";
 import { runWithSpinner } from "../cli/spinner.js";
-import { updateInstallation } from "../app/use-cases/update-installation.js";
+import {
+  getUpdateStrategy,
+  updateInstallation,
+  type UpdateInstallationOptions,
+} from "../app/use-cases/update-installation.js";
 
-interface UpdateOptions {
-  force?: boolean;
-  version?: string;
-  removeQuarantine?: boolean;
-}
-
-function buildUpdateSpinnerText(options: UpdateOptions): string {
+function buildUpdateSpinnerText(options: UpdateInstallationOptions): string {
   const targetVersion = options.version?.replace(/^v/, "");
 
   if (targetVersion) {
@@ -19,14 +17,33 @@ function buildUpdateSpinnerText(options: UpdateOptions): string {
   return "Checking for wt updates";
 }
 
-export async function updateCommand(options: UpdateOptions): Promise<void> {
+export async function updateCommand(
+  options: UpdateInstallationOptions
+): Promise<void> {
   await runCommand(async () => {
     const currentVersion = (await import("../../package.json")).default
       .version as string;
+    const strategy = getUpdateStrategy();
+
+    if (strategy === "homebrew") {
+      await updateInstallation(currentVersion, options, {
+        onBeforeHomebrewUpdate: (command) => {
+          console.log(
+            chalk.dim(`Homebrew installation detected. Running: ${command}`)
+          );
+        },
+      });
+      return;
+    }
+
     const result = await runWithSpinner(
       buildUpdateSpinnerText(options),
       () => updateInstallation(currentVersion, options)
     );
+
+    if (result.strategy !== "standalone") {
+      return;
+    }
 
     if (!result.updated) {
       if (result.targetVersion && result.targetVersion !== currentVersion) {
