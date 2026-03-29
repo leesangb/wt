@@ -21,4 +21,14 @@ describe("resolveDefaultShellCommand", () => {
       })
     ).toEqual(["/Users/test/.bun/bin/bun", "/tmp/wt.ts"]);
   });
+
+  test("falls back to execPath when argv0 is only a PATH-resolved command name", () => {
+    expect(
+      resolveDefaultShellCommand({
+        argv0: "wt",
+        argv: ["bun", "/$bunfs/root/wt"],
+        execPath: "/opt/homebrew/bin/wt",
+      })
+    ).toEqual(["/opt/homebrew/bin/wt"]);
+  });
 });

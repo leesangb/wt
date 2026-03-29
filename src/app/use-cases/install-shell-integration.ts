@@ -35,12 +35,22 @@ export function resolveDefaultShellCommand(
   }
 ): string[] {
   const launcherName = basename(context.argv0 || "").toLowerCase();
+  const hasExplicitPath =
+    context.argv0.includes("/") || context.argv0.includes("\\");
 
-  if (context.argv0 && !RUNTIME_LAUNCHERS.has(launcherName)) {
+  if (
+    context.argv0 &&
+    hasExplicitPath &&
+    !RUNTIME_LAUNCHERS.has(launcherName)
+  ) {
     return [resolve(context.argv0)];
   }
 
   if (context.argv[1]) {
+    if (context.argv[1].startsWith("/$bunfs/")) {
+      return [resolve(context.execPath)];
+    }
+
     return [resolve(context.execPath), resolve(context.argv[1])];
   }
 
