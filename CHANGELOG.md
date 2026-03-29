@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.3.1
+
+### Patch Changes
+
+- bec72c6: add homebrew
+
 ## 0.3.0
 
 ### Minor Changes
