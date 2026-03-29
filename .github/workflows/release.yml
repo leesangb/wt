@@ -70,6 +70,8 @@ jobs:
     runs-on: macos-latest
     needs: release
     if: needs.release.outputs.hasChangesets == 'false' && needs.release.outputs.skipRelease != 'true'
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,15 +105,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout Homebrew tap
-        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        if: env.HOMEBREW_TAP_TOKEN != ''
         uses: actions/checkout@v4
         with:
           repository: leesangb/homebrew-cli
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
           path: homebrew-cli
 
       - name: Update Homebrew formula
-        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        if: env.HOMEBREW_TAP_TOKEN != ''
         env:
           WT_VERSION: ${{ needs.release.outputs.version }}
           WT_MACOS_X64_SHA256: ${{ env.WT_MACOS_X64_SHA256 }}
@@ -119,7 +121,7 @@ jobs:
         run: bun run src/scripts/update-homebrew-tap.ts homebrew-cli
 
       - name: Commit and push Homebrew formula
-        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        if: env.HOMEBREW_TAP_TOKEN != ''
         working-directory: homebrew-cli
         run: |
           git config user.name "github-actions[bot]"
@@ -133,6 +135,6 @@ jobs:
           git push
 
       - name: Note missing Homebrew tap token
-        if: secrets.HOMEBREW_TAP_TOKEN == ''
+        if: env.HOMEBREW_TAP_TOKEN == ''
         run: |
           echo "Skipping Homebrew tap update because HOMEBREW_TAP_TOKEN is not configured." >> $GITHUB_STEP_SUMMARY
