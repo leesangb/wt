@@ -13,6 +13,7 @@ import { tmpdir } from "os";
 import { basename, join } from "path";
 import { fileURLToPath } from "url";
 import { $ } from "bun";
+import { renderShellWrapper } from "./infra/shell/installer.js";
 
 interface TestRepo {
   originDir: string;
@@ -52,7 +53,6 @@ interface FakeGithubCliOptions {
 
 const tempDirs: string[] = [];
 const cliEntry = fileURLToPath(new URL("./index.ts", import.meta.url));
-const bashWrapperTemplatePath = fileURLToPath(new URL("../shell/wt.bash", import.meta.url));
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -190,11 +190,11 @@ function createCliRunner(tempDir: string): string {
   return cliPath;
 }
 
-function createBashWrapper(tempDir: string): string {
+function createBashWrapper(tempDir: string, binaryPath: string): string {
   const wrapperPath = join(tempDir, "wt.bash");
   writeFileSync(
     wrapperPath,
-    readFileSync(bashWrapperTemplatePath, "utf-8"),
+    renderShellWrapper("bash", binaryPath),
     "utf-8"
   );
 
@@ -316,11 +316,9 @@ function runWrappedBashSession(
   envOverrides: Record<string, string | undefined> = {}
 ): ShellSessionResult {
   const tempDir = makeTempDir("wt-cli-e2e-");
-  createCliRunner(tempDir);
-  const wrapperPath = createBashWrapper(tempDir);
-  const mergedPath = [tempDir, envOverrides.PATH, process.env.PATH]
-    .filter(Boolean)
-    .join(":");
+  const cliPath = createCliRunner(tempDir);
+  const wrapperPath = createBashWrapper(tempDir, cliPath);
+  const mergedPath = [envOverrides.PATH, process.env.PATH].filter(Boolean).join(":");
   const command = [
     "shopt -s expand_aliases",
     'alias cd="echo alias-hit"',
@@ -404,6 +402,32 @@ describe("cli e2e", () => {
         .split(/\r?\n/)
         .filter((line) => line === "settings.local.json")
     ).toHaveLength(1);
+  });
+
+  test("shell install writes a wrapper with the requested binary path", () => {
+    const tempDir = makeTempDir("wt-shell-install-");
+    const shellDir = join(tempDir, "shell");
+    const binaryPath = join(tempDir, "bin", "wt");
+    const wrapperPath = join(shellDir, "wt.bash");
+    const result = runCliCapture(
+      [
+        "shell",
+        "install",
+        "bash",
+        "--binary-path",
+        binaryPath,
+        "--shell-dir",
+        shellDir,
+      ],
+      tempDir
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(wrapperPath, "utf-8")).toBe(
+      renderShellWrapper("bash", binaryPath)
+    );
+    expect(result.stdout).toContain(wrapperPath);
+    expect(result.stdout).toContain(`source "${wrapperPath}"`);
   });
 
   test(

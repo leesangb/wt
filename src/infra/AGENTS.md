@@ -36,5 +36,5 @@ This directory contains adapters for external systems and side-effecting impleme
 ## Repo-Specific Examples
 - `git/worktree-repository.ts` should wrap `git worktree` commands and related parsing.
 - `storage/settings-store.ts` should load and save settings, but settings defaults belong in domain.
-- `shell/integration.ts` should manage wrapper file refreshes, but command messaging belongs in `src/commands/update.ts`.
+- `shell/installer.ts` should generate wrapper files and source lines, but command messaging belongs in `src/commands/shell.ts`.
 - `update/*` may fetch release assets and install binaries, but should not choose CLI wording or exit semantics.

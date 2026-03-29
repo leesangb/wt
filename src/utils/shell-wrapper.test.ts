@@ -3,13 +3,12 @@ import { describe, expect, test } from "bun:test";
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { fileURLToPath } from "url";
+import { renderShellWrapper } from "../infra/shell/installer.js";
 
 type ShellName = "bash" | "zsh" | "fish";
 
@@ -42,7 +41,6 @@ interface ShellProcessResult {
   stderr: string;
 }
 
-const shellDir = fileURLToPath(new URL("../../shell/", import.meta.url));
 const shellCases = [
   { name: "bash", scriptName: "wt.bash" },
   { name: "zsh", scriptName: "wt.zsh" },
@@ -67,7 +65,6 @@ function runWrapper(
   try {
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
-    const pathWt = join(tempDir, "wt");
 
     writeFileSync(
       mockWtPath,
@@ -82,13 +79,9 @@ function runWrapper(
       { mode: 0o755 }
     );
 
-    writeFileSync(pathWt, `#!/bin/sh\nexec "${mockWtPath}" "$@"\n`, {
-      mode: 0o755,
-    });
-
     writeFileSync(
       wrapperPath,
-      readFileSync(join(shellDir, shellCase.scriptName), "utf-8"),
+      renderShellWrapper(shellCase.name, mockWtPath),
       "utf-8"
     );
 
@@ -123,7 +116,6 @@ function runWrapper(
         WRAPPER_PATH: wrapperPath,
         MOCK_TARGET_DIR: targetDir,
         MOCK_EXIT_CODE: String(options.exitCode ?? 0),
-        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
       },
     });
 
@@ -148,7 +140,6 @@ function runCompletion(
   try {
     const mockWtPath = join(tempDir, "mock-wt");
     const wrapperPath = join(tempDir, shellCase.scriptName);
-    const pathWt = join(tempDir, "wt");
 
     writeFileSync(
       mockWtPath,
@@ -178,13 +169,9 @@ function runCompletion(
       { mode: 0o755 }
     );
 
-    writeFileSync(pathWt, `#!/bin/sh\nexec "${mockWtPath}" "$@"\n`, {
-      mode: 0o755,
-    });
-
     writeFileSync(
       wrapperPath,
-      readFileSync(join(shellDir, shellCase.scriptName), "utf-8"),
+      renderShellWrapper(shellCase.name, mockWtPath),
       "utf-8"
     );
 
@@ -222,7 +209,6 @@ function runCompletion(
       env: {
         ...process.env,
         WRAPPER_PATH: wrapperPath,
-        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
       },
     });
 
