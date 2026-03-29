@@ -1,15 +1,17 @@
 import chalk from "chalk";
 import { runCommand } from "../cli/command-runtime.js";
 import { runWithSpinner } from "../cli/spinner.js";
-import { updateInstallation } from "../app/use-cases/update-installation.js";
+import {
+  updateInstallation,
+  type UpdateInstallationOptions,
+} from "../app/use-cases/update-installation.js";
+import {
+  buildHomebrewUpdatePlan,
+  isHomebrewManagedInstallation,
+  runHomebrewUpdate,
+} from "../infra/update/homebrew.js";
 
-interface UpdateOptions {
-  force?: boolean;
-  version?: string;
-  removeQuarantine?: boolean;
-}
-
-function buildUpdateSpinnerText(options: UpdateOptions): string {
+function buildUpdateSpinnerText(options: UpdateInstallationOptions): string {
   const targetVersion = options.version?.replace(/^v/, "");
 
   if (targetVersion) {
@@ -19,8 +21,21 @@ function buildUpdateSpinnerText(options: UpdateOptions): string {
   return "Checking for wt updates";
 }
 
-export async function updateCommand(options: UpdateOptions): Promise<void> {
+export async function updateCommand(
+  options: UpdateInstallationOptions
+): Promise<void> {
   await runCommand(async () => {
+    if (isHomebrewManagedInstallation()) {
+      const plan = buildHomebrewUpdatePlan(options);
+
+      console.log(
+        chalk.dim(`Homebrew installation detected. Running: ${plan.displayCommand}`)
+      );
+
+      runHomebrewUpdate(plan);
+      return;
+    }
+
     const currentVersion = (await import("../../package.json")).default
       .version as string;
     const result = await runWithSpinner(

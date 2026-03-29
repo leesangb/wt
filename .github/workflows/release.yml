@@ -84,6 +84,12 @@ jobs:
       - name: Build macOS arm64 binary
         run: bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile wt-macos-arm64
 
+      - name: Compute binary checksums
+        id: checksums
+        run: |
+          echo "WT_MACOS_X64_SHA256=$(shasum -a 256 wt-macos-x64 | awk '{print $1}')" >> $GITHUB_ENV
+          echo "WT_MACOS_ARM64_SHA256=$(shasum -a 256 wt-macos-arm64 | awk '{print $1}')" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -95,3 +101,38 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout Homebrew tap
+        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: leesangb/homebrew-cli
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-cli
+
+      - name: Update Homebrew formula
+        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        env:
+          WT_VERSION: ${{ needs.release.outputs.version }}
+          WT_MACOS_X64_SHA256: ${{ env.WT_MACOS_X64_SHA256 }}
+          WT_MACOS_ARM64_SHA256: ${{ env.WT_MACOS_ARM64_SHA256 }}
+        run: bun run src/scripts/update-homebrew-tap.ts homebrew-cli
+
+      - name: Commit and push Homebrew formula
+        if: secrets.HOMEBREW_TAP_TOKEN != ''
+        working-directory: homebrew-cli
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/wt.rb
+          if git diff --cached --quiet; then
+            echo "Homebrew formula already up to date." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          git commit -m "Update wt to v${{ needs.release.outputs.version }}"
+          git push
+
+      - name: Note missing Homebrew tap token
+        if: secrets.HOMEBREW_TAP_TOKEN == ''
+        run: |
+          echo "Skipping Homebrew tap update because HOMEBREW_TAP_TOKEN is not configured." >> $GITHUB_STEP_SUMMARY

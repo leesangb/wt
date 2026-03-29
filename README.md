@@ -17,6 +17,18 @@ A CLI tool to manage git worktrees with pre/post script support.
 
 ## Installation
 
+### Install with Homebrew
+
+```bash
+brew install leesangb/cli/wt
+```
+
+Homebrew installs can add optional shell integration with:
+
+```bash
+wt shell install zsh
+```
+
 ### Build from Source
 
 ```bash
@@ -203,22 +215,36 @@ The worktree ID and directory name are based on the PR number (`pr-123`). If tha
 
 ### Update wt
 
-Update to the latest release (macOS only for now):
+If `wt` was installed with Homebrew, `wt update` delegates to Homebrew automatically:
+
+```bash
+wt update
+# runs: brew upgrade wt
+```
+
+For Homebrew installs, `--force` becomes a reinstall:
+
+```bash
+wt update --force
+# runs: brew reinstall wt
+```
+
+Standalone binary installs can update to the latest release directly (macOS only for now):
 ```bash
 wt update
 ```
 
-Force re-download current version:
+Standalone binary installs can also force a re-download of the current version:
 ```bash
 wt update --force
 ```
 
-Install a specific version:
+Install a specific version for standalone binary installs:
 ```bash
 wt update --version 0.1.2
 ```
 
-Skip removing quarantine attribute:
+Skip removing quarantine attribute for standalone binary installs:
 ```bash
 wt update --no-remove-quarantine
 ```
