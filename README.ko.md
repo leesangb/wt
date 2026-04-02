@@ -87,11 +87,14 @@ source ~/.wt/shell/wt.fish
 ### 제거
 
 ```bash
-# 제거 스크립트 실행
+# 설치된 wt 제거 (standalone 또는 Homebrew)
+wt uninstall
+
+# source checkout용 helper
 ./uninstall.sh
 
-# 다음을 수행합니다:
-# - ~/.local/bin/에서 wt 바이너리 제거
+# `wt uninstall`은 다음을 수행합니다:
+# - 활성 standalone wt 바이너리를 제거하거나, Homebrew 설치면 `brew uninstall wt`로 위임
 # - ~/.wt/shell/에서 shell wrapper 스크립트 제거
 # - shell 설정 파일에서 source 라인 제거
 ```

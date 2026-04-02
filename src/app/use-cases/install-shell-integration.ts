@@ -18,13 +18,11 @@ export interface ShellCommandContext {
 export interface InstallShellIntegrationOptions {
   shell: string;
   binaryPath?: string;
-  shellDir?: string;
 }
 
 export interface InstallShellIntegrationResult
   extends InstallShellWrapperResult {
   command: string[];
-  shellDir: string;
 }
 
 export function resolveDefaultShellCommand(
@@ -69,9 +67,7 @@ export function installShellIntegration(
   const command = options.binaryPath
     ? [resolve(options.binaryPath)]
     : resolveDefaultShellCommand();
-  const shellDir = options.shellDir
-    ? resolve(options.shellDir)
-    : join(homedir(), ".wt", "shell");
+  const shellDir = join(homedir(), ".wt", "shell");
 
   const result = installShellWrapper({
     shell: options.shell as SupportedShell,
@@ -82,6 +78,5 @@ export function installShellIntegration(
   return {
     ...result,
     command: [...command],
-    shellDir,
   };
 }

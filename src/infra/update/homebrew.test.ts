@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { AppError } from "../../app/errors.js";
 import {
+  buildHomebrewUninstallPlan,
   buildHomebrewUpdatePlan,
   isHomebrewManagedInstallation,
+  runHomebrewUninstall,
   runHomebrewUpdate,
 } from "./homebrew.js";
 
@@ -50,6 +52,13 @@ describe("homebrew update support", () => {
     expect(buildHomebrewUpdatePlan({})).toEqual({
       args: ["upgrade", "wt"],
       displayCommand: "brew upgrade wt",
+    });
+  });
+
+  test("uses brew uninstall for removal", () => {
+    expect(buildHomebrewUninstallPlan()).toEqual({
+      args: ["uninstall", "wt"],
+      displayCommand: "brew uninstall wt",
     });
   });
 
@@ -128,6 +137,60 @@ describe("homebrew update support", () => {
     ).toThrow(
       new AppError(
         "brew upgrade wt failed. Try running `brew update && brew upgrade wt` manually."
+      )
+    );
+  });
+
+  test("runs the generated uninstall command", () => {
+    const calls: Array<{
+      command: string;
+      args: string[];
+      stdio: string;
+    }> = [];
+
+    runHomebrewUninstall(
+      {
+        args: ["uninstall", "wt"],
+        displayCommand: "brew uninstall wt",
+      },
+      (command, args, options) => {
+        calls.push({
+          command,
+          args,
+          stdio: options.stdio,
+        });
+
+        return {
+          status: 0,
+          signal: null,
+        };
+      }
+    );
+
+    expect(calls).toEqual([
+      {
+        command: "brew",
+        args: ["uninstall", "wt"],
+        stdio: "inherit",
+      },
+    ]);
+  });
+
+  test("surfaces uninstall failures with a manual fallback hint", () => {
+    expect(() =>
+      runHomebrewUninstall(
+        {
+          args: ["uninstall", "wt"],
+          displayCommand: "brew uninstall wt",
+        },
+        () => ({
+          status: 1,
+          signal: null,
+        })
+      )
+    ).toThrow(
+      new AppError(
+        "brew uninstall wt failed. Try running `brew uninstall wt` manually."
       )
     );
   });

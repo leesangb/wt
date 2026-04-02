@@ -19,6 +19,11 @@ export interface HomebrewUpdatePlan {
   displayCommand: string;
 }
 
+export interface HomebrewUninstallPlan {
+  args: string[];
+  displayCommand: string;
+}
+
 export interface HomebrewUpdateOptions {
   force?: boolean;
   version?: string;
@@ -139,6 +144,15 @@ export function buildHomebrewUpdatePlan(
   };
 }
 
+export function buildHomebrewUninstallPlan(
+  formulaName: string = "wt"
+): HomebrewUninstallPlan {
+  return {
+    args: ["uninstall", formulaName],
+    displayCommand: `brew uninstall ${formulaName}`,
+  };
+}
+
 export function runHomebrewUpdate(
   plan: HomebrewUpdatePlan,
   runCommand: BrewCommandRunner = (command, args, options) =>
@@ -165,6 +179,36 @@ export function runHomebrewUpdate(
   if (result.status !== 0) {
     throw new AppError(
       `${plan.displayCommand} failed. Try running \`brew update && ${plan.displayCommand}\` manually.`
+    );
+  }
+}
+
+export function runHomebrewUninstall(
+  plan: HomebrewUninstallPlan,
+  runCommand: BrewCommandRunner = (command, args, options) =>
+    spawnSync(command, args, options)
+): void {
+  const result = runCommand("brew", plan.args, {
+    stdio: "inherit",
+  });
+
+  if (result.error) {
+    const error = result.error as NodeJS.ErrnoException;
+
+    if (error.code === "ENOENT") {
+      throw new AppError(
+        "Homebrew installation detected, but `brew` was not found in PATH."
+      );
+    }
+
+    throw new AppError(
+      `Failed to run ${plan.displayCommand}: ${result.error.message}`
+    );
+  }
+
+  if (result.status !== 0) {
+    throw new AppError(
+      `${plan.displayCommand} failed. Try running \`${plan.displayCommand}\` manually.`
     );
   }
 }

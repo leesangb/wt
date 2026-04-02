@@ -13,8 +13,33 @@ INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="wt"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 SHELL_DIR="${HOME}/.wt/shell"
+FORMULA_NAME="wt"
+HOMEBREW_UNINSTALL_FAILED=0
 
 echo -e "${BLUE}=== wt Uninstallation Script ===${NC}\n"
+
+is_homebrew_install_present() {
+  if ! command -v brew > /dev/null 2>&1; then
+    return 1
+  fi
+
+  brew list --formula "${FORMULA_NAME}" > /dev/null 2>&1
+}
+
+remove_homebrew_install() {
+  if ! is_homebrew_install_present; then
+    return
+  fi
+
+  echo -e "${BLUE}Removing Homebrew installation with brew uninstall ${FORMULA_NAME}...${NC}"
+  if brew uninstall "${FORMULA_NAME}"; then
+    echo -e "${GREEN}✓ Homebrew installation removed${NC}\n"
+    return
+  fi
+
+  HOMEBREW_UNINSTALL_FAILED=1
+  echo -e "${YELLOW}⚠️  Homebrew uninstall failed; continuing shell cleanup${NC}\n"
+}
 
 # Remove shell directory
 if [ -d "$SHELL_DIR" ]; then
@@ -33,6 +58,8 @@ if [ -f "$BINARY_PATH" ]; then
 else
   echo -e "${YELLOW}Binary not found at ${BINARY_PATH}${NC}\n"
 fi
+
+remove_homebrew_install
 
 # Function to remove source line from shell config
 remove_source_from_config() {
@@ -56,7 +83,7 @@ remove_source_from_config() {
   cp "$config_file" "${config_file}.bak"
   
   # Remove the source line
-  grep -v "source.*\.wt/shell/wt\.${shell_type}" "${config_file}.bak" > "$config_file"
+  sed "/source.*\\.wt\\/shell\\/wt\\.${shell_type}/d" "${config_file}.bak" > "$config_file"
   
   # Remove the backup if successful
   rm "${config_file}.bak"
@@ -106,3 +133,8 @@ echo -e "${YELLOW}To completely remove all traces, manually delete:${NC}"
 echo -e "  - ${GREEN}rm -rf ~/.wt/${NC} (your worktrees)"
 echo -e "  - Remove ${GREEN}.wt/${NC} directories from your repositories"
 echo ""
+
+if [ $HOMEBREW_UNINSTALL_FAILED -eq 1 ]; then
+  echo -e "${RED}Error: brew uninstall ${FORMULA_NAME} failed after shell cleanup completed.${NC}"
+  exit 1
+fi

@@ -7,7 +7,6 @@ import type { SupportedShell } from "../domain/shell.js";
 
 interface ShellInstallOptions {
   binaryPath?: string;
-  shellDir?: string;
 }
 
 function shellSingleQuote(value: string): string {
@@ -75,7 +74,6 @@ export async function shellInstallCommand(
     const result = installShellIntegration({
       shell,
       binaryPath: options.binaryPath,
-      shellDir: options.shellDir,
     });
     const displayWrapperPath = formatDisplayPath(result.wrapperPath);
     const sourceLine = formatShellSourceLine(result.wrapperPath);

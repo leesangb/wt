@@ -84,8 +84,7 @@ mkdir -p "$SHELL_DIR"
 echo -e "${BLUE}Generating shell wrapper scripts...${NC}"
 for shell_name in zsh bash fish; do
   "${BINARY_PATH}" shell install "$shell_name" \
-    --binary-path "${BINARY_PATH}" \
-    --shell-dir "${SHELL_DIR}" > /dev/null
+    --binary-path "${BINARY_PATH}" > /dev/null
   echo -e "${GREEN}✓ Generated wt.${shell_name}${NC}"
 done
 echo ""
@@ -119,7 +118,7 @@ add_source_to_config() {
   # Remove existing source line if force installing
   if [ $FORCE_INSTALL -eq 1 ] && grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file"; then
     echo -e "${YELLOW}Removing existing ${shell_type} wrapper configuration...${NC}"
-    grep -v "source.*wt/shell/wt\.${shell_type}" "$config_file" > "${config_file}.tmp"
+    sed "/source.*wt\\/shell\\/wt\\.${shell_type}/d" "$config_file" > "${config_file}.tmp"
     mv "${config_file}.tmp" "$config_file"
   fi
   
