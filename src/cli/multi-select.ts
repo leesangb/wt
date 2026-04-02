@@ -449,6 +449,7 @@ export async function promptMultiSelect<T>(
       switch (true) {
         case key.ctrl === true && key.name === "c":
         case key.name === "escape":
+        case value === "q":
           cleanup(finalizePrompt(items, selectedIndexes, true));
           return;
         case key.name === "return":
