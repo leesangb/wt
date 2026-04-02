@@ -549,6 +549,7 @@ describe("cli e2e", () => {
     const uninstallResult = runProjectScript("uninstall.sh", [], {
       env: {
         HOME: tempHome,
+        PATH: "/usr/bin:/bin",
       },
     });
 
@@ -570,36 +571,19 @@ describe("cli e2e", () => {
     const binDir = join(tempHome, "bin");
     const brewPath = join(binDir, "brew");
     const brewLogPath = join(tempHome, "brew.log");
-    const brewPrefix = join(tempHome, "homebrew");
-    const brewManagedBinDir = join(brewPrefix, "bin");
-    const brewManagedWtPath = join(brewManagedBinDir, "wt");
     const shellDir = join(tempHome, ".wt", "shell");
     const zshrcPath = join(tempHome, ".zshrc");
 
     mkdirSync(binDir, { recursive: true });
-    mkdirSync(brewManagedBinDir, { recursive: true });
     mkdirSync(shellDir, { recursive: true });
     writeFileSync(join(shellDir, "wt.zsh"), "# wrapper\n");
     writeFileSync(zshrcPath, `source "${join(shellDir, "wt.zsh")}"\n`);
-    writeFileSync(
-      brewManagedWtPath,
-      [
-        "#!/bin/sh",
-        "exit 0",
-        "",
-      ].join("\n"),
-      { mode: 0o755 }
-    );
     writeFileSync(
       brewPath,
       [
         "#!/bin/sh",
         "set -eu",
         'printf \'%s\\n\' \"$*\" >> \"$BREW_LOG\"',
-        'if [ \"$1\" = \"--prefix\" ]; then',
-        `  printf '%s\\n' "${brewPrefix}"`,
-        "  exit 0",
-        "fi",
         'if [ \"$1\" = \"list\" ] && [ \"${2:-}\" = \"--formula\" ] && [ \"${3:-}\" = \"wt\" ]; then',
         "  exit 0",
         "fi",
@@ -616,15 +600,57 @@ describe("cli e2e", () => {
       env: {
         BREW_LOG: brewLogPath,
         HOME: tempHome,
-        PATH: `${brewManagedBinDir}:${binDir}:${process.env.PATH}`,
+        PATH: `${binDir}:${process.env.PATH}`,
       },
     });
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
-    expect(readFileSync(brewLogPath, "utf-8")).toContain("--prefix");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("list --formula wt");
     expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
     expect(existsSync(shellDir)).toBe(false);
     expect(readFileSync(zshrcPath, "utf-8")).toBe("");
+  });
+
+  test("uninstall.sh removes both standalone and Homebrew installs when both are present", () => {
+    const tempHome = makeTempDir("wt-uninstall-mixed-home-");
+    const binDir = join(tempHome, "bin");
+    const brewPath = join(binDir, "brew");
+    const brewLogPath = join(tempHome, "brew.log");
+    const localBinaryPath = join(tempHome, ".local", "bin", "wt");
+
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(join(tempHome, ".local", "bin"), { recursive: true });
+    writeFileSync(localBinaryPath, "binary\n");
+    writeFileSync(
+      brewPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf \'%s\\n\' \"$*\" >> \"$BREW_LOG\"',
+        'if [ \"$1\" = \"list\" ] && [ \"${2:-}\" = \"--formula\" ] && [ \"${3:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        'if [ \"$1\" = \"uninstall\" ] && [ \"${2:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runProjectScript("uninstall.sh", [], {
+      env: {
+        BREW_LOG: brewLogPath,
+        HOME: tempHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(localBinaryPath)).toBe(false);
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("list --formula wt");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
   });
 
   test("wt uninstall removes a discovered standalone install and shell integration", () => {

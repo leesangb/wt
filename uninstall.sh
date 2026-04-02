@@ -14,81 +14,19 @@ BINARY_NAME="wt"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 SHELL_DIR="${HOME}/.wt/shell"
 FORMULA_NAME="wt"
-LOCAL_BINARY_WAS_PRESENT=0
 
 echo -e "${BLUE}=== wt Uninstallation Script ===${NC}\n"
 
-resolve_symlink_target() {
-  local path=$1
-  local target
-  local target_dir
-  local target_base
-  local resolved_dir
-
-  target=$(readlink "$path" 2>/dev/null || true)
-  if [ -z "$target" ]; then
-    return
-  fi
-
-  case "$target" in
-    /*)
-      printf '%s\n' "$target"
-      return
-      ;;
-  esac
-
-  target_dir=$(dirname "$target")
-  target_base=$(basename "$target")
-  resolved_dir=$(cd "$(dirname "$path")/${target_dir}" 2>/dev/null && pwd -P || true)
-
-  if [ -n "$resolved_dir" ]; then
-    printf '%s/%s\n' "$resolved_dir" "$target_base"
-  fi
-}
-
-is_homebrew_managed_wt_command() {
-  local brew_prefix
-  local wt_command
-  local resolved_path
-
-  if [ $LOCAL_BINARY_WAS_PRESENT -eq 1 ]; then
-    return 1
-  fi
-
+is_homebrew_install_present() {
   if ! command -v brew > /dev/null 2>&1; then
     return 1
   fi
 
-  if ! brew list --formula "${FORMULA_NAME}" > /dev/null 2>&1; then
-    return 1
-  fi
-
-  brew_prefix=$(brew --prefix 2>/dev/null || true)
-  if [ -z "$brew_prefix" ]; then
-    return 1
-  fi
-
-  wt_command=$(command -v "${BINARY_NAME}" 2>/dev/null || true)
-  if [ -z "$wt_command" ]; then
-    return 1
-  fi
-
-  if [ "$wt_command" = "${brew_prefix}/bin/${BINARY_NAME}" ]; then
-    return 0
-  fi
-
-  resolved_path=$(resolve_symlink_target "$wt_command")
-  case "$resolved_path" in
-    "${brew_prefix}/Cellar/${FORMULA_NAME}/"*|"${brew_prefix}/opt/${FORMULA_NAME}/"*)
-      return 0
-      ;;
-  esac
-
-  return 1
+  brew list --formula "${FORMULA_NAME}" > /dev/null 2>&1
 }
 
 remove_homebrew_install() {
-  if ! is_homebrew_managed_wt_command; then
+  if ! is_homebrew_install_present; then
     return
   fi
 
@@ -108,7 +46,6 @@ fi
 
 # Remove binary
 if [ -f "$BINARY_PATH" ]; then
-  LOCAL_BINARY_WAS_PRESENT=1
   echo -e "${BLUE}Removing binary from ${BINARY_PATH}...${NC}"
   rm "$BINARY_PATH"
   echo -e "${GREEN}✓ Binary removed${NC}\n"
