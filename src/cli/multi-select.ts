@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { emitKeypressEvents } from "readline";
 
 export interface MultiSelectPromptItem<T> {
   details?: string[];
@@ -37,6 +38,11 @@ export interface MultiSelectPromptOptions<T> {
 export interface MultiSelectPromptResult<T> {
   cancelled: boolean;
   selectedValues: T[];
+}
+
+interface Keypress {
+  ctrl?: boolean;
+  name?: string;
 }
 
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
@@ -427,7 +433,7 @@ export async function promptMultiSelect<T>(
 
     const cleanup = (result: MultiSelectPromptResult<T>) => {
       isActive = false;
-      stdin.off("data", handleData);
+      stdin.off("keypress", handleKeypress);
       stdin.setRawMode?.(wasRaw);
       if (!wasRaw) {
         stdin.pause();
@@ -439,38 +445,36 @@ export async function promptMultiSelect<T>(
       resolve(result);
     };
 
-    const handleData = (chunk: Buffer | string) => {
-      const value = chunk.toString();
-
-      switch (value) {
-        case "\u0003":
-        case "q":
-        case "\u001b":
+    const handleKeypress = (value: string, key: Keypress) => {
+      switch (true) {
+        case key.ctrl === true && key.name === "c":
+        case key.name === "escape":
           cleanup(finalizePrompt(items, selectedIndexes, true));
           return;
-        case "\r":
-        case "\n":
+        case key.name === "return":
+        case key.name === "enter":
           cleanup(finalizePrompt(items, selectedIndexes, false));
           return;
-        case " ":
+        case key.name === "space":
+        case value === " ":
           if (selectedIndexes.has(currentIndex)) {
             selectedIndexes.delete(currentIndex);
           } else {
             selectedIndexes.add(currentIndex);
           }
           break;
-        case "a":
+        case value === "a":
           selectedIndexes = toggleAll(selectedIndexes, items.length);
           break;
-        case "n":
+        case value === "n":
           selectedIndexes = new Set<number>();
           break;
-        case "\u001b[A":
-        case "k":
+        case key.name === "up":
+        case value === "k":
           currentIndex = currentIndex === 0 ? items.length - 1 : currentIndex - 1;
           break;
-        case "\u001b[B":
-        case "j":
+        case key.name === "down":
+        case value === "j":
           currentIndex = currentIndex === items.length - 1 ? 0 : currentIndex + 1;
           break;
         default:
@@ -485,9 +489,10 @@ export async function promptMultiSelect<T>(
       process.stdout.write("\x1b[?1049h");
     }
 
+    emitKeypressEvents(stdin);
     stdin.setRawMode?.(true);
     stdin.resume();
-    stdin.on("data", handleData);
+    stdin.on("keypress", handleKeypress);
     ensureDetailsLoaded(currentIndex);
     rerender();
   });
