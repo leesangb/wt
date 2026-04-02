@@ -11,6 +11,7 @@ import { updateCommand } from "./commands/update.js";
 import { prCommand } from "./commands/pr.js";
 import { checkoutCommand } from "./commands/checkout.js";
 import { shellInstallCommand } from "./commands/shell.js";
+import { uninstallCommand } from "./commands/uninstall.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -102,6 +103,11 @@ program
     "Do not remove macOS quarantine attribute after download for standalone binary installs"
   )
   .action(updateCommand);
+
+program
+  .command("uninstall")
+  .description("Remove wt using the active installation method")
+  .action(uninstallCommand);
 
 program
   .command("shell")

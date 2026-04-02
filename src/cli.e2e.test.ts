@@ -620,6 +620,99 @@ describe("cli e2e", () => {
     expect(readFileSync(zshrcPath, "utf-8")).toBe("");
   });
 
+  test("wt uninstall removes a discovered standalone install and shell integration", () => {
+    const tempHome = makeTempDir("wt-cli-uninstall-home-");
+    const binaryPath = join(tempHome, ".local", "bin", "wt");
+    const shellDir = join(tempHome, ".wt", "shell");
+    const zshrcPath = join(tempHome, ".zshrc");
+    const bashrcPath = join(tempHome, ".bashrc");
+    const fishConfigPath = join(tempHome, ".config", "fish", "config.fish");
+
+    mkdirSync(join(tempHome, ".local", "bin"), { recursive: true });
+    mkdirSync(join(tempHome, ".config", "fish"), { recursive: true });
+    mkdirSync(shellDir, { recursive: true });
+    writeFileSync(binaryPath, "binary\n");
+    writeFileSync(join(shellDir, "wt.zsh"), "# wrapper\n");
+    writeFileSync(join(shellDir, "wt.bash"), "# wrapper\n");
+    writeFileSync(join(shellDir, "wt.fish"), "# wrapper\n");
+    writeFileSync(zshrcPath, `source "${join(shellDir, "wt.zsh")}"\n`);
+    writeFileSync(bashrcPath, `source "${join(shellDir, "wt.bash")}"\n`);
+    writeFileSync(fishConfigPath, `source "${join(shellDir, "wt.fish")}"\n`);
+
+    const result = runCliCapture(["uninstall"], tempHome, {
+      env: {
+        HOME: tempHome,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain("Removed standalone wt binary");
+    expect(existsSync(binaryPath)).toBe(false);
+    expect(existsSync(shellDir)).toBe(false);
+    expect(readFileSync(zshrcPath, "utf-8")).toBe("");
+    expect(readFileSync(bashrcPath, "utf-8")).toBe("");
+    expect(readFileSync(fishConfigPath, "utf-8")).toBe("");
+  });
+
+  test("wt uninstall delegates to Homebrew when no standalone install exists", () => {
+    const tempHome = makeTempDir("wt-cli-uninstall-homebrew-home-");
+    const binDir = join(tempHome, "bin");
+    const brewPath = join(binDir, "brew");
+    const brewLogPath = join(tempHome, "brew.log");
+    const shellDir = join(tempHome, ".wt", "shell");
+    const zshrcPath = join(tempHome, ".zshrc");
+
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(shellDir, { recursive: true });
+    writeFileSync(join(shellDir, "wt.zsh"), "# wrapper\n");
+    writeFileSync(zshrcPath, `source "${join(shellDir, "wt.zsh")}"\n`);
+    writeFileSync(
+      brewPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf \'%s\\n\' \"$*\" >> \"$BREW_LOG\"',
+        'if [ \"$1\" = \"list\" ] && [ \"${2:-}\" = \"--formula\" ] && [ \"${3:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        'if [ \"$1\" = \"uninstall\" ] && [ \"${2:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(["uninstall"], tempHome, {
+      env: {
+        BREW_LOG: brewLogPath,
+        HOME: tempHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain("Uninstalled wt via Homebrew");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("list --formula wt");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
+    expect(existsSync(shellDir)).toBe(false);
+    expect(readFileSync(zshrcPath, "utf-8")).toBe("");
+  });
+
+  test("wt uninstall shows an actionable error when no installation is detected", () => {
+    const tempHome = makeTempDir("wt-cli-uninstall-missing-home-");
+    const result = runCliCapture(["uninstall"], tempHome, {
+      env: {
+        HOME: tempHome,
+        PATH: "/usr/bin:/bin",
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Could not find an installed wt binary to uninstall");
+  });
+
   test(
     "creates a worktree, pushes it to a local remote, and navigates via the bash wrapper",
     async () => {
