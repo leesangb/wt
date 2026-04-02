@@ -8,7 +8,10 @@ import {
   listGitWorktreePaths,
   removeGitWorktree,
 } from "../../infra/git/worktree-repository.js";
-import { getWorktreeRemovalStatusSummary } from "../../infra/git/status.js";
+import {
+  getWorktreeRemovalStatusSummary,
+  getWorktreeStatusEntries,
+} from "../../infra/git/status.js";
 import type { WorktreeInfo } from "../../domain/worktree.js";
 
 export interface RemoveWorktreeOptions {
@@ -20,6 +23,13 @@ export interface RemoveWorktreePreview {
   localCommitCount: number;
   localChangeCount: number;
   hasUnknownLocalCommits: boolean;
+  statusEntries?: string[];
+  remainingStatusEntryCount?: number;
+}
+
+export interface InspectRemoveWorktreeOptions {
+  includeStatusEntries?: boolean;
+  statusEntryLimit?: number;
 }
 
 export interface RemoveWorktreeResult {
@@ -104,7 +114,8 @@ async function resolveSafeRemovalRoot(
 
 export async function inspectRemoveWorktree(
   target: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  options: InspectRemoveWorktreeOptions = {}
 ): Promise<RemoveWorktreePreview> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
   const {
@@ -117,12 +128,27 @@ export async function inspectRemoveWorktree(
     worktree.branch,
     worktree.baseBranch
   );
+  const statusEntriesResult = options.includeStatusEntries
+    ? await getWorktreeStatusEntries(
+        worktree.path,
+        options.statusEntryLimit ?? 8
+      )
+    : undefined;
 
   return {
     worktree,
     localCommitCount,
     localChangeCount,
     hasUnknownLocalCommits,
+    ...(statusEntriesResult
+      ? {
+          statusEntries: statusEntriesResult.entries,
+          remainingStatusEntryCount: Math.max(
+            statusEntriesResult.totalCount - statusEntriesResult.entries.length,
+            0
+          ),
+        }
+      : {}),
   };
 }
 

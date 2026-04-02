@@ -1606,6 +1606,100 @@ describe("cli e2e", () => {
     expect(existsSync(secondWorktreePath)).toBeFalse();
   });
 
+  test("requires at least one cleanup filter", async () => {
+    const repo = await createTestRepo();
+
+    const result = runCliCapture(["clean"], repo.repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "wt clean requires at least one filter. Use --merged and/or --remote-deleted."
+    );
+  });
+
+  test("shows merged cleanup candidates in dry mode without removing them", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "cleanmerged123";
+    const branchName = "feature-clean-merged";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(["clean", "-m", "--dry"], repo.repoRoot);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain(`Cleanup candidates (${repo.repoName}):`);
+    expect(result.stdout).toContain(`ID:      ${worktreeId}`);
+    expect(result.stdout).toContain("Why:     merged");
+    expect(result.stdout).toContain("Dry run only. No worktrees were removed.");
+    expect(existsSync(worktreePath)).toBeTrue();
+  });
+
+  test("asks for confirmation before cleaning matching worktrees", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "cleanconfirm123";
+    const branchName = "feature-clean-confirm";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(
+      ["clean", "--merged", "--keep-branch"],
+      repo.repoRoot,
+      {
+        input: "n\n",
+      }
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Proceed with cleanup of 1 worktree? [y/N]");
+    expect(result.stdout).toContain("Cleanup cancelled.");
+    expect(result.stderr).toBe("");
+    expect(existsSync(worktreePath)).toBeTrue();
+  });
+
+  test("removes remote-deleted worktrees while keeping the local branch", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "cleangone123";
+    const branchName = "feature-clean-gone";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    await $`git -C ${repo.repoRoot} push origin --delete ${branchName}`.quiet();
+    await $`git -C ${repo.repoRoot} fetch --prune origin`.quiet();
+
+    const result = runCliCapture(["clean", "-d", "--keep-branch", "-f"], repo.repoRoot);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain(`ID:      ${worktreeId}`);
+    expect(result.stdout).toContain("Why:     remote deleted");
+    expect(existsSync(worktreePath)).toBeFalse();
+    expect(
+      spawnSync(
+        "git",
+        [
+          "-C",
+          repo.repoRoot,
+          "show-ref",
+          "--verify",
+          "--quiet",
+          `refs/heads/${branchName}`,
+        ]
+      ).status
+    ).toBe(0);
+  });
+
+  test("requires a TTY for interactive cleanup", async () => {
+    const repo = await createTestRepo();
+
+    const result = runCliCapture(["clean", "-i"], repo.repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "wt clean --interactive requires an interactive terminal."
+    );
+  });
+
   test("adds a unique suffix when sanitized ids would collide", async () => {
     const repo = await createTestRepo();
     const firstBranch = "feature/foo";

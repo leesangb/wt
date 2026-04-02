@@ -5,6 +5,7 @@ import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
+import { cleanCommand } from "./commands/clean.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
 import { prCommand } from "./commands/pr.js";
@@ -48,6 +49,24 @@ program
   .option("--keep-branch", "Keep the branch after removing worktree")
   .option("-f, --force", "Skip confirmation for worktrees with pending changes")
   .action(removeCommand);
+
+program
+  .command("clean")
+  .description("Bulk-remove worktrees that match cleanup filters")
+  .option("-m, --merged", "Include worktrees whose branches are already merged")
+  .option(
+    "-d, --remote-deleted",
+    "Include worktrees whose upstream branch is gone on the remote"
+  )
+  .option("-i, --interactive", "Select cleanup targets in an interactive picker")
+  .option("--dry", "Preview cleanup candidates without removing anything")
+  .addOption(new Option("--dry-run").hideHelp())
+  .option("--keep-branch", "Keep the local branch after removing worktree")
+  .option(
+    "-f, --force",
+    "Skip the preview confirmation and pending-change prompts"
+  )
+  .action(cleanCommand);
 
 program
   .command("cd <target>")

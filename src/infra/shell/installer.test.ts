@@ -29,9 +29,10 @@ describe("shell installer", () => {
 
       expect(result.wrapperPath).toBe(getShellWrapperPath("zsh", shellDir));
       expect(result.sourceLine).toBe(getShellSourceLine("zsh", shellDir));
-      expect(readFileSync(result.wrapperPath, "utf-8")).toBe(
-        renderShellWrapper("zsh", "/tmp/wt-bin")
-      );
+      const wrapper = readFileSync(result.wrapperPath, "utf-8");
+
+      expect(wrapper).toBe(renderShellWrapper("zsh", "/tmp/wt-bin"));
+      expect(wrapper).toContain('clean[Bulk-remove worktrees by filter]');
     } finally {
       rmSync(shellDir, { recursive: true, force: true });
     }
