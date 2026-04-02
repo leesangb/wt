@@ -6,7 +6,17 @@ export interface WorktreeRemovalStatusSummary {
   hasUnknownLocalCommits: boolean;
 }
 
+export interface WorktreeStatusEntriesResult {
+  entries: string[];
+  totalCount: number;
+}
+
 export interface MergedRemoteBranchesResult {
+  branches: Set<string>;
+  known: boolean;
+}
+
+export interface GoneUpstreamBranchesResult {
   branches: Set<string>;
   known: boolean;
 }
@@ -67,6 +77,50 @@ export async function getMergedRemoteBranches(
   return (await getMergedRemoteBranchesResult(repoRoot, baseBranch)).branches;
 }
 
+export async function getGoneUpstreamBranchesResult(
+  repoRoot: string
+): Promise<GoneUpstreamBranchesResult> {
+  try {
+    const format = "%(refname:short)\t%(upstream:track)";
+    const result =
+      await $`git -C ${repoRoot} for-each-ref --format=${format} refs/heads`
+        .text();
+    const branches = new Set<string>();
+
+    for (const line of result.split("\n")) {
+      if (!line) {
+        continue;
+      }
+
+      const separatorIndex = line.indexOf("\t");
+      const branch =
+        separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+      const upstreamTrack =
+        separatorIndex >= 0 ? line.slice(separatorIndex + 1) : "";
+
+      if (branch && upstreamTrack.includes("[gone]")) {
+        branches.add(branch.trim());
+      }
+    }
+
+    return {
+      branches,
+      known: true,
+    };
+  } catch {
+    return {
+      branches: new Set(),
+      known: false,
+    };
+  }
+}
+
+export async function getGoneUpstreamBranches(
+  repoRoot: string
+): Promise<Set<string>> {
+  return (await getGoneUpstreamBranchesResult(repoRoot)).branches;
+}
+
 export async function isBranchMergedToRemote(
   repoRoot: string,
   branch: string,
@@ -100,6 +154,30 @@ export async function getWorktreeStatusSummary(
     return {
       unpushedCount: 0,
       modifiedCount: 0,
+    };
+  }
+}
+
+export async function getWorktreeStatusEntries(
+  worktreePath: string,
+  limit: number = 8
+): Promise<WorktreeStatusEntriesResult> {
+  try {
+    const status = await $`git -C ${worktreePath} status --short`.text();
+    const entries = status
+      .trim()
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0);
+
+    return {
+      entries: entries.slice(0, limit),
+      totalCount: entries.length,
+    };
+  } catch {
+    return {
+      entries: [],
+      totalCount: 0,
     };
   }
 }

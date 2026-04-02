@@ -144,6 +144,7 @@ _wt_completion() {
         'ls[List all worktrees]' \\
         'remove[Remove a worktree]' \\
         'rm[Remove a worktree]' \\
+        'clean[Bulk-remove worktrees by filter]' \\
         'cd[Change directory to a worktree]' \\
         'pr[Create or navigate to a pull request worktree]' \\
         'update[Update wt to latest version]' \\

@@ -12,6 +12,11 @@ import type {
   WorktreeState,
 } from "../types/index.js";
 import { runCommand } from "../cli/command-runtime.js";
+import {
+  buildBaseDescription,
+  buildWorktreeBranchSummary,
+  buildWorktreeIdLabel,
+} from "./worktree-display.js";
 
 type CompletionFormat = "bash" | "zsh" | "fish";
 
@@ -81,71 +86,18 @@ export async function listCommand(options?: {
     console.log(chalk.dim("─".repeat(80)));
 
     for (const worktree of result.worktrees) {
-      const idMetadata: string[] = [];
-
-      if (worktree.isMain) {
-        idMetadata.push(chalk.blue("[main]"));
-      }
-      if (worktree.isCurrent) {
-        idMetadata.push(chalk.green("(current)"));
-      }
-
-      const idLabel =
-        idMetadata.length > 0
-          ? `${worktree.id} ${idMetadata.join(" ")}`
-          : worktree.id;
+      const idLabel = buildWorktreeIdLabel(worktree);
       const timestamp = new Date(worktree.createdAt).toLocaleString();
-      const baseInfo =
-        worktree.baseBranch && worktree.baseCommit
-          ? chalk.dim(`from ${worktree.baseBranch}@${worktree.baseCommit.substring(0, 7)}`)
-          : worktree.baseBranch
-          ? chalk.dim(`from ${worktree.baseBranch}`)
-          : "";
-      const indicators: string[] = [];
-
-      if (worktree.isMerged) {
-        indicators.push(chalk.dim("(merged)"));
-      }
-      if (worktree.unpushedCount > 0) {
-        indicators.push(
-          chalk.yellow(`↑${worktree.unpushedCount} commits not pushed`)
-        );
-      }
-      if (worktree.modifiedCount > 0) {
-        indicators.push(
-          chalk.red(`!${worktree.modifiedCount} paths with local changes`)
-        );
-      }
-
-      const branchParts = [getWorktreeBranchLabel(worktree)];
-      if (baseInfo) {
-        branchParts.push(baseInfo);
-      }
-      if (indicators.length > 0) {
-        branchParts.push(indicators.join(" "));
-      }
 
       console.log(chalk.cyan(`ID:      ${idLabel}`));
-      console.log(chalk.white(`Branch:  ${branchParts.join(" ")}`));
+      console.log(
+        chalk.white(`Branch:  ${buildWorktreeBranchSummary(worktree)}`)
+      );
       console.log(chalk.dim(`Path:    ${worktree.path}`));
       console.log(chalk.dim(`Created: ${timestamp}`));
       console.log(chalk.dim("─".repeat(80)));
     }
   });
-}
-
-function buildBaseDescription(
-  worktree: Pick<WorktreeInfo, "baseBranch" | "baseCommit">
-): string | undefined {
-  if (worktree.baseBranch && worktree.baseCommit) {
-    return `from ${worktree.baseBranch}@${worktree.baseCommit.substring(0, 7)}`;
-  }
-
-  if (worktree.baseBranch) {
-    return `from ${worktree.baseBranch}`;
-  }
-
-  return undefined;
 }
 
 function buildDefaultCompletionDescription(worktree: WorktreeInfo): string {
