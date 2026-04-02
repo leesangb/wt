@@ -428,12 +428,11 @@ describe("cli e2e", () => {
   });
 
   test("shell install writes a wrapper with the requested binary path", () => {
-    const tempDir = makeTempDir("wt-shell-install-");
-    const shellDir = join(tempDir, "shell");
-    const binaryPath = join(tempDir, "bin", "wt");
-    const wrapperPath = join(shellDir, "wt.bash");
+    const tempHome = makeTempDir("wt-shell-install-");
+    const binaryPath = join(tempHome, "bin", "wt");
+    const wrapperPath = join(tempHome, ".wt", "shell", "wt.bash");
     const appendCommand =
-      `printf '\\nsource "${wrapperPath}"\\n' >> ~/.bashrc`;
+      `printf '\\nsource ~/.wt/shell/wt.bash\\n' >> ~/.bashrc`;
     const result = runCliCapture(
       [
         "shell",
@@ -441,25 +440,33 @@ describe("cli e2e", () => {
         "bash",
         "--binary-path",
         binaryPath,
-        "--shell-dir",
-        shellDir,
       ],
-      tempDir
+      tempHome,
+      {
+        env: {
+          ...process.env,
+          HOME: tempHome,
+        },
+      }
     );
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     expect(readFileSync(wrapperPath, "utf-8")).toBe(
       renderShellWrapper("bash", binaryPath)
     );
-    expect(result.stdout).toContain(wrapperPath);
+    expect(result.stdout).toContain("~/.wt/shell/wt.bash");
     expect(result.stdout).toContain(appendCommand);
   });
 
   test("shell install defaults to the current launch command", () => {
-    const tempDir = makeTempDir("wt-shell-install-default-");
-    const shellDir = join(tempDir, "shell");
-    const wrapperPath = join(shellDir, "wt.bash");
-    const result = runCliCapture(["shell", "install", "bash", "--shell-dir", shellDir], tempDir);
+    const tempHome = makeTempDir("wt-shell-install-default-");
+    const wrapperPath = join(tempHome, ".wt", "shell", "wt.bash");
+    const result = runCliCapture(["shell", "install", "bash"], tempHome, {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+      },
+    });
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     const wrapper = readFileSync(wrapperPath, "utf-8");

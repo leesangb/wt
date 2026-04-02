@@ -84,8 +84,7 @@ mkdir -p "$SHELL_DIR"
 echo -e "${BLUE}Generating shell wrapper scripts...${NC}"
 for shell_name in zsh bash fish; do
   "${BINARY_PATH}" shell install "$shell_name" \
-    --binary-path "${BINARY_PATH}" \
-    --shell-dir "${SHELL_DIR}" > /dev/null
+    --binary-path "${BINARY_PATH}" > /dev/null
   echo -e "${GREEN}✓ Generated wt.${shell_name}${NC}"
 done
 echo ""

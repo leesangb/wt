@@ -115,7 +115,6 @@ program
   .command("install <shell>")
   .description("Install shell integration for bash, zsh, or fish")
   .option("--binary-path <path>", "Binary path to embed in the shell wrapper")
-  .option("--shell-dir <path>", "Directory to install shell wrappers into")
   .action(shellInstallCommand);
 
 await program.parseAsync();
