@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.4.0
+
+### Minor Changes
+
+- 6fc32dc: Add `wt clean` for previewable bulk cleanup of merged and remote-deleted worktrees.
+
 ## 0.3.1
 
 ### Patch Changes
