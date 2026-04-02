@@ -119,7 +119,7 @@ add_source_to_config() {
   # Remove existing source line if force installing
   if [ $FORCE_INSTALL -eq 1 ] && grep -q "source.*wt/shell/wt\.${shell_type}" "$config_file"; then
     echo -e "${YELLOW}Removing existing ${shell_type} wrapper configuration...${NC}"
-    grep -v "source.*wt/shell/wt\.${shell_type}" "$config_file" > "${config_file}.tmp"
+    sed "/source.*wt\\/shell\\/wt\\.${shell_type}/d" "$config_file" > "${config_file}.tmp"
     mv "${config_file}.tmp" "$config_file"
   fi
   

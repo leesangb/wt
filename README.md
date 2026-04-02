@@ -87,11 +87,15 @@ If you want to pin a specific executable path, pass `--binary-path <path>`. If t
 ### Uninstallation
 
 ```bash
-# Run the uninstallation script
+# Standalone/source install
 ./uninstall.sh
 
-# This will:
+# Homebrew install
+brew uninstall wt
+
+# The uninstallation script will:
 # - Remove the wt binary from ~/.local/bin/
+# - Delegate to `brew uninstall wt` when a Homebrew install is present
 # - Remove shell wrapper scripts from ~/.wt/shell/
 # - Remove source lines from shell config files
 ```

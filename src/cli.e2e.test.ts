@@ -53,6 +53,7 @@ interface FakeGithubCliOptions {
 
 const tempDirs: string[] = [];
 const cliEntry = fileURLToPath(new URL("./index.ts", import.meta.url));
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -119,6 +120,28 @@ function runCliCapture(
 function runCli(args: string[], cwd: string): void {
   const result = runCliCapture(args, cwd);
   assertProcessSuccess(result.status, result.stderr, result.stdout);
+}
+
+function runProjectScript(
+  scriptName: "install.sh" | "uninstall.sh",
+  args: string[] = [],
+  options: CliRunOptions = {}
+): CliRunResult {
+  const result = spawnSync("bash", [join(projectRoot, scriptName), ...args], {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    env: {
+      ...process.env,
+      ...options.env,
+    },
+    input: options.input,
+  });
+
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }
 
 async function createGitRepo(): Promise<TestRepo> {
@@ -464,6 +487,137 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(
       `printf '\\nsource ~/.wt/shell/wt.zsh\\n' >> ~/.zshrc`
     );
+  });
+
+  test("install.sh --force rewrites an existing shell source line even when it is the only line", () => {
+    const tempHome = makeTempDir("wt-install-force-home-");
+    const zshrcPath = join(tempHome, ".zshrc");
+    writeFileSync(zshrcPath, 'source "/tmp/old/.wt/shell/wt.zsh"\n');
+
+    const result = runProjectScript("install.sh", ["--force"], {
+      env: {
+        HOME: tempHome,
+      },
+      input: "",
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const zshrc = readFileSync(zshrcPath, "utf-8");
+    const sourceLines = zshrc
+      .split(/\r?\n/)
+      .filter((line) => line.includes("source") && line.includes("wt.zsh"));
+
+    expect(sourceLines).toEqual([
+      `source "${join(tempHome, ".wt", "shell", "wt.zsh")}"`
+    ]);
+  });
+
+  test("uninstall.sh removes a standalone install and shell integration", () => {
+    const tempHome = makeTempDir("wt-uninstall-home-");
+    const zshrcPath = join(tempHome, ".zshrc");
+    const bashrcPath = join(tempHome, ".bashrc");
+    const fishConfigPath = join(tempHome, ".config", "fish", "config.fish");
+
+    mkdirSync(join(tempHome, ".config", "fish"), { recursive: true });
+    writeFileSync(zshrcPath, "# zsh config\n");
+    writeFileSync(bashrcPath, "# bash config\n");
+    writeFileSync(fishConfigPath, "# fish config\n");
+
+    const installResult = runProjectScript("install.sh", [], {
+      env: {
+        HOME: tempHome,
+      },
+      input: "",
+    });
+
+    assertProcessSuccess(
+      installResult.status,
+      installResult.stderr,
+      installResult.stdout
+    );
+    expect(existsSync(join(tempHome, ".local", "bin", "wt"))).toBe(true);
+    expect(existsSync(join(tempHome, ".wt", "shell"))).toBe(true);
+
+    const uninstallResult = runProjectScript("uninstall.sh", [], {
+      env: {
+        HOME: tempHome,
+      },
+    });
+
+    assertProcessSuccess(
+      uninstallResult.status,
+      uninstallResult.stderr,
+      uninstallResult.stdout
+    );
+
+    expect(existsSync(join(tempHome, ".local", "bin", "wt"))).toBe(false);
+    expect(existsSync(join(tempHome, ".wt", "shell"))).toBe(false);
+    expect(readFileSync(zshrcPath, "utf-8")).not.toContain("wt/shell/wt.zsh");
+    expect(readFileSync(bashrcPath, "utf-8")).not.toContain("wt/shell/wt.bash");
+    expect(readFileSync(fishConfigPath, "utf-8")).not.toContain("wt/shell/wt.fish");
+  });
+
+  test("uninstall.sh delegates Homebrew installs and removes a lone source line", () => {
+    const tempHome = makeTempDir("wt-uninstall-homebrew-home-");
+    const binDir = join(tempHome, "bin");
+    const brewPath = join(binDir, "brew");
+    const brewLogPath = join(tempHome, "brew.log");
+    const brewPrefix = join(tempHome, "homebrew");
+    const brewManagedBinDir = join(brewPrefix, "bin");
+    const brewManagedWtPath = join(brewManagedBinDir, "wt");
+    const shellDir = join(tempHome, ".wt", "shell");
+    const zshrcPath = join(tempHome, ".zshrc");
+
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(brewManagedBinDir, { recursive: true });
+    mkdirSync(shellDir, { recursive: true });
+    writeFileSync(join(shellDir, "wt.zsh"), "# wrapper\n");
+    writeFileSync(zshrcPath, `source "${join(shellDir, "wt.zsh")}"\n`);
+    writeFileSync(
+      brewManagedWtPath,
+      [
+        "#!/bin/sh",
+        "exit 0",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+    writeFileSync(
+      brewPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf \'%s\\n\' \"$*\" >> \"$BREW_LOG\"',
+        'if [ \"$1\" = \"--prefix\" ]; then',
+        `  printf '%s\\n' "${brewPrefix}"`,
+        "  exit 0",
+        "fi",
+        'if [ \"$1\" = \"list\" ] && [ \"${2:-}\" = \"--formula\" ] && [ \"${3:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        'if [ \"$1\" = \"uninstall\" ] && [ \"${2:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runProjectScript("uninstall.sh", [], {
+      env: {
+        BREW_LOG: brewLogPath,
+        HOME: tempHome,
+        PATH: `${brewManagedBinDir}:${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("--prefix");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
+    expect(existsSync(shellDir)).toBe(false);
+    expect(readFileSync(zshrcPath, "utf-8")).toBe("");
   });
 
   test(
