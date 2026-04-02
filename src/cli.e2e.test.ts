@@ -653,6 +653,52 @@ describe("cli e2e", () => {
     expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
   });
 
+  test("uninstall.sh still removes shell config when Homebrew uninstall fails", () => {
+    const tempHome = makeTempDir("wt-uninstall-homebrew-failure-home-");
+    const binDir = join(tempHome, "bin");
+    const brewPath = join(binDir, "brew");
+    const brewLogPath = join(tempHome, "brew.log");
+    const shellDir = join(tempHome, ".wt", "shell");
+    const zshrcPath = join(tempHome, ".zshrc");
+
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(shellDir, { recursive: true });
+    writeFileSync(join(shellDir, "wt.zsh"), "# wrapper\n");
+    writeFileSync(zshrcPath, `source "${join(shellDir, "wt.zsh")}"\n`);
+    writeFileSync(
+      brewPath,
+      [
+        "#!/bin/sh",
+        "set -eu",
+        'printf \'%s\\n\' \"$*\" >> \"$BREW_LOG\"',
+        'if [ \"$1\" = \"list\" ] && [ \"${2:-}\" = \"--formula\" ] && [ \"${3:-}\" = \"wt\" ]; then',
+        "  exit 0",
+        "fi",
+        'if [ \"$1\" = \"uninstall\" ] && [ \"${2:-}\" = \"wt\" ]; then',
+        "  exit 1",
+        "fi",
+        "exit 1",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runProjectScript("uninstall.sh", [], {
+      env: {
+        BREW_LOG: brewLogPath,
+        HOME: tempHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("Homebrew uninstall failed; continuing shell cleanup");
+    expect(result.stdout).toContain("Removing zsh wrapper");
+    expect(readFileSync(brewLogPath, "utf-8")).toContain("uninstall wt");
+    expect(existsSync(shellDir)).toBe(false);
+    expect(readFileSync(zshrcPath, "utf-8")).toBe("");
+  });
+
   test("wt uninstall removes a discovered standalone install and shell integration", () => {
     const tempHome = makeTempDir("wt-cli-uninstall-home-");
     const binaryPath = join(tempHome, ".local", "bin", "wt");

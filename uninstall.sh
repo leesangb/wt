@@ -14,6 +14,7 @@ BINARY_NAME="wt"
 BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 SHELL_DIR="${HOME}/.wt/shell"
 FORMULA_NAME="wt"
+HOMEBREW_UNINSTALL_FAILED=0
 
 echo -e "${BLUE}=== wt Uninstallation Script ===${NC}\n"
 
@@ -31,8 +32,13 @@ remove_homebrew_install() {
   fi
 
   echo -e "${BLUE}Removing Homebrew installation with brew uninstall ${FORMULA_NAME}...${NC}"
-  brew uninstall "${FORMULA_NAME}"
-  echo -e "${GREEN}✓ Homebrew installation removed${NC}\n"
+  if brew uninstall "${FORMULA_NAME}"; then
+    echo -e "${GREEN}✓ Homebrew installation removed${NC}\n"
+    return
+  fi
+
+  HOMEBREW_UNINSTALL_FAILED=1
+  echo -e "${YELLOW}⚠️  Homebrew uninstall failed; continuing shell cleanup${NC}\n"
 }
 
 # Remove shell directory
@@ -127,3 +133,8 @@ echo -e "${YELLOW}To completely remove all traces, manually delete:${NC}"
 echo -e "  - ${GREEN}rm -rf ~/.wt/${NC} (your worktrees)"
 echo -e "  - Remove ${GREEN}.wt/${NC} directories from your repositories"
 echo ""
+
+if [ $HOMEBREW_UNINSTALL_FAILED -eq 1 ]; then
+  echo -e "${RED}Error: brew uninstall ${FORMULA_NAME} failed after shell cleanup completed.${NC}"
+  exit 1
+fi
