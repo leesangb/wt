@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.5.0
+
+### Minor Changes
+
+- e34eb59: Fix Homebrew uninstall behavior, add a `wt uninstall` CLI command, and harden shell wrapper config cleanup during reinstall and removal.
+
 ## 0.4.0
 
 ### Minor Changes
