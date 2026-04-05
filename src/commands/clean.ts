@@ -86,7 +86,7 @@ function assertInteractiveTerminal(): void {
     !process.stdout.isTTY ||
     typeof process.stdin.setRawMode !== "function"
   ) {
-    throw new AppError("wt clean --interactive requires an interactive terminal.");
+    throw new AppError("wt clean requires an interactive terminal.");
   }
 }
 
@@ -362,12 +362,8 @@ export async function cleanCommand(
   options: CleanCommandOptions
 ): Promise<void> {
   await runCommand(async () => {
-    const interactive = options.interactive === true;
     const previewCache = new Map<string, RemoveWorktreePreview>();
-
-    if (interactive) {
-      assertInteractiveTerminal();
-    }
+    assertInteractiveTerminal();
 
     const plan = await planWorktreeCleanup(
       {
@@ -376,25 +372,21 @@ export async function cleanCommand(
       },
       process.cwd(),
       {
-        includeAllCandidates: interactive,
+        includeAllCandidates: true,
       }
     );
 
     if (plan.candidates.length === 0) {
-      console.log(
-        chalk.yellow(
-          interactive
-            ? "No worktrees available to clean."
-            : "No worktrees matched the requested cleanup filters."
-        )
-      );
+      console.log(chalk.yellow("No worktrees available to clean."));
       return;
     }
 
     const pickerEntries = buildCleanupPickerEntries(plan.candidates);
-    const selectedEntries = interactive
-      ? await selectCleanupEntries(plan.repoName, pickerEntries, previewCache)
-      : pickerEntries;
+    const selectedEntries = await selectCleanupEntries(
+      plan.repoName,
+      pickerEntries,
+      previewCache
+    );
 
     if (!selectedEntries) {
       console.log(chalk.yellow("Cleanup cancelled."));

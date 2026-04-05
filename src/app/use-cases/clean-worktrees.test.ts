@@ -20,6 +20,40 @@ afterEach(() => {
 });
 
 describe("planWorktreeCleanup", () => {
+  test("can include all non-main worktrees without filters for interactive cleanup", async () => {
+    const originDir = makeTempDir("wt-origin-");
+    const repoRoot = makeTempDir("wt-repo-");
+    const worktreeRoot = makeTempDir("wt-worktrees-");
+    const repoName = basename(originDir).replace(/\.git$/, "");
+    const firstWorktreePath = join(worktreeRoot, `${repoName}-one`);
+    const secondWorktreePath = join(worktreeRoot, `${repoName}-two`);
+
+    await $`git init --bare ${originDir}`.quiet();
+    await $`git clone ${originDir} ${repoRoot}`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    await Bun.write(join(repoRoot, "README.md"), "base\n");
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} push -u origin main`.quiet();
+    await $`git -C ${repoRoot} remote set-head origin main`.quiet();
+
+    await $`git -C ${repoRoot} worktree add -b feature/one ${firstWorktreePath} main`.quiet();
+    await $`git -C ${repoRoot} worktree add -b feature/two ${secondWorktreePath} main`.quiet();
+
+    const plan = await planWorktreeCleanup({}, repoRoot, {
+      includeAllCandidates: true,
+    });
+
+    expect(plan.candidates).toHaveLength(2);
+    expect(plan.candidates.map(candidate => candidate.worktree.id)).toEqual([
+      "one",
+      "two",
+    ]);
+    expect(plan.candidates.every(candidate => candidate.reasons.length === 0)).toBeTrue();
+  });
+
   test("can include unmatched worktrees so interactive cleanup can adjust the selection", async () => {
     const originDir = makeTempDir("wt-origin-");
     const repoRoot = makeTempDir("wt-repo-");
