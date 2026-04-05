@@ -278,19 +278,18 @@ worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면,
 ### 조건에 맞는 worktree 정리
 
 ```bash
+wt clean
 wt clean -m
 wt clean -d --dry
-wt clean -i
 wt clean -m -d --keep-branch
 ```
 
-`wt clean`은 하나 이상의 cleanup 필터에 맞는 worktree를 한 번에 제거합니다. 필터 없이 직접 고르려면 `-i`, `--interactive`를 사용할 수 있습니다:
+`wt clean`은 항상 interactive picker를 엽니다. cleanup 필터를 주면 매칭된 항목이 미리 선택되고, 필터가 없으면 메인 worktree를 제외한 전체 목록을 보여줍니다:
 
 - `-m`, `--merged`: base branch에 이미 병합된 브랜치의 worktree 포함
 - `-d`, `--remote-deleted`: 원격에서 upstream 브랜치가 사라진 worktree 포함
-- `-i`, `--interactive`: interactive picker를 열며, 필터와 함께 쓰면 매칭된 항목을 미리 선택하고, 필터 없이 쓰면 메인 worktree를 제외한 전체 목록을 보여줌
 
-실제 삭제 전에 항상 선택된 대상의 미리보기를 출력하고 한 번 더 확인합니다. 미리보기만 보고 싶으면 `--dry`, 미리보기 확인과 변경사항 프롬프트까지 모두 건너뛰려면 `-f`, `--force`를 사용하세요. `--remote-deleted`는 upstream이 `[gone]` 상태인 브랜치만 대상으로 삼으므로, 아직 push하지 않은 로컬 브랜치를 원격 삭제로 오인하지 않습니다.
+실제 삭제 전에 항상 선택된 대상의 미리보기를 출력하고 한 번 더 확인합니다. 미리보기만 보고 싶으면 `--dry`, 미리보기 확인과 변경사항 프롬프트까지 모두 건너뛰려면 `-f`, `--force`를 사용하세요. 선택이 항상 picker에서 이뤄지므로 `wt clean`은 interactive terminal이 필요합니다. `--remote-deleted`는 upstream이 `[gone]` 상태인 브랜치만 대상으로 삼으므로, 아직 push하지 않은 로컬 브랜치를 원격 삭제로 오인하지 않습니다.
 
 ## 설정
 

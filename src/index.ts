@@ -53,13 +53,13 @@ program
 
 program
   .command("clean")
-  .description("Bulk-remove worktrees that match cleanup filters")
+  .description("Bulk-remove worktrees in an interactive picker")
   .option("-m, --merged", "Include worktrees whose branches are already merged")
   .option(
     "-d, --remote-deleted",
     "Include worktrees whose upstream branch is gone on the remote"
   )
-  .option("-i, --interactive", "Select cleanup targets in an interactive picker")
+  .addOption(new Option("-i, --interactive").hideHelp())
   .option("--dry", "Preview cleanup candidates without removing anything")
   .addOption(new Option("--dry-run").hideHelp())
   .option("--keep-branch", "Keep the local branch after removing worktree")

@@ -32,7 +32,7 @@ describe("shell installer", () => {
       const wrapper = readFileSync(result.wrapperPath, "utf-8");
 
       expect(wrapper).toBe(renderShellWrapper("zsh", "/tmp/wt-bin"));
-      expect(wrapper).toContain('clean[Bulk-remove worktrees by filter]');
+      expect(wrapper).toContain('clean[Bulk-remove worktrees interactively]');
     } finally {
       rmSync(shellDir, { recursive: true, force: true });
     }

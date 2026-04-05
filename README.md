@@ -278,19 +278,18 @@ You can remove a worktree using:
 ### Clean up matching worktrees
 
 ```bash
+wt clean
 wt clean -m
 wt clean -d --dry
-wt clean -i
 wt clean -m -d --keep-branch
 ```
 
-`wt clean` removes multiple worktrees that match one or more cleanup filters. You can also use `-i`, `--interactive` without filters to pick manually:
+`wt clean` always opens an interactive picker. Cleanup filters preselect matching worktrees, and without filters it shows all non-main worktrees:
 
 - `-m`, `--merged`: include worktrees whose branches are already merged into their base branch
 - `-d`, `--remote-deleted`: include worktrees whose configured upstream branch is gone on the remote
-- `-i`, `--interactive`: open an interactive picker; when used with filters it preselects matches, and when used without filters it shows all non-main worktrees
 
-Before removing anything, `wt clean` prints a preview of the selected worktrees and asks for confirmation. Use `--dry` to preview only, or `-f`, `--force` to skip the preview confirmation and any pending-change prompts. `--remote-deleted` only matches branches with a gone upstream, so local branches that were never pushed are not treated as deleted remotes.
+Before removing anything, `wt clean` prints a preview of the selected worktrees and asks for confirmation. Use `--dry` to preview only, or `-f`, `--force` to skip the preview confirmation and any pending-change prompts. `wt clean` requires an interactive terminal because selection always happens in the picker. `--remote-deleted` only matches branches with a gone upstream, so local branches that were never pushed are not treated as deleted remotes.
 
 ## Configuration
 
