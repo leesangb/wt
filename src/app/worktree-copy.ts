@@ -1,6 +1,6 @@
 import { $ } from "bun";
 import { cpSync, mkdirSync, readdirSync } from "fs";
-import { dirname, join } from "path";
+import { dirname, isAbsolute, join, relative } from "path";
 import type { WtSettings } from "../domain/settings.js";
 
 const DEFAULT_EXCLUDE_GLOBS = [
@@ -89,6 +89,31 @@ async function getGitIgnoredDirectoryGlobs(repoRoot: string): Promise<string[]> 
     });
 }
 
+async function getGitTrackedFilePaths(repoRoot: string): Promise<Set<string>> {
+  const output = await $`git -C ${repoRoot} ls-files --cached -z`.text();
+
+  return new Set(output.split("\0").filter(Boolean));
+}
+
+function resolveWorktreeRelativePath(
+  repoRoot: string,
+  worktreePath: string
+): string | undefined {
+  const relativePath = relative(repoRoot, worktreePath).replaceAll("\\", "/");
+
+  if (
+    !relativePath ||
+    relativePath === "." ||
+    relativePath.startsWith("../") ||
+    relativePath === ".." ||
+    isAbsolute(relativePath)
+  ) {
+    return undefined;
+  }
+
+  return relativePath;
+}
+
 export async function copyConfiguredPaths(
   settings: Pick<WtSettings, "copy">,
   repoRoot: string,
@@ -101,6 +126,8 @@ export async function copyConfiguredPaths(
   const includeGlobs = compileGlobs(settings.copy.include);
   const includePrefixes = dedupe(settings.copy.include.map(getStaticPrefix));
   const gitIgnoredDirectoryGlobs = await getGitIgnoredDirectoryGlobs(repoRoot);
+  const trackedFilePaths = await getGitTrackedFilePaths(repoRoot);
+  const worktreeRelativePath = resolveWorktreeRelativePath(repoRoot, worktreePath);
   const excludeGlobs = compileGlobs([
     ...DEFAULT_EXCLUDE_GLOBS,
     ...gitIgnoredDirectoryGlobs,
@@ -117,6 +144,10 @@ export async function copyConfiguredPaths(
         ? `${relativeDirPath}/${entry.name}`
         : entry.name;
 
+      if (worktreeRelativePath && relativePath === worktreeRelativePath) {
+        continue;
+      }
+
       if (matchesAny(excludeGlobs, relativePath)) {
         continue;
       }
@@ -129,15 +160,11 @@ export async function copyConfiguredPaths(
           continue;
         }
 
-        if (included) {
-          mkdirSync(join(worktreePath, relativePath), { recursive: true });
-        }
-
         walk(relativePath, included);
         continue;
       }
 
-      if (!included) {
+      if (!included || trackedFilePaths.has(relativePath)) {
         continue;
       }
 

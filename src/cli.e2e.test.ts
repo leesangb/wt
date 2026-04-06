@@ -878,6 +878,7 @@ describe("cli e2e", () => {
     mkdirSync(join(repo.repoRoot, "node_modules", "pkg"), { recursive: true });
     mkdirSync(join(repo.repoRoot, "cache"), { recursive: true });
     writeFileSync(join(repo.repoRoot, ".gitignore"), "node_modules/\ncache/\n");
+    writeFileSync(join(repo.repoRoot, "README.md"), "local tracked change\n");
     writeFileSync(join(repo.repoRoot, ".env"), "TOKEN=repo\n");
     writeFileSync(
       join(repo.repoRoot, ".wt", "settings.local.json"),
@@ -896,6 +897,7 @@ describe("cli e2e", () => {
     runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
 
     expect(readFileSync(join(worktreePath, ".env"), "utf-8")).toBe("TOKEN=repo\n");
+    expect(readFileSync(join(worktreePath, "README.md"), "utf-8")).toBe("base\n");
     expect(
       readFileSync(join(worktreePath, ".wt", "settings.local.json"), "utf-8")
     ).toContain('"include": [');

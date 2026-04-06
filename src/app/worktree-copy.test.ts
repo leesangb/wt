@@ -27,6 +27,74 @@ afterEach(() => {
 });
 
 describe("copyConfiguredPaths", () => {
+  test("skips the destination worktree when it lives inside the repository", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = join(repoRoot, ".worktrees", "feature-copy");
+
+    mkdirSync(worktreePath, { recursive: true });
+    writeFileSync(join(repoRoot, ".env"), "TOKEN=repo\n");
+    writeFileSync(join(worktreePath, "local-only.txt"), "worktree\n");
+
+    await $`git -C ${repoRoot} init -q`;
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: ["**/*"],
+          exclude: [],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(readFileSync(join(worktreePath, ".env"), "utf-8")).toBe("TOKEN=repo\n");
+    expect(existsSync(join(worktreePath, ".worktrees"))).toBeFalse();
+    expect(readFileSync(join(worktreePath, "local-only.txt"), "utf-8")).toBe("worktree\n");
+  });
+
+  test("copies only untracked files even when tracked files match include patterns", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = makeTempDir("wt-copy-worktree-");
+
+    mkdirSync(join(repoRoot, ".wt"), { recursive: true });
+    mkdirSync(join(repoRoot, "apps", "web"), { recursive: true });
+
+    writeFileSync(
+      join(repoRoot, ".wt", "settings.json"),
+      JSON.stringify({ baseBranch: "main" }, null, 2)
+    );
+    writeFileSync(
+      join(repoRoot, ".wt", "settings.local.json"),
+      JSON.stringify({ baseBranch: "develop" }, null, 2)
+    );
+    writeFileSync(join(repoRoot, "apps", "web", "tracked.json"), '{"tracked":true}\n');
+    writeFileSync(join(repoRoot, "apps", "web", ".env.local"), "APP=1\n");
+
+    await $`git -C ${repoRoot} init -q`;
+    await $`git -C ${repoRoot} add .wt/settings.json apps/web/tracked.json`.quiet();
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: [".wt", "apps"],
+          exclude: [],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(existsSync(join(worktreePath, ".wt", "settings.json"))).toBeFalse();
+    expect(
+      readFileSync(join(worktreePath, ".wt", "settings.local.json"), "utf-8")
+    ).toContain('"develop"');
+    expect(existsSync(join(worktreePath, "apps", "web", "tracked.json"))).toBeFalse();
+    expect(readFileSync(join(worktreePath, "apps", "web", ".env.local"), "utf-8")).toBe(
+      "APP=1\n"
+    );
+  });
+
   test("treats folder-only include and exclude patterns as subtree rules", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = makeTempDir("wt-copy-worktree-");
