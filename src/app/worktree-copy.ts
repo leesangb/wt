@@ -6,6 +6,8 @@ import type { WtSettings } from "../domain/settings.js";
 const DEFAULT_EXCLUDE_GLOBS = [
   ".git",
   ".git/**",
+  "**/.git",
+  "**/.git/**",
   "node_modules",
   "node_modules/**",
   "**/node_modules",
@@ -90,9 +92,26 @@ async function getGitIgnoredDirectoryGlobs(repoRoot: string): Promise<string[]> 
 }
 
 async function getGitTrackedFilePaths(repoRoot: string): Promise<Set<string>> {
-  const output = await $`git -C ${repoRoot} ls-files --cached -z`.text();
+  try {
+    const output = await $`git -C ${repoRoot} ls-files --cached -z`.text();
 
-  return new Set(output.split("\0").filter(Boolean));
+    return new Set(output.split("\0").filter(Boolean));
+  } catch (error) {
+    const stderr =
+      typeof error === "object" && error && "stderr" in error
+        ? String(error.stderr)
+        : "";
+    const exitCode =
+      typeof error === "object" && error && "exitCode" in error
+        ? Number(error.exitCode)
+        : undefined;
+
+    if (exitCode === 128 && stderr.includes("not a git repository")) {
+      return new Set();
+    }
+
+    throw error;
+  }
 }
 
 function resolveWorktreeRelativePath(
@@ -126,7 +145,8 @@ export async function copyConfiguredPaths(
   const includeGlobs = compileGlobs(settings.copy.include);
   const includePrefixes = dedupe(settings.copy.include.map(getStaticPrefix));
   const gitIgnoredDirectoryGlobs = await getGitIgnoredDirectoryGlobs(repoRoot);
-  const trackedFilePaths = await getGitTrackedFilePaths(repoRoot);
+  const sourceTrackedFilePaths = await getGitTrackedFilePaths(repoRoot);
+  const targetTrackedFilePaths = await getGitTrackedFilePaths(worktreePath);
   const worktreeRelativePath = resolveWorktreeRelativePath(repoRoot, worktreePath);
   const excludeGlobs = compileGlobs([
     ...DEFAULT_EXCLUDE_GLOBS,
@@ -164,7 +184,11 @@ export async function copyConfiguredPaths(
         continue;
       }
 
-      if (!included || trackedFilePaths.has(relativePath)) {
+      if (
+        !included ||
+        sourceTrackedFilePaths.has(relativePath) ||
+        targetTrackedFilePaths.has(relativePath)
+      ) {
         continue;
       }
 

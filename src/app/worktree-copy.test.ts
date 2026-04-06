@@ -27,6 +27,43 @@ afterEach(() => {
 });
 
 describe("copyConfiguredPaths", () => {
+  test("does not overwrite files tracked in the target worktree branch", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = makeTempDir("wt-copy-worktree-");
+
+    mkdirSync(join(repoRoot, "config"), { recursive: true });
+    writeFileSync(join(repoRoot, "config", "app.json"), '{"version":"main"}\n');
+
+    await $`git -C ${repoRoot} init -q`;
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    await $`git -C ${repoRoot} add config/app.json`.quiet();
+    await $`git -C ${repoRoot} commit -m main`.quiet();
+    await $`git -C ${repoRoot} checkout -b source`.quiet();
+    await $`git -C ${repoRoot} rm config/app.json`.quiet();
+    await $`git -C ${repoRoot} commit -m remove-config`.quiet();
+
+    mkdirSync(join(repoRoot, "config"), { recursive: true });
+    writeFileSync(join(repoRoot, "config", "app.json"), '{"version":"local"}\n');
+    await $`git -C ${repoRoot} worktree add ${worktreePath} main`.quiet();
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: ["config"],
+          exclude: [],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(readFileSync(join(worktreePath, "config", "app.json"), "utf-8")).toBe(
+      '{"version":"main"}\n'
+    );
+  });
+
   test("skips the destination worktree when it lives inside the repository", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = join(repoRoot, ".worktrees", "feature-copy");
@@ -141,6 +178,7 @@ describe("copyConfiguredPaths", () => {
     mkdirSync(join(repoRoot, "cache"), { recursive: true });
     mkdirSync(join(repoRoot, "secrets"), { recursive: true });
     mkdirSync(join(repoRoot, "apps", "web"), { recursive: true });
+    mkdirSync(join(repoRoot, "vendor", "lib"), { recursive: true });
 
     writeFileSync(join(repoRoot, ".gitignore"), "node_modules/\ncache/\n");
     writeFileSync(join(repoRoot, ".env"), "TOKEN=repo\n");
@@ -154,6 +192,7 @@ describe("copyConfiguredPaths", () => {
     writeFileSync(join(repoRoot, "cache", "data.txt"), "cached\n");
     writeFileSync(join(repoRoot, "secrets", "token.txt"), "secret\n");
     writeFileSync(join(repoRoot, "apps", "web", ".env.local"), "APP=1\n");
+    writeFileSync(join(repoRoot, "vendor", "lib", ".git"), "gitdir: ../.git/modules/lib\n");
 
     await $`git -C ${repoRoot} init -q`;
 
@@ -179,6 +218,7 @@ describe("copyConfiguredPaths", () => {
     expect(existsSync(join(worktreePath, ".wt", "meta.json"))).toBeFalse();
     expect(existsSync(join(worktreePath, "node_modules"))).toBeFalse();
     expect(existsSync(join(worktreePath, "cache"))).toBeFalse();
+    expect(existsSync(join(worktreePath, "vendor", "lib", ".git"))).toBeFalse();
     expect(existsSync(join(worktreePath, "secrets", "token.txt"))).toBeFalse();
   });
 });
