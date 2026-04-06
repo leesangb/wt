@@ -311,7 +311,7 @@ wt clean -m -d --keep-branch
 
 사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `copy.*`와 `scripts.*` 필드도 병합되므로 `copy.exclude`나 `scripts.postMode`만 따로 바꿀 수 있습니다.
 
-`copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 source 저장소에서 git에 트래킹되지 않은 파일만 복사하고, 새로 만든 worktree 쪽에서 이미 tracked인 파일은 덮어쓰지 않습니다. 또한 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
+`copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. 앞에 `./`를 붙여도 되고, `./apps`와 `apps`는 같은 의미입니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 source 저장소에서 git에 트래킹되지 않은 파일만 복사하고, 새로 만든 worktree 쪽에서 이미 tracked인 파일은 덮어쓰지 않습니다. 또한 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
 
 예시 `.wt/settings.local.json`:
 

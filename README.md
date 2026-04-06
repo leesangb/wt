@@ -311,7 +311,7 @@ Edit `.wt/settings.json` in your repository:
 
 You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*` and `scripts.*` fields are merged, so you can override only `copy.exclude` or `scripts.postMode` without copying the rest of each object.
 
-`copy.include` and `copy.exclude` are resolved relative to the repository root. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
+`copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
 Example `.wt/settings.local.json`:
 

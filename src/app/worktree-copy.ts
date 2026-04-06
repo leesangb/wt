@@ -30,8 +30,17 @@ function dedupe(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))];
 }
 
+function normalizeCopyPattern(pattern: string): string {
+  const normalizedPattern = pattern.replaceAll("\\", "/");
+  const negationPrefix = normalizedPattern.match(/^!+/)?.[0] ?? "";
+
+  return `${negationPrefix}${normalizedPattern
+    .slice(negationPrefix.length)
+    .replace(/^(?:\.\/)+/, "")}`;
+}
+
 function compileGlobs(patterns: string[]): CompiledGlob[] {
-  return dedupe(patterns).map((pattern) => ({
+  return dedupe(patterns.map(normalizeCopyPattern)).map((pattern) => ({
     pattern,
     glob: new Bun.Glob(pattern),
   }));
@@ -52,7 +61,7 @@ function matchesAny(
 }
 
 function getStaticPrefix(pattern: string): string {
-  const normalizedPattern = pattern.replaceAll("\\", "/").replace(/^!+/, "");
+  const normalizedPattern = normalizeCopyPattern(pattern).replace(/^!+/, "");
   const segments = normalizedPattern.split("/");
   const prefixSegments: string[] = [];
 
