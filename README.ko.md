@@ -132,6 +132,10 @@ wt init
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": [],
@@ -163,8 +167,9 @@ wt new feature-branch --no-cd
 2. pre 스크립트 실행 (설정된 경우)
 3. `~/.wt/<저장소명-feature-branch>`에 `feature-branch` 브랜치로 worktree 생성
 4. 새 브랜치를 원격에 upstream 추적과 함께 푸시 (`--no-push`를 사용하지 않는 경우)
-5. 새 worktree에서 post 스크립트 실행 (설정된 경우)
-6. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
+5. 설정된 로컬 파일들을 새 worktree로 복사 (설정된 경우)
+6. 새 worktree에서 post 스크립트 실행 (설정된 경우)
+7. 새 worktree 디렉토리로 자동 이동 (shell wrapper 사용 시)
 
 post 스크립트를 async 모드로 실행하면 `wt`는 즉시 반환되고, `<worktree>/.wt/` 아래에 상태/로그 파일(`post-task.json`, `post-task.log`)이 생성됩니다. macOS에서는 async 작업이 시작될 때와 끝날 때 알림 센터 알림도 표시되며, 알림 전송 실패는 무시됩니다.
 
@@ -298,16 +303,23 @@ wt clean -m -d --keep-branch
 - **worktreeDir**: worktree의 기본 디렉토리 (기본값: `~/.wt`)
 - **baseBranch**: 새 worktree의 기본 브랜치 (기본값: `main`)
 - **pushRemote**: 새 브랜치를 원격에 자동 푸시 (기본값: `true`)
+- **copy.include**: 저장소 루트에서 각 새 worktree로 복사할 glob 패턴
+- **copy.exclude**: `copy.include` 결과에서 제외할 glob 패턴
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 - **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
 
-사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `scripts.*` 필드도 병합되므로 `scripts` 전체를 다시 쓰지 않고 `scripts.postMode`만 바꿀 수 있습니다.
+사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `copy.*`와 `scripts.*` 필드도 병합되므로 `copy.exclude`나 `scripts.postMode`만 따로 바꿀 수 있습니다.
+
+`copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
 
 예시 `.wt/settings.local.json`:
 
 ```json
 {
+  "copy": {
+    "exclude": ["dist", ".wt/settings.json"]
+  },
   "baseBranch": "develop",
   "scripts": {
     "postMode": "sync"
@@ -333,6 +345,10 @@ wt clean -m -d --keep-branch
   "worktreeDir": "~/.wt",
   "baseBranch": "develop",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": [],
@@ -347,6 +363,10 @@ wt clean -m -d --keep-branch
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": ["npm install"]
@@ -360,9 +380,30 @@ wt clean -m -d --keep-branch
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": ["npm install", "code $WT_PATH"]
+  }
+}
+```
+
+**로컬 env 파일과 wt 로컬 override를 각 worktree로 복사:**
+```json
+{
+  "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": true,
+  "copy": {
+    "include": [".env", ".env.local", ".wt/settings.local.json", "apps/web"],
+    "exclude": [".wt/settings.json", "dist"]
+  },
+  "scripts": {
+    "pre": [],
+    "post": []
   }
 }
 ```

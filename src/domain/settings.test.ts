@@ -15,6 +15,9 @@ describe("mergeSettingsInputs", () => {
       mergeSettingsInputs(
         {
           worktreeDir: "/tmp/worktrees",
+          copy: {
+            include: [".env"],
+          },
           scripts: {
             pre: ["echo pre"],
             post: ["bun install"],
@@ -22,6 +25,9 @@ describe("mergeSettingsInputs", () => {
         },
         {
           baseBranch: "develop",
+          copy: {
+            exclude: ["node_modules/**"],
+          },
           scripts: {
             postMode: "sync",
           },
@@ -30,6 +36,10 @@ describe("mergeSettingsInputs", () => {
     ).toEqual({
       worktreeDir: "/tmp/worktrees",
       baseBranch: "develop",
+      copy: {
+        include: [".env"],
+        exclude: ["node_modules/**"],
+      },
       scripts: {
         pre: ["echo pre"],
         post: ["bun install"],
@@ -56,9 +66,58 @@ describe("normalizeSettings", () => {
       worktreeDir: "/tmp/worktrees",
       baseBranch: "main",
       pushRemote: true,
+      copy: {
+        include: [],
+        exclude: [],
+      },
       scripts: {
         pre: [],
         post: ["pnpm install"],
+        postMode: "async",
+      },
+    });
+  });
+
+  test("preserves copy and exclude arrays", () => {
+    expect(
+      normalizeSettings({
+        copy: {
+          include: [".env", ".wt/settings.local.json"],
+          exclude: ["node_modules/**", ".wt/.gitignore"],
+        },
+      })
+    ).toEqual({
+      worktreeDir: "~/.wt",
+      baseBranch: "main",
+      pushRemote: true,
+      copy: {
+        include: [".env", ".wt/settings.local.json"],
+        exclude: ["node_modules/**", ".wt/.gitignore"],
+      },
+      scripts: {
+        pre: [],
+        post: [],
+        postMode: "async",
+      },
+    });
+  });
+
+  test("accepts legacy copy arrays and normalizes them to copy.include", () => {
+    expect(
+      normalizeSettings({
+        copy: [".env", ".env.local"],
+      })
+    ).toEqual({
+      worktreeDir: "~/.wt",
+      baseBranch: "main",
+      pushRemote: true,
+      copy: {
+        include: [".env", ".env.local"],
+        exclude: [],
+      },
+      scripts: {
+        pre: [],
+        post: [],
         postMode: "async",
       },
     });

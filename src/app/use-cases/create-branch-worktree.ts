@@ -8,6 +8,7 @@ import {
   resolveUniqueWorktreeId,
   type CreateWorktreeResult,
 } from "../worktree-creation.js";
+import { copyConfiguredPaths } from "../worktree-copy.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
 import {
@@ -96,6 +97,7 @@ export async function createBranchWorktree(
 
   await runPreCreationScripts(settings, context.repoRoot, scriptEnv);
   await attachGitWorktree(context.repoRoot, worktreePath, normalizedBranchName);
+  await copyConfiguredPaths(settings, context.repoRoot, worktreePath);
 
   await writeWorktreeMeta(
     worktreePath,

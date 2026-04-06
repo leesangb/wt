@@ -14,6 +14,7 @@ import { basename, join } from "path";
 import { fileURLToPath } from "url";
 import { $ } from "bun";
 import { renderShellWrapper } from "./infra/shell/installer.js";
+import { WORKTREE_GITIGNORE_CONTENT } from "./infra/storage/worktree-meta-store.js";
 
 interface TestRepo {
   originDir: string;
@@ -867,6 +868,44 @@ describe("cli e2e", () => {
       expect(upstreamResult.stdout.trim()).toBe("origin/feature-e2e");
     }
   );
+
+  test("copies configured files into a new worktree while respecting excludes", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature-copy-config";
+    const worktreeId = "copy-config";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    mkdirSync(join(repo.repoRoot, "node_modules", "pkg"), { recursive: true });
+    mkdirSync(join(repo.repoRoot, "cache"), { recursive: true });
+    writeFileSync(join(repo.repoRoot, ".gitignore"), "node_modules/\ncache/\n");
+    writeFileSync(join(repo.repoRoot, ".env"), "TOKEN=repo\n");
+    writeFileSync(
+      join(repo.repoRoot, ".wt", "settings.local.json"),
+      JSON.stringify({ copy: { include: ["**/*"] } }, null, 2)
+    );
+    writeFileSync(join(repo.repoRoot, "node_modules", "pkg", "index.js"), "module\n");
+    writeFileSync(join(repo.repoRoot, "cache", "data.txt"), "cached\n");
+
+    updateSettings(repo.repoRoot, (settings) => {
+      settings.copy = {
+        include: ["**/*"],
+        exclude: [".wt/settings.json"],
+      };
+    });
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    expect(readFileSync(join(worktreePath, ".env"), "utf-8")).toBe("TOKEN=repo\n");
+    expect(
+      readFileSync(join(worktreePath, ".wt", "settings.local.json"), "utf-8")
+    ).toContain('"include": [');
+    expect(existsSync(join(worktreePath, ".wt", "settings.json"))).toBeFalse();
+    expect(readFileSync(join(worktreePath, ".wt", ".gitignore"), "utf-8")).toBe(
+      WORKTREE_GITIGNORE_CONTENT
+    );
+    expect(existsSync(join(worktreePath, "node_modules"))).toBeFalse();
+    expect(existsSync(join(worktreePath, "cache"))).toBeFalse();
+  });
 
   test("cleans up a partially created worktree when push fails", async () => {
     const repo = await createTestRepo();

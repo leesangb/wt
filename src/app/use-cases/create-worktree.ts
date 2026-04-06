@@ -13,6 +13,7 @@ import {
   runPreCreationScripts,
   type CreateWorktreeResult,
 } from "../worktree-creation.js";
+import { copyConfiguredPaths } from "../worktree-copy.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
   loadSettings,
@@ -126,6 +127,7 @@ export async function createWorktree(
     baseBranch,
     pushRemote
   );
+  await copyConfiguredPaths(settings, context.repoRoot, worktreePath);
 
   await writeWorktreeMeta(
     worktreePath,
