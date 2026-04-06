@@ -65,6 +65,10 @@ describe("settings store", () => {
       worktreeDir: "~/.wt",
       baseBranch: "main",
       pushRemote: true,
+      copy: {
+        include: [],
+        exclude: [],
+      },
       scripts: {
         pre: [],
         post: [],
@@ -87,6 +91,10 @@ describe("settings store", () => {
       worktreeDir: "/tmp/worktrees",
       baseBranch: "main",
       pushRemote: false,
+      copy: {
+        include: [],
+        exclude: [],
+      },
       scripts: {
         pre: [],
         post: [],
@@ -104,6 +112,9 @@ describe("settings store", () => {
       worktreeDir: "/tmp/worktrees",
       baseBranch: "main",
       pushRemote: true,
+      copy: {
+        include: [".env"],
+      },
       scripts: {
         pre: ["echo pre"],
         post: ["bun install"],
@@ -112,6 +123,9 @@ describe("settings store", () => {
     });
     writeJson(join(wtDir, "settings.local.json"), {
       baseBranch: "develop",
+      copy: {
+        exclude: ["node_modules/**"],
+      },
       scripts: {
         postMode: "sync",
       },
@@ -121,6 +135,10 @@ describe("settings store", () => {
       worktreeDir: "/tmp/worktrees",
       baseBranch: "develop",
       pushRemote: true,
+      copy: {
+        include: [".env"],
+        exclude: ["node_modules/**"],
+      },
       scripts: {
         pre: ["echo pre"],
         post: ["bun install"],
@@ -145,9 +163,47 @@ describe("settings store", () => {
       worktreeDir: "~/.wt",
       baseBranch: "main",
       pushRemote: false,
+      copy: {
+        include: [],
+        exclude: [],
+      },
       scripts: {
         pre: [],
         post: ["pnpm install"],
+        postMode: "async",
+      },
+    });
+  });
+
+  test("lets local settings override copy and exclude arrays", async () => {
+    const repoRoot = makeTempDir("wt-settings-store-");
+    const wtDir = join(repoRoot, ".wt");
+
+    mkdirSync(wtDir, { recursive: true });
+    writeJson(join(wtDir, "settings.json"), {
+      copy: {
+        include: [".env"],
+        exclude: ["dist/**"],
+      },
+    });
+    writeJson(join(wtDir, "settings.local.json"), {
+      copy: {
+        include: [".env.local"],
+        exclude: ["coverage/**"],
+      },
+    });
+
+    await expect(loadSettings(repoRoot)).resolves.toEqual({
+      worktreeDir: "~/.wt",
+      baseBranch: "main",
+      pushRemote: true,
+      copy: {
+        include: [".env.local"],
+        exclude: ["coverage/**"],
+      },
+      scripts: {
+        pre: [],
+        post: [],
         postMode: "async",
       },
     });

@@ -132,6 +132,10 @@ This creates `.wt/settings.json` in your repository:
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": [],
@@ -163,8 +167,9 @@ This will:
 2. Run the pre scripts (if configured)
 3. Create a worktree at `~/.wt/<reponame-feature-branch>` with branch `feature-branch`
 4. Push the new branch to remote with upstream tracking (unless `--no-push` is used)
-5. Run the post scripts in the new worktree (if configured)
-6. Automatically change to the new worktree directory (with shell wrapper)
+5. Copy configured local files into the new worktree (if configured)
+6. Run the post scripts in the new worktree (if configured)
+7. Automatically change to the new worktree directory (with shell wrapper)
 
 When post scripts run in async mode, `wt` returns immediately and writes status/log files under `<worktree>/.wt/` (`post-task.json`, `post-task.log`). On macOS, `wt` also sends Notification Center notifications when the async task starts and when it finishes. Notification delivery failures are ignored.
 
@@ -298,16 +303,23 @@ Edit `.wt/settings.json` in your repository:
 - **worktreeDir**: Base directory for worktrees (default: `~/.wt`)
 - **baseBranch**: Default base branch for new worktrees (default: `main`)
 - **pushRemote**: Auto-push new branch to remote (default: `true`)
+- **copy.include**: Glob patterns to copy from the repository root into each new worktree
+- **copy.exclude**: Glob patterns to remove from `copy.include`
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
 
-You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `scripts.*` fields are merged, so you can override only `scripts.postMode` without copying the rest of `scripts`.
+You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*` and `scripts.*` fields are merged, so you can override only `copy.exclude` or `scripts.postMode` without copying the rest of each object.
+
+`copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
 Example `.wt/settings.local.json`:
 
 ```json
 {
+  "copy": {
+    "exclude": ["dist", ".wt/settings.json"]
+  },
   "baseBranch": "develop",
   "scripts": {
     "postMode": "sync"
@@ -333,6 +345,10 @@ Scripts have access to these environment variables:
   "worktreeDir": "~/.wt",
   "baseBranch": "develop",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": []
@@ -346,6 +362,10 @@ Scripts have access to these environment variables:
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": ["npm install"]
@@ -359,9 +379,30 @@ Scripts have access to these environment variables:
   "worktreeDir": "~/.wt",
   "baseBranch": "main",
   "pushRemote": true,
+  "copy": {
+    "include": [],
+    "exclude": []
+  },
   "scripts": {
     "pre": [],
     "post": ["npm install", "code $WT_PATH"]
+  }
+}
+```
+
+**Copy local env files and local wt overrides into each worktree:**
+```json
+{
+  "worktreeDir": "~/.wt",
+  "baseBranch": "main",
+  "pushRemote": true,
+  "copy": {
+    "include": [".env", ".env.local", ".wt/settings.local.json", "apps/web"],
+    "exclude": [".wt/settings.json", "dist"]
+  },
+  "scripts": {
+    "pre": [],
+    "post": []
   }
 }
 ```
