@@ -149,6 +149,34 @@ describe("copyConfiguredPaths", () => {
     );
   });
 
+  test("supports trailing-slash directory patterns in include and exclude", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = makeTempDir("wt-copy-worktree-");
+
+    mkdirSync(join(repoRoot, "apps", "web"), { recursive: true });
+    mkdirSync(join(repoRoot, "secrets"), { recursive: true });
+    writeFileSync(join(repoRoot, "apps", "web", ".env.local"), "APP=1\n");
+    writeFileSync(join(repoRoot, "secrets", "token.txt"), "secret\n");
+
+    await $`git -C ${repoRoot} init -q`;
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: ["apps/"],
+          exclude: ["secrets/"],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(readFileSync(join(worktreePath, "apps", "web", ".env.local"), "utf-8")).toBe(
+      "APP=1\n"
+    );
+    expect(existsSync(join(worktreePath, "secrets"))).toBeFalse();
+  });
+
   test("copies only untracked files even when tracked files match include patterns", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = makeTempDir("wt-copy-worktree-");

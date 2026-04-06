@@ -37,8 +37,18 @@ function compileGlobs(patterns: string[]): CompiledGlob[] {
   }));
 }
 
-function matchesAny(globs: CompiledGlob[], relativePath: string): boolean {
-  return globs.some(({ glob }) => glob.match(relativePath));
+function matchesAny(
+  globs: CompiledGlob[],
+  relativePath: string,
+  isDirectory: boolean = false
+): boolean {
+  return globs.some(({ glob }) => {
+    if (glob.match(relativePath)) {
+      return true;
+    }
+
+    return isDirectory ? glob.match(`${relativePath}/`) : false;
+  });
 }
 
 function getStaticPrefix(pattern: string): string {
@@ -237,11 +247,15 @@ export async function copyConfiguredPaths(
         continue;
       }
 
-      if (matchesAny(excludeGlobs, relativePath)) {
+      if (matchesAny(excludeGlobs, relativePath, entry.isDirectory())) {
         continue;
       }
 
-      const explicitlyIncluded = matchesAny(includeGlobs, relativePath);
+      const explicitlyIncluded = matchesAny(
+        includeGlobs,
+        relativePath,
+        entry.isDirectory()
+      );
       const included = inheritedIncluded || explicitlyIncluded;
 
       if (entry.isDirectory()) {
