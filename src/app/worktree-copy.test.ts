@@ -90,6 +90,40 @@ describe("copyConfiguredPaths", () => {
     expect(readFileSync(join(worktreePath, "local-only.txt"), "utf-8")).toBe("worktree\n");
   });
 
+  test("skips sibling linked worktrees when the worktree root lives inside the repository", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const siblingWorktreePath = join(repoRoot, ".worktrees", "old");
+    const worktreePath = join(repoRoot, ".worktrees", "new");
+
+    writeFileSync(join(repoRoot, "README.md"), "base\n");
+    writeFileSync(join(repoRoot, ".env"), "TOKEN=repo\n");
+
+    await $`git -C ${repoRoot} init -q`;
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} worktree add -b old ${siblingWorktreePath} main`.quiet();
+    await $`git -C ${repoRoot} worktree add -b new ${worktreePath} main`.quiet();
+
+    writeFileSync(join(siblingWorktreePath, "sibling-only.txt"), "sibling\n");
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: ["**/*"],
+          exclude: [],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(readFileSync(join(worktreePath, ".env"), "utf-8")).toBe("TOKEN=repo\n");
+    expect(existsSync(join(worktreePath, ".worktrees", "old", "sibling-only.txt"))).toBeFalse();
+  });
+
   test("copies only untracked files even when tracked files match include patterns", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = makeTempDir("wt-copy-worktree-");

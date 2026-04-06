@@ -1,7 +1,8 @@
 import { $ } from "bun";
-import { cpSync, mkdirSync, readdirSync } from "fs";
+import { cpSync, mkdirSync, readdirSync, realpathSync } from "fs";
 import { dirname, isAbsolute, join, relative } from "path";
 import type { WtSettings } from "../domain/settings.js";
+import { listGitWorktreePaths } from "../infra/git/worktree-repository.js";
 
 const DEFAULT_EXCLUDE_GLOBS = [
   ".git",
@@ -118,7 +119,12 @@ function resolveWorktreeRelativePath(
   repoRoot: string,
   worktreePath: string
 ): string | undefined {
-  const relativePath = relative(repoRoot, worktreePath).replaceAll("\\", "/");
+  const normalizedRepoRoot = realpathSync(repoRoot);
+  const normalizedWorktreePath = realpathSync(worktreePath);
+  const relativePath = relative(
+    normalizedRepoRoot,
+    normalizedWorktreePath
+  ).replaceAll("\\", "/");
 
   if (
     !relativePath ||
@@ -133,6 +139,20 @@ function resolveWorktreeRelativePath(
   return relativePath;
 }
 
+async function getRepoLocalWorktreeGlobs(repoRoot: string): Promise<string[]> {
+  const worktreePaths = await listGitWorktreePaths(repoRoot);
+
+  return worktreePaths.flatMap(({ path }) => {
+    const relativePath = resolveWorktreeRelativePath(repoRoot, path);
+
+    if (!relativePath) {
+      return [];
+    }
+
+    return [relativePath, `${relativePath}/**`];
+  });
+}
+
 export async function copyConfiguredPaths(
   settings: Pick<WtSettings, "copy">,
   repoRoot: string,
@@ -145,12 +165,14 @@ export async function copyConfiguredPaths(
   const includeGlobs = compileGlobs(settings.copy.include);
   const includePrefixes = dedupe(settings.copy.include.map(getStaticPrefix));
   const gitIgnoredDirectoryGlobs = await getGitIgnoredDirectoryGlobs(repoRoot);
+  const repoLocalWorktreeGlobs = await getRepoLocalWorktreeGlobs(repoRoot);
   const sourceTrackedFilePaths = await getGitTrackedFilePaths(repoRoot);
   const targetTrackedFilePaths = await getGitTrackedFilePaths(worktreePath);
   const worktreeRelativePath = resolveWorktreeRelativePath(repoRoot, worktreePath);
   const excludeGlobs = compileGlobs([
     ...DEFAULT_EXCLUDE_GLOBS,
     ...gitIgnoredDirectoryGlobs,
+    ...repoLocalWorktreeGlobs,
     ...settings.copy.exclude,
   ]);
 
