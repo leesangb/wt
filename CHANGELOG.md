@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.5.1
+
+### Patch Changes
+
+- 30bb464: make clean interactive, add copy
+
 ## 0.5.0
 
 ### Minor Changes
