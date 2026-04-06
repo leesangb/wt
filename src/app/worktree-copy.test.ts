@@ -124,6 +124,31 @@ describe("copyConfiguredPaths", () => {
     expect(existsSync(join(worktreePath, ".worktrees", "old", "sibling-only.txt"))).toBeFalse();
   });
 
+  test("keeps traversing directories for glob-only include patterns", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = makeTempDir("wt-copy-worktree-");
+
+    mkdirSync(join(repoRoot, "apps", "web"), { recursive: true });
+    writeFileSync(join(repoRoot, "apps", "web", ".env.local"), "APP=1\n");
+
+    await $`git -C ${repoRoot} init -q`;
+
+    await copyConfiguredPaths(
+      {
+        copy: {
+          include: ["**/.env*"],
+          exclude: [],
+        },
+      },
+      repoRoot,
+      worktreePath
+    );
+
+    expect(readFileSync(join(worktreePath, "apps", "web", ".env.local"), "utf-8")).toBe(
+      "APP=1\n"
+    );
+  });
+
   test("copies only untracked files even when tracked files match include patterns", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = makeTempDir("wt-copy-worktree-");

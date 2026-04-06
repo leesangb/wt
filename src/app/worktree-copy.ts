@@ -1,4 +1,4 @@
-import { $ } from "bun";
+import { $, spawn } from "bun";
 import { cpSync, mkdirSync, readdirSync, realpathSync } from "fs";
 import { dirname, isAbsolute, join, relative } from "path";
 import type { WtSettings } from "../domain/settings.js";
@@ -92,35 +92,52 @@ async function getGitIgnoredDirectoryGlobs(repoRoot: string): Promise<string[]> 
     });
 }
 
-async function getGitTrackedFilePaths(repoRoot: string): Promise<Set<string>> {
-  try {
-    const output = await $`git -C ${repoRoot} ls-files --cached -z`.text();
+async function getGitTrackedFilePaths(
+  repoRoot: string,
+  pathspecs?: string[]
+): Promise<Set<string>> {
+  const args = [
+    "git",
+    "-C",
+    repoRoot,
+    "ls-files",
+    "--cached",
+    "-z",
+    ...(pathspecs && pathspecs.length > 0 ? ["--", ...pathspecs] : []),
+  ];
+  const proc = spawn(args, {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 
-    return new Set(output.split("\0").filter(Boolean));
-  } catch (error) {
-    const stderr =
-      typeof error === "object" && error && "stderr" in error
-        ? String(error.stderr)
-        : "";
-    const exitCode =
-      typeof error === "object" && error && "exitCode" in error
-        ? Number(error.exitCode)
-        : undefined;
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
 
-    if (exitCode === 128 && stderr.includes("not a git repository")) {
-      return new Set();
-    }
-
-    throw error;
+  if (exitCode === 0) {
+    return new Set(stdout.split("\0").filter(Boolean));
   }
+
+  if (exitCode === 128 && stderr.includes("not a git repository")) {
+    return new Set();
+  }
+
+  throw new Error(
+    stderr.trim() || `git ls-files failed with exit code ${exitCode}`
+  );
+}
+
+function normalizeExistingPath(path: string): string {
+  return realpathSync(path);
 }
 
 function resolveWorktreeRelativePath(
-  repoRoot: string,
+  normalizedRepoRoot: string,
   worktreePath: string
 ): string | undefined {
-  const normalizedRepoRoot = realpathSync(repoRoot);
-  const normalizedWorktreePath = realpathSync(worktreePath);
+  const normalizedWorktreePath = normalizeExistingPath(worktreePath);
   const relativePath = relative(
     normalizedRepoRoot,
     normalizedWorktreePath
@@ -139,11 +156,14 @@ function resolveWorktreeRelativePath(
   return relativePath;
 }
 
-async function getRepoLocalWorktreeGlobs(repoRoot: string): Promise<string[]> {
+async function getRepoLocalWorktreeGlobs(
+  repoRoot: string,
+  normalizedRepoRoot: string
+): Promise<string[]> {
   const worktreePaths = await listGitWorktreePaths(repoRoot);
 
   return worktreePaths.flatMap(({ path }) => {
-    const relativePath = resolveWorktreeRelativePath(repoRoot, path);
+    const relativePath = resolveWorktreeRelativePath(normalizedRepoRoot, path);
 
     if (!relativePath) {
       return [];
@@ -163,18 +183,45 @@ export async function copyConfiguredPaths(
   }
 
   const includeGlobs = compileGlobs(settings.copy.include);
-  const includePrefixes = dedupe(settings.copy.include.map(getStaticPrefix));
-  const gitIgnoredDirectoryGlobs = await getGitIgnoredDirectoryGlobs(repoRoot);
-  const repoLocalWorktreeGlobs = await getRepoLocalWorktreeGlobs(repoRoot);
-  const sourceTrackedFilePaths = await getGitTrackedFilePaths(repoRoot);
-  const targetTrackedFilePaths = await getGitTrackedFilePaths(worktreePath);
-  const worktreeRelativePath = resolveWorktreeRelativePath(repoRoot, worktreePath);
+  const rawIncludePrefixes = settings.copy.include.map(getStaticPrefix);
+  const includePrefixes = rawIncludePrefixes.some((prefix) => prefix === "")
+    ? [""]
+    : dedupe(rawIncludePrefixes);
+  const normalizedRepoRoot = normalizeExistingPath(repoRoot);
+  const trackedFilePathspecs = includePrefixes.includes("")
+    ? undefined
+    : includePrefixes;
+  const [
+    gitIgnoredDirectoryGlobs,
+    repoLocalWorktreeGlobs,
+    sourceTrackedFilePaths,
+    targetTrackedFilePaths,
+  ] = await Promise.all([
+    getGitIgnoredDirectoryGlobs(repoRoot),
+    getRepoLocalWorktreeGlobs(repoRoot, normalizedRepoRoot),
+    getGitTrackedFilePaths(repoRoot, trackedFilePathspecs),
+    getGitTrackedFilePaths(worktreePath, trackedFilePathspecs),
+  ]);
+  const worktreeRelativePath = resolveWorktreeRelativePath(
+    normalizedRepoRoot,
+    worktreePath
+  );
   const excludeGlobs = compileGlobs([
     ...DEFAULT_EXCLUDE_GLOBS,
     ...gitIgnoredDirectoryGlobs,
     ...repoLocalWorktreeGlobs,
     ...settings.copy.exclude,
   ]);
+  const createdDestinationDirs = new Set<string>([worktreePath]);
+
+  function ensureDestinationDir(directoryPath: string): void {
+    if (createdDestinationDirs.has(directoryPath)) {
+      return;
+    }
+
+    mkdirSync(directoryPath, { recursive: true });
+    createdDestinationDirs.add(directoryPath);
+  }
 
   function walk(relativeDirPath: string, inheritedIncluded: boolean): void {
     const sourceDirPath = relativeDirPath
@@ -217,7 +264,7 @@ export async function copyConfiguredPaths(
       const sourcePath = join(repoRoot, relativePath);
       const destinationPath = join(worktreePath, relativePath);
 
-      mkdirSync(dirname(destinationPath), { recursive: true });
+      ensureDestinationDir(dirname(destinationPath));
       cpSync(sourcePath, destinationPath, {
         dereference: false,
         force: true,
