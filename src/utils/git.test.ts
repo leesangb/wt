@@ -58,6 +58,73 @@ describe("isBranchMergedToRemote", () => {
       process.chdir(previousCwd);
     }
   });
+
+  test("throws when the base branch does not exist on the remote", async () => {
+    const previousCwd = process.cwd();
+    const originDir = makeTempDir("wt-origin-");
+    const repoRoot = makeTempDir("wt-repo-");
+
+    await $`git init --bare ${originDir}`.quiet();
+    await $`git clone ${originDir} ${repoRoot}`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    await Bun.write(join(repoRoot, "README.md"), "base\n");
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} push -u origin main`.quiet();
+    await $`git -C ${repoRoot} remote set-head origin main`.quiet();
+
+    process.chdir(repoRoot);
+
+    try {
+      expect(
+        isBranchMergedToRemote("main", "missing-base")
+      ).rejects.toThrow("Cannot determine merge status");
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  test("detects merged status even after the remote branch is deleted", async () => {
+    const previousCwd = process.cwd();
+    const originDir = makeTempDir("wt-origin-");
+    const repoRoot = makeTempDir("wt-repo-");
+    const worktreeRoot = makeTempDir("wt-worktrees-");
+    const worktreePath = join(worktreeRoot, "repo-feature");
+
+    await $`git init --bare ${originDir}`.quiet();
+    await $`git clone ${originDir} ${repoRoot}`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b trunk`.quiet();
+    await Bun.write(join(repoRoot, "README.md"), "base\n");
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} push -u origin trunk`.quiet();
+    await $`git -C ${repoRoot} remote set-head origin trunk`.quiet();
+    await $`git -C ${repoRoot} worktree add -b feature/deleted-test ${worktreePath} trunk`.quiet();
+    await Bun.write(join(worktreePath, "README.md"), "feature\n");
+    await $`git -C ${worktreePath} add README.md`.quiet();
+    await $`git -C ${worktreePath} commit -m feature`.quiet();
+    await $`git -C ${worktreePath} push -u origin feature/deleted-test`.quiet();
+    await $`git -C ${repoRoot} merge --no-ff feature/deleted-test -m merge-feature`.quiet();
+    await $`git -C ${repoRoot} push origin trunk`.quiet();
+
+    // Delete the remote branch and prune
+    await $`git -C ${originDir} branch -D feature/deleted-test`.quiet();
+    await $`git -C ${repoRoot} fetch --prune`.quiet();
+
+    process.chdir(repoRoot);
+
+    try {
+      expect(
+        await isBranchMergedToRemote("feature/deleted-test", "trunk")
+      ).toBeTrue();
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
 });
 
 describe("getWorktreeStatusSummary", () => {
