@@ -1640,6 +1640,43 @@ describe("cli e2e", () => {
     expect(completionResult.stdout).not.toContain("unpushed");
   });
 
+  test("detects merged status even after the remote branch is deleted", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "mergeddeleted123";
+    const branchName = "feature-merged-deleted";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    writeFileSync(join(worktreePath, "README.md"), "base\nmerged-deleted\n");
+    await $`git -C ${worktreePath} add README.md`.quiet();
+    await $`git -C ${worktreePath} commit -m merged-deleted`.quiet();
+    await $`git -C ${worktreePath} push origin ${branchName}`.quiet();
+
+    // Simulate PR merge on remote: fast-forward main to the branch tip, then delete the remote branch
+    const branchTip = (await $`git -C ${repo.repoRoot} rev-parse origin/${branchName}`.text()).trim();
+    await $`git -C ${repo.originDir} update-ref refs/heads/main ${branchTip}`.quiet();
+    await $`git -C ${repo.originDir} branch -D ${branchName}`.quiet();
+    await $`git -C ${repo.repoRoot} fetch --prune`.quiet();
+
+    const completionResult = runCliCapture(
+      ["list", "--completion", "bash", "--exclude-main-worktree"],
+      repo.repoRoot
+    );
+    assertProcessSuccess(
+      completionResult.status,
+      completionResult.stderr,
+      completionResult.stdout
+    );
+
+    const completionLine = completionResult.stdout
+      .split(/\r?\n/)
+      .find(line => line.startsWith(`${worktreeId}:`));
+
+    expect(completionLine).toBeDefined();
+    expect(completionLine).toContain("merged");
+    expect(completionLine).not.toContain("not merged");
+  });
+
   test("omits merged status in completion output when merge status is unknown", async () => {
     const repo = await createTestRepo();
     const worktreeId = "removeunknown123";

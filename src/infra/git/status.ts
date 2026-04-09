@@ -126,8 +126,20 @@ export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
-  const result = await getMergedRemoteBranchesResult(repoRoot, baseBranch);
-  return result.known && result.branches.has(`origin/${branch}`);
+  const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch(repoRoot));
+
+  if (!mergeBaseBranch) {
+    throw new Error("Cannot determine merge status: no base branch specified and no default remote branch found");
+  }
+
+  const baseRef = `origin/${mergeBaseBranch}`;
+  const baseExists = await getCommitHash(repoRoot, baseRef);
+
+  if (!baseExists) {
+    throw new Error(`Cannot determine merge status: ${baseRef} does not exist`);
+  }
+
+  return isRefAncestor(repoRoot, branch, baseRef);
 }
 
 export async function getWorktreeStatusSummary(
