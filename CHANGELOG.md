@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.5.2
+
+### Patch Changes
+
+- 0ab95b4: improve merge detection
+
 ## 0.5.1
 
 ### Patch Changes
