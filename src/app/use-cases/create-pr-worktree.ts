@@ -206,6 +206,8 @@ export async function createPrWorktree(
     createWorktreeMeta(baseBranch, baseCommit, undefined, {
       id,
       fullId,
+      prNumber: pullRequestInfo.number,
+      prUrl: pullRequestInfo.url,
     })
   );
 

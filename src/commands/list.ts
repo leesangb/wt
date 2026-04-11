@@ -87,12 +87,16 @@ export async function listCommand(options?: {
 
     for (const worktree of result.worktrees) {
       const idLabel = buildWorktreeIdLabel(worktree);
+      const pullRequestSummary = buildPullRequestSummary(worktree);
       const timestamp = new Date(worktree.createdAt).toLocaleString();
 
       console.log(chalk.cyan(`ID:      ${idLabel}`));
       console.log(
         chalk.white(`Branch:  ${buildWorktreeBranchSummary(worktree)}`)
       );
+      if (pullRequestSummary) {
+        console.log(`PR:      ${pullRequestSummary}`);
+      }
       console.log(chalk.dim(`Path:    ${worktree.path}`));
       console.log(chalk.dim(`Created: ${timestamp}`));
       console.log(chalk.dim("─".repeat(80)));
@@ -132,4 +136,16 @@ function buildRemoveCompletionDescription(
   }
 
   return `${getWorktreeBranchLabel(worktree)} | ${metadata.join(" | ")}`;
+}
+
+function buildPullRequestSummary(
+  worktree: Pick<WorktreeState, "prNumber" | "prUrl">
+): string | undefined {
+  if (!worktree.prUrl) {
+    return undefined;
+  }
+
+  return worktree.prNumber
+    ? `#${worktree.prNumber} ${worktree.prUrl}`
+    : worktree.prUrl;
 }

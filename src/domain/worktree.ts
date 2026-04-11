@@ -8,6 +8,8 @@ export interface WorktreeMeta {
   createdAt: string;
   id?: string;
   fullId?: string;
+  prNumber?: string;
+  prUrl?: string;
 }
 
 export interface GitWorktreeRef {
@@ -30,6 +32,8 @@ export interface WorktreeInfo {
   createdAt: string;
   baseBranch?: string;
   baseCommit?: string;
+  prNumber?: string;
+  prUrl?: string;
 }
 
 export interface WorktreeState extends WorktreeInfo {
@@ -124,12 +128,12 @@ export function createWorktreeMeta(
   baseBranch: string,
   baseCommit: string,
   createdAt: string = new Date().toISOString(),
-  identifiers?: Pick<WorktreeInfo, "id" | "fullId">
+  metadata?: Pick<WorktreeInfo, "fullId" | "id" | "prNumber" | "prUrl">
 ): WorktreeMeta {
   return {
     baseBranch,
     baseCommit,
     createdAt,
-    ...identifiers,
+    ...metadata,
   };
 }
