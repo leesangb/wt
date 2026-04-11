@@ -57,6 +57,8 @@ export async function loadWorktreeInfos(
         createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
         baseBranch: meta?.baseBranch,
         baseCommit: meta?.baseCommit,
+        prNumber: meta?.prNumber,
+        prUrl: meta?.prUrl,
       };
     })
   );

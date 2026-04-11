@@ -67,4 +67,23 @@ describe("worktree domain", () => {
       })
     ).toBe("(detached) @ abc1234");
   });
+
+  test("preserves pull request metadata in stored worktree meta", () => {
+    expect(
+      createWorktreeMeta("main", "abc123", "2026-03-16T00:00:00.000Z", {
+        id: "pr-123",
+        fullId: "repo-pr-123",
+        prNumber: "123",
+        prUrl: "https://github.com/example/repo/pull/123",
+      })
+    ).toEqual({
+      baseBranch: "main",
+      baseCommit: "abc123",
+      createdAt: "2026-03-16T00:00:00.000Z",
+      id: "pr-123",
+      fullId: "repo-pr-123",
+      prNumber: "123",
+      prUrl: "https://github.com/example/repo/pull/123",
+    });
+  });
 });

@@ -74,6 +74,7 @@ describe("uninstall installation use case", () => {
         argv0: "bun",
         execPath: "/Users/test/.bun/bin/bun",
       },
+      standaloneBinaryPath: "/Users/test/.local/bin/missing-wt",
       isHomebrewInstallAvailable: () => true,
       onBeforeHomebrewUninstall: (command) => delegatedCommands.push(command),
       runHomebrewUninstall: (plan) => {
@@ -146,6 +147,7 @@ describe("uninstall installation use case", () => {
           argv0: "bun",
           execPath: "/Users/test/.bun/bin/bun",
         },
+        standaloneBinaryPath: "/Users/test/.local/bin/missing-wt",
         isHomebrewInstallAvailable: () => false,
       })
     ).toThrow(

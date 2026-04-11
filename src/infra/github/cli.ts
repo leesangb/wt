@@ -12,6 +12,19 @@ export interface PullRequestInfo {
   baseRefName: string;
   headRefName: string;
   headRefOid: string;
+  number: string;
+  url: string;
+}
+
+export interface PullRequestLink {
+  number: string;
+  url: string;
+}
+
+interface PullRequestListEntry {
+  headRefName: string;
+  number: number;
+  url: string;
 }
 
 function runGithubCommand(
@@ -75,7 +88,7 @@ export async function getPullRequestInfo(
       "view",
       pullRequestNumber,
       "--json",
-      "baseRefName,headRefName,headRefOid",
+      "baseRefName,headRefName,headRefOid,number,url",
     ],
     repoRoot
   );
@@ -86,15 +99,27 @@ export async function getPullRequestInfo(
     );
   }
 
-  let info: Partial<PullRequestInfo>;
+  let info: Partial<{
+    baseRefName: string;
+    headRefName: string;
+    headRefOid: string;
+    number: number;
+    url: string;
+  }>;
 
   try {
-    info = JSON.parse(result.stdout) as Partial<PullRequestInfo>;
+    info = JSON.parse(result.stdout) as typeof info;
   } catch {
     throw new AppError(`Could not parse PR #${pullRequestNumber} details from GitHub CLI`);
   }
 
-  if (!info.baseRefName || !info.headRefName || !info.headRefOid) {
+  if (
+    !info.baseRefName ||
+    !info.headRefName ||
+    !info.headRefOid ||
+    typeof info.number !== "number" ||
+    !info.url
+  ) {
     throw new AppError(`Could not determine branch information for PR #${pullRequestNumber}`);
   }
 
@@ -102,7 +127,71 @@ export async function getPullRequestInfo(
     baseRefName: info.baseRefName,
     headRefName: info.headRefName,
     headRefOid: info.headRefOid,
+    number: String(info.number),
+    url: info.url,
   };
+}
+
+export async function listPullRequestLinks(
+  repoRoot: string
+): Promise<Map<string, PullRequestLink>> {
+  const result = runGithubCommand(
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      "1000",
+      "--json",
+      "number,url,headRefName",
+    ],
+    repoRoot
+  );
+
+  if (result.status !== 0) {
+    return new Map();
+  }
+
+  let entries: Partial<PullRequestListEntry>[];
+
+  try {
+    entries = JSON.parse(result.stdout) as Partial<PullRequestListEntry>[];
+  } catch {
+    return new Map();
+  }
+
+  if (!Array.isArray(entries)) {
+    return new Map();
+  }
+
+  const linksByBranch = new Map<string, PullRequestLink | null>();
+
+  for (const entry of entries) {
+    if (
+      !entry.headRefName ||
+      typeof entry.number !== "number" ||
+      !entry.url
+    ) {
+      continue;
+    }
+
+    if (linksByBranch.has(entry.headRefName)) {
+      linksByBranch.set(entry.headRefName, null);
+      continue;
+    }
+
+    linksByBranch.set(entry.headRefName, {
+      number: String(entry.number),
+      url: entry.url,
+    });
+  }
+
+  return new Map(
+    [...linksByBranch.entries()].filter(
+      (entry): entry is [string, PullRequestLink] => entry[1] !== null
+    )
+  );
 }
 
 export async function checkoutPullRequest(

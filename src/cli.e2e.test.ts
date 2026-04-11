@@ -50,6 +50,8 @@ interface FakeGithubCliOptions {
   headBranch?: string;
   headRefOid?: string;
   logPath?: string;
+  prNumber?: string;
+  prUrl?: string;
 }
 
 const tempDirs: string[] = [];
@@ -239,6 +241,9 @@ function createFakeGithubEnv(
   const headBranch = options.headBranch ?? "feature/pr-123";
   const headRefOid =
     options.headRefOid ?? "0000000000000000000000000000000000000000";
+  const prNumber = options.prNumber ?? "123";
+  const prUrl =
+    options.prUrl ?? `https://github.com/example/repo/pull/${prNumber}`;
 
   mkdirSync(binDir, { recursive: true });
 
@@ -276,7 +281,20 @@ function createFakeGithubEnv(
         ...authScript.map((line) => `  ${line}`),
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "view" ]; then',
-        `  printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}"}'`,
+        "  selector=$3",
+        `  if [ "$selector" = "${headBranch}" ]; then`,
+          `    printf '%s\\n' '{"number":${prNumber},"url":"${prUrl}"}'`,
+        "    exit 0",
+        "  fi",
+        `  if [ "$selector" = "${prNumber}" ]; then`,
+        `    printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}","number":${prNumber},"url":"${prUrl}"}'`,
+        "    exit 0",
+        "  fi",
+        '  echo "no pull request found" >&2',
+        "  exit 1",
+        "fi",
+        'if [ "$1" = "pr" ] && [ "${2:-}" = "list" ]; then',
+        `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","headRefName":"${headBranch}"}]'`,
         "  exit 0",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
@@ -1480,6 +1498,59 @@ describe("cli e2e", () => {
 
     expect(mainIdLine).toBe(`ID:      ${mainWorktreeId} [main]`);
     expect(linkedIdLine).toBe(`ID:      ${worktreeId} (current)`);
+  });
+
+  test("shows a linked pull request URL in list output for a branch worktree", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "prlink123";
+    const branchName = "feature-pr-link";
+    const prUrl = "https://github.com/example/repo/pull/456";
+    const ghLogPath = join(repo.repoRoot, "gh.log");
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(["list"], repo.repoRoot, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        logPath: ghLogPath,
+        prNumber: "456",
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const ghLog = readFileSync(ghLogPath, "utf-8");
+
+    expect(result.stdout).toContain(`ID:      ${worktreeId}`);
+    expect(result.stdout).toContain(`PR:      #456 ${prUrl}`);
+    expect(ghLog).toContain("pr list --state open --limit 1000 --json number,url,headRefName");
+    expect(ghLog).not.toContain(`pr view ${branchName}`);
+  });
+
+  test("shows stored pull request URLs in list output for PR worktrees", async () => {
+    const repo = await createTestRepo();
+    const prNumber = "789";
+    const branchName = "feature-pr-worktree-link";
+    const prUrl = "https://github.com/example/repo/pull/789";
+
+    const createResult = runCliCapture(["pr", prNumber, "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        prNumber,
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(
+      createResult.status,
+      createResult.stderr,
+      createResult.stdout
+    );
+
+    const listResult = runCliCapture(["list"], repo.repoRoot);
+    assertProcessSuccess(listResult.status, listResult.stderr, listResult.stdout);
+
+    expect(listResult.stdout).toContain(`ID:      pr-${prNumber}`);
+    expect(listResult.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
   });
 
   test("lists a detached main worktree instead of hiding it", async () => {

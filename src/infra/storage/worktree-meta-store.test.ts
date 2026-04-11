@@ -38,6 +38,8 @@ describe("worktree meta store", () => {
       createdAt: "2026-03-15T00:00:00.000Z",
       id: "feature/issue-12",
       fullId: "repo-feature/issue-12",
+      prNumber: "123",
+      prUrl: "https://github.com/example/repo/pull/123",
     });
 
     expect(
@@ -50,6 +52,8 @@ describe("worktree meta store", () => {
       createdAt: "2026-03-15T00:00:00.000Z",
       id: "feature/issue-12",
       fullId: "repo-feature/issue-12",
+      prNumber: "123",
+      prUrl: "https://github.com/example/repo/pull/123",
     });
     expect(
       readFileSync(join(worktreePath, ".wt", ".gitignore"), "utf-8")
@@ -67,6 +71,8 @@ describe("worktree meta store", () => {
         baseBranch: "trunk",
         baseCommit: "def456",
         createdAt: "2026-03-15T01:00:00.000Z",
+        prNumber: "456",
+        prUrl: "https://github.com/example/repo/pull/456",
       })
     );
 
@@ -74,6 +80,8 @@ describe("worktree meta store", () => {
       baseBranch: "trunk",
       baseCommit: "def456",
       createdAt: "2026-03-15T01:00:00.000Z",
+      prNumber: "456",
+      prUrl: "https://github.com/example/repo/pull/456",
     });
   });
 });
