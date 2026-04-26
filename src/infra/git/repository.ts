@@ -30,5 +30,17 @@ export async function getRepoName(repoRoot: string): Promise<string> {
     }
   } catch {}
 
+  try {
+    const worktreeList =
+      await $`git -C ${repoRoot} worktree list --porcelain`.text();
+    const mainWorktreeLine = worktreeList
+      .split("\n")
+      .find((line) => line.startsWith("worktree "));
+
+    if (mainWorktreeLine) {
+      return basename(mainWorktreeLine.substring(9));
+    }
+  } catch {}
+
   return basename(repoRoot);
 }

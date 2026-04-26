@@ -1573,6 +1573,34 @@ describe("cli e2e", () => {
     expect("baseBranch" in meta).toBeFalse();
   });
 
+  test("uses the main worktree name for full ids when renaming without an origin remote", async () => {
+    const repoRoot = makeTempDir("wt-no-origin-repo-");
+    const worktreeRoot = makeTempDir("wt-no-origin-worktrees-");
+    const repoName = basename(repoRoot);
+    const oldId = "old";
+    const newId = "new";
+    const worktreePath = join(worktreeRoot, `${repoName}-${oldId}`);
+
+    await $`git -C ${repoRoot} init`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    writeFileSync(join(repoRoot, "README.md"), "base\n");
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} worktree add -b feature-no-origin ${worktreePath} main`.quiet();
+
+    const result = runCliCapture(["rename", newId], worktreePath);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const meta = JSON.parse(
+      readFileSync(join(worktreePath, ".wt", "meta.json"), "utf-8")
+    );
+
+    expect(meta.id).toBe(newId);
+    expect(meta.fullId).toBe(`${repoName}-${newId}`);
+  });
+
   test("marks the main worktree in list output", async () => {
     const repo = await createTestRepo();
     const worktreeId = "mainmark123";
