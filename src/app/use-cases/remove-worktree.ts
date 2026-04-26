@@ -56,6 +56,15 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function findCurrentWorktree(
+  worktrees: WorktreeInfo[],
+  cwd: string
+): WorktreeInfo | undefined {
+  return worktrees
+    .filter((worktree) => isPathInside(worktree.path, cwd))
+    .sort((a, b) => b.path.length - a.path.length)[0];
+}
+
 async function resolveRemovalTarget(
   target: string,
   cwd: string
@@ -65,6 +74,20 @@ async function resolveRemovalTarget(
 }> {
   const context = await requireRepositoryContext(cwd);
   const worktrees = await loadWorktreeInfos(context);
+
+  if (target === ".") {
+    const currentWorktree = findCurrentWorktree(worktrees, context.cwd);
+
+    if (!currentWorktree) {
+      throw new AppError("Current directory is not inside a git worktree");
+    }
+
+    return {
+      context,
+      worktree: currentWorktree,
+    };
+  }
+
   const result = resolveWorktreeTarget(worktrees, target, {
     allowPartialPath: true,
   });

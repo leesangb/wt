@@ -288,6 +288,7 @@ worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면,
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
 - 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)
 - worktree를 고유하게 식별할 수 있는 경로의 일부
+- `.`: 현재 디렉터리가 속한 worktree 제거
 
 ### 조건에 맞는 worktree 정리
 

@@ -288,6 +288,7 @@ You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
 - Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)
 - Any part of the path that uniquely identifies the worktree
+- `.` to remove the worktree containing your current directory
 
 ### Clean up matching worktrees
 
