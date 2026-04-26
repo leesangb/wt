@@ -1479,6 +1479,128 @@ describe("cli e2e", () => {
     expect(existsSync(worktreePath)).toBeFalse();
   });
 
+  test("renames the current worktree id without moving the directory", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const oldId = "rename-old";
+    const newId = "rename-new";
+    const branchName = "feature-rename";
+    const worktreePath = getWorktreePath(repo, oldId);
+
+    runCli(["new", branchName, "--id", oldId, "--no-cd"], repo.repoRoot);
+
+    const renameResult = runCliCapture(["rename", newId], worktreePath);
+    assertProcessSuccess(
+      renameResult.status,
+      renameResult.stderr,
+      renameResult.stdout
+    );
+
+    const meta = JSON.parse(
+      readFileSync(join(worktreePath, ".wt", "meta.json"), "utf-8")
+    );
+    const listResult = runCliCapture(["list"], repo.repoRoot);
+    assertProcessSuccess(listResult.status, listResult.stderr, listResult.stdout);
+    const idLines = listResult.stdout
+      .split(/\r?\n/)
+      .filter(line => line.startsWith("ID:"));
+    const cdResult = runWrappedBashSession(repo.repoRoot, [
+      `wt cd ${newId}`,
+      "cd_status=$?",
+      'cd_pwd="$PWD"',
+      'printf \'CD_STATUS=%s\\nCD_PWD=%s\\n\' "$cd_status" "$cd_pwd"',
+    ]);
+
+    assertProcessSuccess(cdResult.processStatus, cdResult.stderr, cdResult.stdout);
+
+    expect(renameResult.stdout).toContain(
+      `Renamed worktree: ${oldId} -> ${newId}`
+    );
+    expect(meta.id).toBe(newId);
+    expect(meta.fullId).toBe(`${repo.repoName}-${newId}`);
+    expect(existsSync(worktreePath)).toBeTrue();
+    expect(existsSync(getWorktreePath(repo, newId))).toBeFalse();
+    expect(idLines).toContain(`ID:      ${newId}`);
+    expect(idLines).not.toContain(`ID:      ${oldId}`);
+    expect(Number(readOutputValue(cdResult.stdout, "CD_STATUS"))).toBe(0);
+    expect(realpathSync(readOutputValue(cdResult.stdout, "CD_PWD"))).toBe(
+      realpathSync(worktreePath)
+    );
+  });
+
+  test("rejects renaming a worktree id to an id already in use", async () => {
+    const repo = await createTestRepo();
+    const oldId = "rename-conflict-old";
+    const occupiedId = "rename-conflict-new";
+
+    runCli(["new", "feature-rename-a", "--id", oldId, "--no-cd"], repo.repoRoot);
+    runCli(
+      ["new", "feature-rename-b", "--id", occupiedId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const result = runCliCapture(
+      ["rename", occupiedId],
+      getWorktreePath(repo, oldId)
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      `Worktree ID "${occupiedId}" is already in use`
+    );
+  });
+
+  test("does not persist an empty base branch when renaming a raw git worktree", async () => {
+    const repo = await createTestRepo();
+    const oldId = "raw-rename";
+    const newId = "raw-renamed";
+    const rawWorktreePath = getWorktreePath(repo, oldId);
+
+    await $`git -C ${repo.repoRoot} worktree add -b feature-raw-rename ${rawWorktreePath} main`.quiet();
+
+    const result = runCliCapture(["rename", newId], rawWorktreePath);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const meta = JSON.parse(
+      readFileSync(join(rawWorktreePath, ".wt", "meta.json"), "utf-8")
+    );
+
+    expect(meta.id).toBe(newId);
+    expect(meta.fullId).toBe(`${repo.repoName}-${newId}`);
+    expect("baseBranch" in meta).toBeFalse();
+  });
+
+  test("uses the main worktree name for full ids when renaming without an origin remote", async () => {
+    const repoRoot = makeTempDir("wt-no-origin-repo-");
+    const worktreeRoot = makeTempDir("wt-no-origin-worktrees-");
+    const repoName = basename(repoRoot);
+    const oldId = "old";
+    const newId = "new";
+    const worktreePath = join(worktreeRoot, `${repoName}-${oldId}`);
+
+    await $`git -C ${repoRoot} init`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} checkout -b main`.quiet();
+    writeFileSync(join(repoRoot, "README.md"), "base\n");
+    await $`git -C ${repoRoot} add README.md`.quiet();
+    await $`git -C ${repoRoot} commit -m base`.quiet();
+    await $`git -C ${repoRoot} worktree add -b feature-no-origin ${worktreePath} main`.quiet();
+
+    const result = runCliCapture(["rename", newId], worktreePath);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const meta = JSON.parse(
+      readFileSync(join(worktreePath, ".wt", "meta.json"), "utf-8")
+    );
+
+    expect(meta.id).toBe(newId);
+    expect(meta.fullId).toBe(`${repoName}-${newId}`);
+  });
+
   test("marks the main worktree in list output", async () => {
     const repo = await createTestRepo();
     const worktreeId = "mainmark123";

@@ -3,9 +3,9 @@ import { basename } from "path";
 export const DETACHED_WORKTREE_LABEL = "(detached)";
 
 export interface WorktreeMeta {
-  baseBranch: string;
-  baseCommit: string;
-  createdAt: string;
+  baseBranch?: string;
+  baseCommit?: string;
+  createdAt?: string;
   id?: string;
   fullId?: string;
   prNumber?: string;

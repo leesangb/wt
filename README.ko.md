@@ -8,6 +8,7 @@ pre/post 스크립트 지원이 포함된 git worktree 관리 CLI 도구입니�
 
 - 🚀 브랜치 기반 ID와 저장소 기반 이름으로 worktree 생성
 - 🎯 새 worktree로 자동 이동 (shell wrapper 통합)
+- ✏️ 디렉터리는 그대로 두고 worktree ID 변경
 - ⚙️ 저장소별로 worktree 기본 디렉토리, 기본 브랜치, 원격 푸시 동작 설정
 - 🔄 worktree 생성 전 최신 변경사항 자동 fetch
 - 📤 기본적으로 원격에 자동 푸시 (`--no-push` 플래그로 비활성화)
@@ -265,6 +266,14 @@ wt list
 wt ls
 ```
 
+### 현재 worktree ID 변경
+
+```bash
+wt rename new-name
+```
+
+`wt rename`은 현재 디렉터리가 속한 worktree의 ID만 변경합니다. 실제 worktree 디렉터리 이름이나 경로는 바꾸지 않습니다. 새 ID는 저장소의 다른 worktree와 충돌하지 않아야 하며, main worktree는 변경할 수 없습니다.
+
 ### worktree 제거
 
 ```bash
@@ -453,6 +462,7 @@ wt/
 │   │   ├── pr.ts              # wt pr
 │   │   ├── list.ts            # wt list / wt ls
 │   │   ├── remove.ts          # wt remove / wt rm
+│   │   ├── rename.ts          # wt rename
 │   │   ├── clean.ts           # wt clean
 │   │   ├── cd.ts              # wt cd
 │   │   ├── shell.ts           # wt shell install

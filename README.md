@@ -8,6 +8,7 @@ A CLI tool to manage git worktrees with pre/post script support.
 
 - 🚀 Create worktrees with branch-based IDs and repo-based naming
 - 🎯 Auto-cd to new worktree (with shell wrapper integration)
+- ✏️ Rename a worktree ID without moving its directory
 - ⚙️ Configure worktree base directory, base branch, and remote push behavior per repository
 - 🔄 Auto-fetch latest changes before creating worktree
 - 📤 Auto-push to remote by default (disable with `--no-push` flag)
@@ -265,6 +266,14 @@ wt list
 wt ls
 ```
 
+### Rename the current worktree ID
+
+```bash
+wt rename new-name
+```
+
+`wt rename` updates the ID for the worktree containing your current directory. It does not move or rename the worktree directory. The new ID must be unique across the repository's worktrees, and the main worktree cannot be renamed.
+
 ### Remove a worktree
 
 ```bash
@@ -452,6 +461,7 @@ wt/
 │   │   ├── pr.ts             # wt pr
 │   │   ├── list.ts           # wt list / wt ls
 │   │   ├── remove.ts         # wt remove / wt rm
+│   │   ├── rename.ts         # wt rename
 │   │   ├── clean.ts          # wt clean
 │   │   ├── cd.ts             # wt cd
 │   │   ├── shell.ts          # wt shell install

@@ -5,6 +5,7 @@ import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
 import { removeCommand } from "./commands/remove.js";
+import { renameCommand } from "./commands/rename.js";
 import { cleanCommand } from "./commands/clean.js";
 import { cdCommand } from "./commands/cd.js";
 import { updateCommand } from "./commands/update.js";
@@ -50,6 +51,11 @@ program
   .option("--keep-branch", "Keep the branch after removing worktree")
   .option("-f, --force", "Skip confirmation for worktrees with pending changes")
   .action(removeCommand);
+
+program
+  .command("rename <new-id>")
+  .description("Rename the current worktree ID without moving its directory")
+  .action(renameCommand);
 
 program
   .command("clean")
