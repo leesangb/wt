@@ -1553,6 +1553,26 @@ describe("cli e2e", () => {
     );
   });
 
+  test("does not persist an empty base branch when renaming a raw git worktree", async () => {
+    const repo = await createTestRepo();
+    const oldId = "raw-rename";
+    const newId = "raw-renamed";
+    const rawWorktreePath = getWorktreePath(repo, oldId);
+
+    await $`git -C ${repo.repoRoot} worktree add -b feature-raw-rename ${rawWorktreePath} main`.quiet();
+
+    const result = runCliCapture(["rename", newId], rawWorktreePath);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const meta = JSON.parse(
+      readFileSync(join(rawWorktreePath, ".wt", "meta.json"), "utf-8")
+    );
+
+    expect(meta.id).toBe(newId);
+    expect(meta.fullId).toBe(`${repo.repoName}-${newId}`);
+    expect("baseBranch" in meta).toBeFalse();
+  });
+
   test("marks the main worktree in list output", async () => {
     const repo = await createTestRepo();
     const worktreeId = "mainmark123";

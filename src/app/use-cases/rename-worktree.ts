@@ -64,9 +64,12 @@ function buildRenamedMeta(
   newId: string,
   newFullId: string
 ): WorktreeMeta {
+  const baseBranch = meta?.baseBranch ?? worktree.baseBranch;
+  const baseCommit = meta?.baseCommit ?? worktree.baseCommit;
+
   return {
-    baseBranch: meta?.baseBranch ?? worktree.baseBranch ?? "",
-    baseCommit: meta?.baseCommit ?? worktree.baseCommit ?? "",
+    ...(baseBranch ? { baseBranch } : {}),
+    ...(baseCommit ? { baseCommit } : {}),
     createdAt: meta?.createdAt ?? worktree.createdAt,
     prNumber: meta?.prNumber ?? worktree.prNumber,
     prUrl: meta?.prUrl ?? worktree.prUrl,
