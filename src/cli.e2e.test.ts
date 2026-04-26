@@ -2026,6 +2026,40 @@ describe("cli e2e", () => {
   );
 
   test(
+    "removes the current worktree when target is dot",
+    async () => {
+      if (!isShellAvailable("bash")) {
+        return;
+      }
+
+      const repo = await createTestRepo();
+      const worktreeId = "rmdot123";
+      const branchName = "feature-rm-dot";
+      const worktreePath = getWorktreePath(repo, worktreeId);
+      const nestedDir = join(worktreePath, "nested");
+
+      runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+      mkdirSync(nestedDir, { recursive: true });
+
+      const result = runWrappedBashSession(repo.repoRoot, [
+        `builtin cd "${nestedDir}"`,
+        "wt rm . --keep-branch",
+        "rm_status=$?",
+        'rm_pwd="$PWD"',
+        'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
+      ]);
+
+      assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+      expect(Number(readOutputValue(result.stdout, "RM_STATUS"))).toBe(0);
+      expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
+        realpathSync(repo.repoRoot)
+      );
+      expect(existsSync(worktreePath)).toBeFalse();
+    }
+  );
+
+  test(
     "returns the shell to the main worktree after removing the current worktree in a batch that exits nonzero",
     async () => {
       if (!isShellAvailable("bash")) {
