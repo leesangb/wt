@@ -33,6 +33,7 @@ describe("shell installer", () => {
 
       expect(wrapper).toBe(renderShellWrapper("zsh", "/tmp/wt-bin"));
       expect(wrapper).toContain('clean[Bulk-remove worktrees interactively]');
+      expect(wrapper).toContain('rename[Rename the current worktree ID]');
     } finally {
       rmSync(shellDir, { recursive: true, force: true });
     }
