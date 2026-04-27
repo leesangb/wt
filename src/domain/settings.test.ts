@@ -47,6 +47,29 @@ describe("mergeSettingsInputs", () => {
       },
     });
   });
+
+  test("merges nested issue overrides without dropping sibling fields", () => {
+    expect(
+      mergeSettingsInputs(
+        {
+          issue: {
+            pattern: "[A-Z]+-\\d+",
+            url: "https://old.example/$issue",
+          },
+        },
+        {
+          issue: {
+            url: "https://new.example/$issue",
+          },
+        }
+      )
+    ).toEqual({
+      issue: {
+        pattern: "[A-Z]+-\\d+",
+        url: "https://new.example/$issue",
+      },
+    });
+  });
 });
 
 describe("normalizeSettings", () => {
@@ -99,6 +122,20 @@ describe("normalizeSettings", () => {
         post: [],
         postMode: "async",
       },
+    });
+  });
+
+  test("preserves issue tracker settings", () => {
+    expect(
+      normalizeSettings({
+        issue: {
+          pattern: "[A-Z]+-\\d+",
+          url: "https://myissues.com/$issue",
+        },
+      }).issue
+    ).toEqual({
+      pattern: "[A-Z]+-\\d+",
+      url: "https://myissues.com/$issue",
     });
   });
 

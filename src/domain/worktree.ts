@@ -34,6 +34,8 @@ export interface WorktreeInfo {
   baseCommit?: string;
   prNumber?: string;
   prUrl?: string;
+  issueKey?: string;
+  issueUrl?: string;
 }
 
 export interface WorktreeState extends WorktreeInfo {

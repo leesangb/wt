@@ -88,12 +88,16 @@ export async function listCommand(options?: {
     for (const worktree of result.worktrees) {
       const idLabel = buildWorktreeIdLabel(worktree);
       const pullRequestSummary = buildPullRequestSummary(worktree);
+      const issueSummary = buildIssueSummary(worktree);
       const timestamp = new Date(worktree.createdAt).toLocaleString();
 
       console.log(chalk.cyan(`ID:      ${idLabel}`));
       console.log(
         chalk.white(`Branch:  ${buildWorktreeBranchSummary(worktree)}`)
       );
+      if (issueSummary) {
+        console.log(`Issue:   ${issueSummary}`);
+      }
       if (pullRequestSummary) {
         console.log(`PR:      ${pullRequestSummary}`);
       }
@@ -148,4 +152,16 @@ function buildPullRequestSummary(
   return worktree.prNumber
     ? `#${worktree.prNumber} ${worktree.prUrl}`
     : worktree.prUrl;
+}
+
+function buildIssueSummary(
+  worktree: Pick<WorktreeState, "issueKey" | "issueUrl">
+): string | undefined {
+  if (!worktree.issueUrl) {
+    return undefined;
+  }
+
+  return worktree.issueKey
+    ? `${worktree.issueKey} ${worktree.issueUrl}`
+    : worktree.issueUrl;
 }

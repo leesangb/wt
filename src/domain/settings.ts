@@ -11,19 +11,28 @@ export interface WtCopySettings {
   exclude: string[];
 }
 
+export interface WtIssueSettings {
+  pattern: string;
+  url: string;
+}
+
 export interface WtSettings {
   worktreeDir: string;
   baseBranch: string;
   pushRemote: boolean;
   copy: WtCopySettings;
   scripts: WtScriptsSettings;
+  issue?: WtIssueSettings;
 }
 
 export type WtCopySettingsInput = string[] | Partial<WtCopySettings>;
 
-export type WtSettingsInput = Partial<Omit<WtSettings, "copy" | "scripts">> & {
+export type WtSettingsInput = Partial<
+  Omit<WtSettings, "copy" | "scripts" | "issue">
+> & {
   copy?: WtCopySettingsInput;
   scripts?: Partial<WtScriptsSettings>;
+  issue?: Partial<WtIssueSettings>;
 };
 
 export const DEFAULT_WT_SETTINGS: WtSettings = {
@@ -57,6 +66,19 @@ function normalizeCopyInput(
   return input;
 }
 
+function normalizeIssueInput(
+  input?: Partial<WtIssueSettings> | null
+): WtIssueSettings | undefined {
+  if (!input?.pattern || !input.url) {
+    return undefined;
+  }
+
+  return {
+    pattern: input.pattern,
+    url: input.url,
+  };
+}
+
 export function mergeSettingsInputs(
   base?: WtSettingsInput | null,
   override?: WtSettingsInput | null
@@ -81,12 +103,20 @@ export function mergeSettingsInputs(
           ...overrideCopy,
         }
       : undefined;
+  const mergedIssue =
+    base?.issue || override?.issue
+      ? {
+          ...base?.issue,
+          ...override?.issue,
+        }
+      : undefined;
 
   return {
     ...base,
     ...override,
     ...(mergedCopy ? { copy: mergedCopy } : {}),
     ...(mergedScripts ? { scripts: mergedScripts } : {}),
+    ...(mergedIssue ? { issue: mergedIssue } : {}),
   };
 }
 
@@ -94,6 +124,7 @@ export function normalizeSettings(
   input?: WtSettingsInput | null
 ): WtSettings {
   const copyInput = normalizeCopyInput(input?.copy);
+  const issueInput = normalizeIssueInput(input?.issue);
 
   return {
     worktreeDir: input?.worktreeDir ?? DEFAULT_WT_SETTINGS.worktreeDir,
@@ -109,5 +140,6 @@ export function normalizeSettings(
       postMode:
         input?.scripts?.postMode ?? DEFAULT_WT_SETTINGS.scripts.postMode,
     },
+    ...(issueInput ? { issue: issueInput } : {}),
   };
 }
