@@ -1649,6 +1649,43 @@ describe("cli e2e", () => {
     expect(ghLog).not.toContain(`pr view ${branchName}`);
   });
 
+  test("shows an issue tracker URL in list output for matching branch names", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/DEV-123";
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.issue = {
+        pattern: "[A-Z]+-\\d+",
+        url: "https://myissues.com/$issue",
+      };
+    });
+    runCli(["new", branchName, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(["ls"], repo.repoRoot);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).toContain("Issue:   DEV-123 https://myissues.com/DEV-123");
+  });
+
+  test("shows an actionable error for invalid issue tracker patterns", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/DEV-123";
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.issue = {
+        pattern: "[A-Z+",
+        url: "https://myissues.com/$issue",
+      };
+    });
+    runCli(["new", branchName, "--no-cd"], repo.repoRoot);
+
+    const result = runCliCapture(["ls"], repo.repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Invalid issue.pattern");
+    expect(result.stderr).toContain("[A-Z+");
+  });
+
   test("shows stored pull request URLs in list output for PR worktrees", async () => {
     const repo = await createTestRepo();
     const prNumber = "789";

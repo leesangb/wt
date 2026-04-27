@@ -1,4 +1,5 @@
 export type {
+  WtIssueSettings,
   ScriptMode,
   WtSettings,
   WtSettingsInput,

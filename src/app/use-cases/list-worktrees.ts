@@ -4,12 +4,16 @@ import type {
   WorktreeState,
 } from "../../domain/worktree.js";
 import { requireRepositoryContext } from "../repository-context.js";
+import { AppError } from "../errors.js";
+import { buildIssueLinkFromPattern } from "../../domain/issue-link.js";
 import { listPullRequestLinks } from "../../infra/github/cli.js";
+import { loadSettings } from "../../infra/storage/settings-store.js";
 import {
   loadWorktreeInfos,
   loadWorktreeRemovalInfos,
   loadWorktreeStates,
 } from "../worktree-catalog.js";
+import type { WtIssueSettings } from "../../domain/settings.js";
 
 export interface ListWorktreeInfosOptions {
   excludeMainWorktree?: boolean;
@@ -63,6 +67,44 @@ async function enrichWorktreesWithPullRequests<T extends WorktreeInfo>(
   });
 }
 
+function enrichWorktreesWithIssueLinks<T extends WorktreeInfo>(
+  issueSettings: WtIssueSettings | undefined,
+  worktrees: T[]
+): T[] {
+  if (!issueSettings) {
+    return worktrees;
+  }
+
+  let issuePattern: RegExp;
+
+  try {
+    issuePattern = new RegExp(issueSettings.pattern);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new AppError(
+      `Invalid issue.pattern "${issueSettings.pattern}": ${message}`
+    );
+  }
+
+  return worktrees.map((worktree) => {
+    const issueLink = buildIssueLinkFromPattern(
+      worktree.branch,
+      issuePattern,
+      issueSettings.url
+    );
+
+    if (!issueLink) {
+      return worktree;
+    }
+
+    return {
+      ...worktree,
+      issueKey: issueLink.key,
+      issueUrl: issueLink.url,
+    };
+  });
+}
+
 export async function listWorktreeInfos(
   cwd: string = process.cwd(),
   options: ListWorktreeInfosOptions = {}
@@ -83,9 +125,14 @@ export async function listWorktrees(
   cwd: string = process.cwd()
 ): Promise<ListWorktreesResult> {
   const context = await requireRepositoryContext(cwd);
+  const settings = await loadSettings(context.repoRoot);
+  const worktreesWithIssueLinks = enrichWorktreesWithIssueLinks(
+    settings.issue,
+    await loadWorktreeStates(context)
+  );
   const worktrees = await enrichWorktreesWithPullRequests(
     context.repoRoot,
-    await loadWorktreeStates(context)
+    worktreesWithIssueLinks
   );
 
   return {
