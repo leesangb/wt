@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.6.0
+
+### Minor Changes
+
+- 206533a: Show configurable issue tracker links in wt list output
+
 ## 0.5.3
 
 ### Patch Changes
