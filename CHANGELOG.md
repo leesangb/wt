@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.5.3
+
+### Patch Changes
+
+- 1ab8aeb: rename and rm current
+
 ## 0.5.2
 
 ### Patch Changes
