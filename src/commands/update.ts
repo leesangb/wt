@@ -5,6 +5,7 @@ import {
   getUpdateStrategy,
   updateInstallation,
   type UpdateInstallationOptions,
+  type UpdateInstallationResult,
 } from "../app/use-cases/update-installation.js";
 
 function buildUpdateSpinnerText(options: UpdateInstallationOptions): string {
@@ -17,6 +18,26 @@ function buildUpdateSpinnerText(options: UpdateInstallationOptions): string {
   return "Checking for wt updates";
 }
 
+function printShellIntegrationRefresh(result: UpdateInstallationResult): void {
+  const shellIntegration = result.shellIntegration;
+
+  if (!shellIntegration) {
+    return;
+  }
+
+  if (shellIntegration.refreshedShells.length > 0) {
+    console.log(
+      chalk.dim(
+        `Refreshed shell integration for ${shellIntegration.refreshedShells.join(", ")}.`
+      )
+    );
+  }
+
+  for (const warning of shellIntegration.warnings) {
+    console.log(chalk.yellow(`Warning: ${warning}`));
+  }
+}
+
 export async function updateCommand(
   options: UpdateInstallationOptions
 ): Promise<void> {
@@ -26,13 +47,14 @@ export async function updateCommand(
     const strategy = getUpdateStrategy();
 
     if (strategy === "homebrew") {
-      await updateInstallation(currentVersion, options, {
+      const result = await updateInstallation(currentVersion, options, {
         onBeforeHomebrewUpdate: (command) => {
           console.log(
             chalk.dim(`Homebrew installation detected. Running: ${command}`)
           );
         },
       });
+      printShellIntegrationRefresh(result);
       return;
     }
 
@@ -64,6 +86,7 @@ export async function updateCommand(
     }
 
     console.log(chalk.green(`✓ Updated wt to version ${result.targetVersion}`));
+    printShellIntegrationRefresh(result);
     console.log(chalk.dim("Run: wt --version to verify."));
   });
 }

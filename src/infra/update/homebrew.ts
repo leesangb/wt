@@ -79,13 +79,24 @@ function isHomebrewLinkedBinPath(normalizedPath: string): boolean {
   );
 }
 
+function getHomebrewPrefixForManagedPath(
+  normalizedPath: string
+): string | undefined {
+  return HOMEBREW_PREFIXES.find((prefix) => {
+    return (
+      normalizedPath.startsWith(`${prefix}/Cellar/wt/`) ||
+      normalizedPath.startsWith(`${prefix}/opt/wt/`)
+    );
+  });
+}
+
 function isHomebrewExecutablePath(
   path: string,
   resolvePath: (path: string) => string | undefined = defaultResolvePath
 ): boolean {
   const normalizedPath = normalizeExecutablePath(path);
 
-  if (isHomebrewManagedTargetPath(normalizedPath)) {
+  if (getHomebrewPrefixForManagedPath(normalizedPath)) {
     return true;
   }
 
@@ -113,6 +124,34 @@ export function isHomebrewManagedInstallation(
   return candidates.some((candidate) =>
     isHomebrewExecutablePath(candidate, resolvePath)
   );
+}
+
+export function resolveHomebrewShellBinaryPath(
+  processInfo: HomebrewProcessInfo = {
+    argv0: process.argv0,
+    execPath: process.execPath,
+  }
+): string {
+  const candidates = [
+    looksLikePath(processInfo.argv0) ? processInfo.argv0 : undefined,
+    processInfo.execPath,
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    const normalizedPath = normalizeExecutablePath(candidate);
+
+    if (isHomebrewLinkedBinPath(normalizedPath)) {
+      return normalizedPath;
+    }
+
+    const prefix = getHomebrewPrefixForManagedPath(normalizedPath);
+
+    if (prefix) {
+      return `${prefix}/bin/wt`;
+    }
+  }
+
+  return "wt";
 }
 
 export function buildHomebrewUpdatePlan(
