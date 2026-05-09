@@ -471,7 +471,7 @@ describe("cli e2e", () => {
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     expect(readFileSync(wrapperPath, "utf-8")).toBe(
-      renderShellWrapper("bash", binaryPath)
+      renderShellWrapper("bash", binaryPath, { wrapperPath })
     );
     expect(result.stdout).toContain("~/.wt/shell/wt.bash");
     expect(result.stdout).toContain(appendCommand);

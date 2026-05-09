@@ -1,17 +1,50 @@
-import { mkdirSync, writeFileSync } from "fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { homedir } from "os";
 import { join } from "path";
-import type { SupportedShell } from "../../domain/shell.js";
+import { AppError } from "../../app/errors.js";
+import { SUPPORTED_SHELLS, type SupportedShell } from "../../domain/shell.js";
 
 export interface InstallShellWrapperOptions {
   shell: SupportedShell;
   command: string | readonly string[];
   shellDir: string;
+  mkdir?: typeof mkdirSync;
+  writeFile?: typeof writeFileSync;
 }
 
 export interface InstallShellWrapperResult {
   shell: SupportedShell;
   wrapperPath: string;
   sourceLine: string;
+}
+
+export interface RefreshShellWrappersResult {
+  refreshedShells: SupportedShell[];
+  warnings: string[];
+}
+
+export interface ShellCommandResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  error?: Error;
+  stderr?: string;
+  stdout?: string;
+}
+
+export type ShellCommandRunner = (
+  command: string,
+  args: string[],
+  options: {
+    encoding: "utf-8";
+    stdio: "pipe";
+  }
+) => ShellCommandResult;
+
+export interface RefreshExistingShellWrappersOptions {
+  binaryPath: string;
+  shellDir?: string;
+  runCommand?: ShellCommandRunner;
 }
 
 function escapeDoubleQuotedShell(value: string): string {
@@ -34,6 +67,48 @@ function renderShellCommand(command: string | readonly string[]): string {
     .join(" ");
 }
 
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+
+  return code === "EACCES" || code === "EPERM";
+}
+
+function throwShellWriteError(error: unknown, shellDir: string): never {
+  if (isPermissionError(error)) {
+    throw new AppError(
+      `Could not write wt shell integration in ${shellDir}. This usually means the directory is owned by another user. Run: sudo chown -R "$(id -u):$(id -g)" ~/.wt`
+    );
+  }
+
+  throw error;
+}
+
+function renderPosixReloadAfterUpdate(wrapperPath?: string): string {
+  if (!wrapperPath) {
+    return "";
+  }
+
+  return `
+  local __wt_wrapper_path="${escapeDoubleQuotedShell(wrapperPath)}"
+  if [ "\${1:-}" = "update" ] && [ $exit_code -eq 0 ] && [ -r "$__wt_wrapper_path" ]; then
+    source "$__wt_wrapper_path"
+  fi
+`;
+}
+
+function renderFishReloadAfterUpdate(wrapperPath?: string): string {
+  if (!wrapperPath) {
+    return "";
+  }
+
+  return `
+    set -l __wt_wrapper_path "${escapeDoubleQuotedShell(wrapperPath)}"
+    if test (count $argv) -gt 0; and test "$argv[1]" = update; and test $exit_code -eq 0; and test -r "$__wt_wrapper_path"
+        source "$__wt_wrapper_path"
+    end
+`;
+}
+
 export function getShellWrapperFileName(shell: SupportedShell): string {
   return `wt.${shell}`;
 }
@@ -53,8 +128,12 @@ export function getShellSourceLine(
   return `source "${escapeDoubleQuotedShell(wrapperPath)}"`;
 }
 
-function renderBashWrapper(command: string | readonly string[]): string {
+function renderBashWrapper(
+  command: string | readonly string[],
+  wrapperPath?: string
+): string {
   const renderedCommand = renderShellCommand(command);
+  const reloadAfterUpdate = renderPosixReloadAfterUpdate(wrapperPath);
 
   return `# wt shell wrapper for bash
 # Add this to your ~/.bashrc
@@ -75,6 +154,7 @@ wt() {
   fi
 
   rm -f "$cd_file"
+${reloadAfterUpdate}
   return $exit_code
 }
 
@@ -101,8 +181,12 @@ complete -F _wt_completion wt
 `;
 }
 
-function renderZshWrapper(command: string | readonly string[]): string {
+function renderZshWrapper(
+  command: string | readonly string[],
+  wrapperPath?: string
+): string {
   const renderedCommand = renderShellCommand(command);
+  const reloadAfterUpdate = renderPosixReloadAfterUpdate(wrapperPath);
 
   return `# wt shell wrapper for zsh
 # Add this to your ~/.zshrc
@@ -123,6 +207,7 @@ wt() {
   fi
 
   rm -f "$cd_file"
+${reloadAfterUpdate}
   return $exit_code
 }
 
@@ -171,8 +256,12 @@ compdef _wt_completion wt
 `;
 }
 
-function renderFishWrapper(command: string | readonly string[]): string {
+function renderFishWrapper(
+  command: string | readonly string[],
+  wrapperPath?: string
+): string {
   const renderedCommand = renderShellCommand(command);
+  const reloadAfterUpdate = renderFishReloadAfterUpdate(wrapperPath);
 
   return `# wt shell wrapper for fish
 # Add this to your ~/.config/fish/config.fish
@@ -192,6 +281,7 @@ function wt
     end
 
     rm -f "$cd_file"
+${reloadAfterUpdate}
     return $exit_code
 end
 
@@ -210,33 +300,96 @@ complete -c wt -n "__fish_seen_subcommand_from rm remove" -a "(__wt_complete_rem
 
 export function renderShellWrapper(
   shell: SupportedShell,
-  command: string | readonly string[]
+  command: string | readonly string[],
+  options: { wrapperPath?: string } = {}
 ): string {
   switch (shell) {
     case "bash":
-      return renderBashWrapper(command);
+      return renderBashWrapper(command, options.wrapperPath);
     case "zsh":
-      return renderZshWrapper(command);
+      return renderZshWrapper(command, options.wrapperPath);
     case "fish":
-      return renderFishWrapper(command);
+      return renderFishWrapper(command, options.wrapperPath);
   }
 }
 
 export function installShellWrapper(
   options: InstallShellWrapperOptions
 ): InstallShellWrapperResult {
-  mkdirSync(options.shellDir, { recursive: true });
+  try {
+    (options.mkdir ?? mkdirSync)(options.shellDir, { recursive: true });
+  } catch (error) {
+    throwShellWriteError(error, options.shellDir);
+  }
 
   const wrapperPath = getShellWrapperPath(options.shell, options.shellDir);
-  writeFileSync(
-    wrapperPath,
-    renderShellWrapper(options.shell, options.command),
-    "utf-8"
-  );
+
+  try {
+    (options.writeFile ?? writeFileSync)(
+      wrapperPath,
+      renderShellWrapper(options.shell, options.command, { wrapperPath }),
+      "utf-8"
+    );
+  } catch (error) {
+    throwShellWriteError(error, options.shellDir);
+  }
 
   return {
     shell: options.shell,
     wrapperPath,
     sourceLine: getShellSourceLine(options.shell, options.shellDir),
+  };
+}
+
+export function refreshExistingShellWrappers(
+  options: RefreshExistingShellWrappersOptions
+): RefreshShellWrappersResult {
+  const shellDir = options.shellDir ?? join(homedir(), ".wt", "shell");
+  const runCommand =
+    options.runCommand ??
+    ((command, args, commandOptions) =>
+      spawnSync(command, args, commandOptions));
+  const refreshedShells: SupportedShell[] = [];
+  const warnings: string[] = [];
+
+  for (const shell of SUPPORTED_SHELLS) {
+    const wrapperPath = getShellWrapperPath(shell, shellDir);
+
+    if (!existsSync(wrapperPath)) {
+      continue;
+    }
+
+    const result = runCommand(
+      options.binaryPath,
+      ["shell", "install", shell, "--binary-path", options.binaryPath],
+      {
+        encoding: "utf-8",
+        stdio: "pipe",
+      }
+    );
+
+    if (result.error) {
+      warnings.push(
+        `Could not refresh ${shell} shell wrapper at ${wrapperPath}: ${result.error.message}`
+      );
+      continue;
+    }
+
+    if (result.status !== 0) {
+      const stderr = result.stderr?.trim();
+      warnings.push(
+        `Could not refresh ${shell} shell wrapper at ${wrapperPath}: ${
+          stderr || `shell install exited with status ${result.status}`
+        }`
+      );
+      continue;
+    }
+
+    refreshedShells.push(shell);
+  }
+
+  return {
+    refreshedShells,
+    warnings,
   };
 }
