@@ -10,8 +10,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   ensureLocalSettingsIgnored,
+  ensureRemoveTaskArtifactsIgnored,
   loadSettings,
   LOCAL_SETTINGS_GITIGNORE_ENTRY,
+  REMOVE_TASK_GITIGNORE_ENTRIES,
 } from "./settings-store.js";
 
 const tempDirs: string[] = [];
@@ -55,6 +57,40 @@ describe("settings store", () => {
     await expect(ensureLocalSettingsIgnored(repoRoot)).resolves.toBe(false);
     expect(readFileSync(gitignorePath, "utf-8")).toBe(
       "settings.json\nsettings.local.json\n"
+    );
+  });
+
+  test("adds remove task artifact ignore entries", async () => {
+    const repoRoot = makeTempDir("wt-settings-store-");
+    const settingsDir = join(repoRoot, ".wt");
+
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, ".gitignore"), "settings.local.json\n");
+
+    await expect(ensureRemoveTaskArtifactsIgnored(repoRoot)).resolves.toBe(true);
+    expect(readFileSync(join(settingsDir, ".gitignore"), "utf-8")).toBe(
+      [
+        "settings.local.json",
+        ...REMOVE_TASK_GITIGNORE_ENTRIES,
+        "",
+      ].join("\n")
+    );
+  });
+
+  test("does not duplicate remove task artifact ignore entries", async () => {
+    const repoRoot = makeTempDir("wt-settings-store-");
+    const settingsDir = join(repoRoot, ".wt");
+    const gitignorePath = join(settingsDir, ".gitignore");
+
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(
+      gitignorePath,
+      ["settings.local.json", ...REMOVE_TASK_GITIGNORE_ENTRIES, ""].join("\n")
+    );
+
+    await expect(ensureRemoveTaskArtifactsIgnored(repoRoot)).resolves.toBe(false);
+    expect(readFileSync(gitignorePath, "utf-8")).toBe(
+      ["settings.local.json", ...REMOVE_TASK_GITIGNORE_ENTRIES, ""].join("\n")
     );
   });
 

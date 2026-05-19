@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -389,6 +390,49 @@ function runWrappedBashSession(
 
 function readLines(path: string): string[] {
   return readFileSync(path, "utf-8").trimEnd().split(/\r?\n/);
+}
+
+function findRemoveTaskFiles(repoRoot: string, worktreeId: string): string[] {
+  const wtDir = join(repoRoot, ".wt");
+  const taskId = worktreeId
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "worktree";
+
+  if (!existsSync(wtDir)) {
+    return [];
+  }
+
+  return readdirSync(wtDir)
+    .filter(
+      (name) =>
+        name.startsWith(`remove-task-${taskId}-`) && name.endsWith(".json")
+    )
+    .map((name) => join(wtDir, name));
+}
+
+async function waitForRemoveTaskStatus(
+  repoRoot: string,
+  worktreeId: string,
+  expectedStatus: string
+): Promise<string> {
+  let foundStatusFilePath = "";
+
+  await waitFor(() => {
+    const statusFilePath = findRemoveTaskFiles(repoRoot, worktreeId)[0];
+
+    if (!statusFilePath) {
+      return false;
+    }
+
+    const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
+      status: string;
+    };
+
+    foundStatusFilePath = statusFilePath;
+    return status.status === expectedStatus;
+  });
+
+  return foundStatusFilePath;
 }
 
 async function waitFor(
@@ -2058,7 +2102,40 @@ describe("cli e2e", () => {
       expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
         realpathSync(repo.repoRoot)
       );
+      expect(result.stdout).toContain("Started background removal");
+
+      const statusFilePath = await waitForRemoveTaskStatus(
+        repo.repoRoot,
+        worktreeId,
+        "done"
+      );
       expect(existsSync(worktreePath)).toBeFalse();
+      const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
+        kind: string;
+        logFilePath: string;
+        status: string;
+        worktreeId: string;
+        worktreePath: string;
+      };
+      const logFilePath = statusFilePath.replace(/\.json$/, ".log");
+      const log = readFileSync(logFilePath, "utf-8");
+      const gitStatus = spawnSync(
+        "git",
+        ["-C", repo.repoRoot, "status", "--short", "--", statusFilePath, logFilePath],
+        {
+          encoding: "utf-8",
+        }
+      );
+
+      assertProcessSuccess(gitStatus.status, gitStatus.stderr, gitStatus.stdout);
+      expect(gitStatus.stdout.trim()).toBe("");
+      expect(status.kind).toBe("remove-worktree");
+      expect(status.status).toBe("done");
+      expect(status.worktreeId).toBe(worktreeId);
+      expect(status.worktreePath).toContain(worktreeId);
+      expect(realpathSync(status.logFilePath)).toBe(realpathSync(logFilePath));
+      expect(log).toContain("Removing worktree");
+      expect(log).toContain(worktreeId);
     }
   );
 
@@ -2070,12 +2147,12 @@ describe("cli e2e", () => {
       }
 
       const repo = await createTestRepo();
-      const worktreeId = "rmdot123";
-      const branchName = "feature-rm-dot";
+      const branchName = "feature/rm-dot";
+      const worktreeId = branchName;
       const worktreePath = getWorktreePath(repo, worktreeId);
       const nestedDir = join(worktreePath, "nested");
 
-      runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+      runCli(["new", branchName, "--no-cd"], repo.repoRoot);
       mkdirSync(nestedDir, { recursive: true });
 
       const result = runWrappedBashSession(repo.repoRoot, [
@@ -2092,9 +2169,79 @@ describe("cli e2e", () => {
       expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
         realpathSync(repo.repoRoot)
       );
+      expect(result.stdout).toContain("Started background removal");
+
+      await waitForRemoveTaskStatus(repo.repoRoot, worktreeId, "done");
       expect(existsSync(worktreePath)).toBeFalse();
     }
   );
+
+  test("sends macOS notifications when background removal finishes", async () => {
+    if (process.platform !== "darwin" || !isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const worktreeId = "rmnotify123";
+    const branchName = "feature-rm-notify";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const nestedDir = join(worktreePath, "nested");
+    const fakeBinDir = makeTempDir("wt-fake-bin-");
+    const notificationLogPath = join(fakeBinDir, "osascript.log");
+    const fakeOsascriptPath = join(fakeBinDir, "osascript");
+
+    writeFileSync(
+      fakeOsascriptPath,
+      [
+        "#!/bin/sh",
+        'printf "%s\\n" "$*" >> "$WT_TEST_OSASCRIPT_LOG"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    mkdirSync(nestedDir, { recursive: true });
+
+    const result = runWrappedBashSession(
+      repo.repoRoot,
+      [
+        `builtin cd "${nestedDir}"`,
+        "wt rm . --keep-branch",
+        "rm_status=$?",
+        'rm_pwd="$PWD"',
+        'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
+      ],
+      {
+        PATH: fakeBinDir,
+        WT_TEST_OSASCRIPT_LOG: notificationLogPath,
+      }
+    );
+
+    assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+    expect(Number(readOutputValue(result.stdout, "RM_STATUS"))).toBe(0);
+
+    await waitForRemoveTaskStatus(repo.repoRoot, worktreeId, "done");
+    await waitFor(() => {
+      if (!existsSync(notificationLogPath)) {
+        return false;
+      }
+
+      const notificationLog = readFileSync(notificationLogPath, "utf-8");
+
+      return (
+        notificationLog.includes(`${worktreeId} removal finished`) &&
+        (notificationLog.match(/display notification/g)?.length ?? 0) === 2
+      );
+    });
+
+    const notificationLog = readFileSync(notificationLogPath, "utf-8");
+
+    expect(notificationLog).toContain(`${worktreeId} removal started`);
+    expect(notificationLog).toContain('subtitle "Worktree removal running"');
+    expect(notificationLog).toContain(`${worktreeId} removal finished`);
+    expect(notificationLog).toContain('subtitle "Worktree removed - log saved"');
+  });
 
   test(
     "returns the shell to the main worktree after removing the current worktree in a batch that exits nonzero",
@@ -2131,7 +2278,7 @@ describe("cli e2e", () => {
   );
 
   test(
-    "returns the shell to the main worktree when branch deletion fails after removing the current worktree",
+    "returns nonzero in foreground mode when branch deletion fails after removing the current worktree",
     async () => {
       if (!isShellAvailable("bash")) {
         return;
@@ -2142,7 +2289,10 @@ describe("cli e2e", () => {
       const branchName = "feature-rm-branch-fail";
       const worktreePath = getWorktreePath(repo, worktreeId);
       const nestedDir = join(worktreePath, "nested");
-      const lockedWorktreePath = join(repo.worktreeRoot, `${repo.repoName}-branch-lock`);
+      const lockedWorktreePath = join(
+        repo.worktreeRoot,
+        `${repo.repoName}-branch-lock`
+      );
 
       runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
       await $`git -C ${repo.repoRoot} worktree add --force ${lockedWorktreePath} ${branchName}`.quiet();
@@ -2150,7 +2300,7 @@ describe("cli e2e", () => {
 
       const result = runWrappedBashSession(repo.repoRoot, [
         `builtin cd "${nestedDir}"`,
-        `wt rm ${worktreeId} >/dev/null 2>/dev/null`,
+        `wt rm ${worktreeId} --foreground >/dev/null 2>/dev/null`,
         "rm_status=$?",
         'rm_pwd="$PWD"',
         'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
@@ -2198,9 +2348,47 @@ describe("cli e2e", () => {
       expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
         realpathSync(repo.repoRoot)
       );
+      expect(result.stdout).toContain("Started background removal");
+
+      await waitForRemoveTaskStatus(repo.repoRoot, worktreeId, "done");
       expect(existsSync(worktreePath)).toBeFalse();
     }
   );
+
+  test("does not background removal of the main worktree", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const linkedWorktreeId = "linked123";
+    const linkedBranchName = "feature-linked-worktree";
+    const linkedWorktreePath = getWorktreePath(repo, linkedWorktreeId);
+
+    runCli(
+      ["new", linkedBranchName, "--id", linkedWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const result = runWrappedBashSession(repo.repoRoot, [
+      "wt rm . --keep-branch >/tmp/wt-rm-main-stdout 2>/tmp/wt-rm-main-stderr",
+      "rm_status=$?",
+      'rm_pwd="$PWD"',
+      'printf \'RM_STATUS=%s\\nRM_PWD=%s\\n\' "$rm_status" "$rm_pwd"',
+      "cat /tmp/wt-rm-main-stdout",
+    ]);
+
+    assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+
+    expect(Number(readOutputValue(result.stdout, "RM_STATUS"))).toBe(1);
+    expect(realpathSync(readOutputValue(result.stdout, "RM_PWD"))).toBe(
+      realpathSync(repo.repoRoot)
+    );
+    expect(result.stdout).not.toContain("Started background removal");
+    expect(existsSync(repo.repoRoot)).toBeTrue();
+    expect(existsSync(linkedWorktreePath)).toBeTrue();
+    expect(findRemoveTaskFiles(repo.repoRoot, repo.repoName)).toEqual([]);
+  });
 
   test("removes multiple worktrees in one command", async () => {
     const repo = await createTestRepo();

@@ -8,6 +8,10 @@ import {
 } from "../../domain/settings.js";
 
 export const LOCAL_SETTINGS_GITIGNORE_ENTRY = "settings.local.json";
+export const REMOVE_TASK_GITIGNORE_ENTRIES = [
+  "remove-task-*.json",
+  "remove-task-*.log",
+];
 const LOCAL_SETTINGS_GITIGNORE_ALIASES = new Set([
   LOCAL_SETTINGS_GITIGNORE_ENTRY,
   "/settings.local.json",
@@ -44,6 +48,19 @@ export async function loadSettings(repoRoot: string): Promise<WtSettings> {
 export async function ensureLocalSettingsIgnored(
   repoRoot: string
 ): Promise<boolean> {
+  return ensureWtGitignoreEntries(repoRoot, [LOCAL_SETTINGS_GITIGNORE_ENTRY]);
+}
+
+export async function ensureRemoveTaskArtifactsIgnored(
+  repoRoot: string
+): Promise<boolean> {
+  return ensureWtGitignoreEntries(repoRoot, REMOVE_TASK_GITIGNORE_ENTRIES);
+}
+
+async function ensureWtGitignoreEntries(
+  repoRoot: string,
+  entries: string[]
+): Promise<boolean> {
   const settingsDir = join(repoRoot, ".wt");
   const gitignorePath = join(settingsDir, ".gitignore");
 
@@ -54,11 +71,20 @@ export async function ensureLocalSettingsIgnored(
   const currentContent = existsSync(gitignorePath)
     ? readFileSync(gitignorePath, "utf-8")
     : "";
-  const alreadyIgnored = currentContent
+  const currentLines = currentContent
     .split(/\r?\n/)
-    .some((line) => LOCAL_SETTINGS_GITIGNORE_ALIASES.has(line.trim()));
+    .map((line) => line.trim());
+  const missingEntries = entries.filter((entry) => {
+    if (entry === LOCAL_SETTINGS_GITIGNORE_ENTRY) {
+      return !currentLines.some((line) =>
+        LOCAL_SETTINGS_GITIGNORE_ALIASES.has(line)
+      );
+    }
 
-  if (alreadyIgnored) {
+    return !currentLines.includes(entry);
+  });
+
+  if (missingEntries.length === 0) {
     return false;
   }
 
@@ -67,7 +93,7 @@ export async function ensureLocalSettingsIgnored(
 
   writeFileSync(
     gitignorePath,
-    `${currentContent}${separator}${LOCAL_SETTINGS_GITIGNORE_ENTRY}\n`,
+    `${currentContent}${separator}${missingEntries.join("\n")}\n`,
     "utf-8"
   );
 

@@ -50,6 +50,7 @@ program
   .description("Remove one or more worktrees by ID")
   .option("--keep-branch", "Keep the branch after removing worktree")
   .option("-f, --force", "Skip confirmation for worktrees with pending changes")
+  .option("--foreground", "Wait for current worktree removal to finish")
   .action(removeCommand);
 
 program

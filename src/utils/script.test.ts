@@ -68,6 +68,8 @@ describe("buildDetachedRunnerCommand", () => {
     expect(cmd).toContain('"status":"done"');
     expect(cmd).toContain('"status":"failed"');
     expect(cmd).toContain("tmp_status_file='/tmp/post-task.json'.tmp.$$");
+    expect(cmd).toContain('"status": "done"');
+    expect(cmd).toContain('"finishedAt":');
     expect(cmd).toContain('mv "$tmp_status_file"');
   });
 
