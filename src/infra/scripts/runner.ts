@@ -1,5 +1,5 @@
 import { spawn as spawnChildProcess } from "node:child_process";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { SHELL_CD_FILE_ENV } from "../shell/cd.js";
 
@@ -9,6 +9,12 @@ export interface DetachedScriptOptions {
   scripts: string[];
   startNotification?: DetachedNotification;
   completionNotification?: DetachedCompletionNotification;
+}
+
+export interface DetachedTaskOptions extends DetachedScriptOptions {
+  cwd: string;
+  env?: Record<string, string>;
+  statusMetadata?: Record<string, unknown>;
 }
 
 export interface DetachedNotification {
@@ -100,7 +106,12 @@ export function buildDetachedRunnerCommand(
     : undefined;
   const buildStatusUpdateCommand = (status: "done" | "failed"): string => [
     `tmp_status_file='${statusFile}'.tmp.$$`,
-    `printf '{"status":"${status}","finishedAt":"%s"}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$tmp_status_file"`,
+    `finished_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")`,
+    `if [ -f '${statusFile}' ]; then`,
+    `  sed -e 's/"status"[[:space:]]*:[[:space:]]*"running"/"status": "${status}"/' -e '$ s/}/,\\n  "finishedAt": "'"$finished_at"'"\\n}/' '${statusFile}' > "$tmp_status_file"`,
+    `else`,
+    `  printf '{"status":"${status}","finishedAt":"%s"}\n' "$finished_at" > "$tmp_status_file"`,
+    `fi`,
     `mv "$tmp_status_file" '${statusFile}'`,
   ].join("\n");
   const successCommands = [
@@ -178,8 +189,6 @@ export function executeScriptsDetached(
   statusFilePath: string,
   logFilePath: string
 ): number {
-  mkdirSync(dirname(statusFilePath), { recursive: true });
-  mkdirSync(dirname(logFilePath), { recursive: true });
   const target = env?.WT_BRANCH ?? env?.WT_ID ?? "Worktree";
   const startNotification =
     process.platform === "darwin"
@@ -190,10 +199,37 @@ export function executeScriptsDetached(
       ? buildPostScriptCompletionNotification(target)
       : undefined;
 
+  return executeDetachedTask({
+    scripts,
+    cwd,
+    env,
+    statusFilePath,
+    logFilePath,
+    startNotification,
+    completionNotification,
+  });
+}
+
+export function executeDetachedTask(options: DetachedTaskOptions): number {
+  const {
+    cwd,
+    env,
+    logFilePath,
+    scripts,
+    statusFilePath,
+    statusMetadata,
+    startNotification,
+    completionNotification,
+  } = options;
+
+  mkdirSync(dirname(statusFilePath), { recursive: true });
+  mkdirSync(dirname(logFilePath), { recursive: true });
+
   writeFileSync(
     statusFilePath,
     JSON.stringify(
       {
+        ...statusMetadata,
         status: "running",
         startedAt: new Date().toISOString(),
         logFilePath,
@@ -229,20 +265,30 @@ export function executeScriptsDetached(
   }
   proc.unref();
 
+  tryAddDetachedTaskPid(statusFilePath, pid);
+
+  return pid;
+}
+
+function tryAddDetachedTaskPid(statusFilePath: string, pid: number): void {
+  const status = JSON.parse(readFileSync(statusFilePath, "utf-8")) as {
+    status?: string;
+    [key: string]: unknown;
+  };
+
+  if (status.status !== "running") {
+    return;
+  }
+
   writeFileSync(
     statusFilePath,
     JSON.stringify(
       {
-        status: "running",
-        startedAt: new Date().toISOString(),
+        ...status,
         pid,
-        logFilePath,
-        scripts,
       },
       null,
       2
     )
   );
-
-  return pid;
 }

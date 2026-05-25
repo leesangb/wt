@@ -4,6 +4,7 @@ export {
   buildPostScriptStartNotification,
   buildScriptEnv,
   escapeAppleScriptString,
+  executeDetachedTask,
   executeScript,
   executeScripts,
   executeScriptsDetached,
@@ -13,4 +14,5 @@ export type {
   DetachedNotification,
   DetachedCompletionNotification,
   DetachedScriptOptions,
+  DetachedTaskOptions,
 } from "../infra/scripts/runner.js";

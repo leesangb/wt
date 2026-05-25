@@ -284,6 +284,8 @@ wt rm <id...>
 
 worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면, `wt rm`은 삭제 전에 한 번 더 확인합니다. 여러 worktree를 넘기면 각 대상마다 개별로 확인합니다. 프롬프트를 건너뛰려면 `wt rm <id...> --force`를 사용할 수 있습니다.
 
+현재 디렉터리가 속한 worktree를 제거할 때는 `wt rm`이 삭제 작업을 백그라운드로 시작하고, shell은 즉시 main worktree로 돌아갑니다. 출력에는 백그라운드 작업 PID와 main worktree의 `.wt/` 아래에 생성된 status/log 파일 경로가 표시됩니다. macOS에서는 백그라운드 삭제 성공 또는 실패를 알림으로 알려줍니다. 삭제가 끝날 때까지 기다리고 싶으면 `wt rm . --foreground`를 사용하세요.
+
 다음 방법으로 worktree를 제거할 수 있습니다:
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
 - 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)

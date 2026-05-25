@@ -3,7 +3,9 @@ import { createInterface } from "readline/promises";
 import { AppError } from "../app/errors.js";
 import { getWorktreeBranchLabel } from "../domain/worktree.js";
 import {
+  type BackgroundRemoveWorktreeResult,
   inspectRemoveWorktree,
+  removeCurrentWorktreeInBackground,
   RemoveWorktreeError,
   removeWorktree,
 } from "../app/use-cases/remove-worktree.js";
@@ -13,6 +15,7 @@ import { emitShellCd } from "../infra/shell/cd.js";
 export interface RemoveCommandOptions {
   keepBranch?: boolean;
   force?: boolean;
+  foreground?: boolean;
 }
 
 export interface RemovalPrompter {
@@ -223,6 +226,33 @@ export function logRemovalResult(
   }
 }
 
+export function logBackgroundRemovalResult(
+  result: BackgroundRemoveWorktreeResult
+): void {
+  const branchLabel = getWorktreeBranchLabel(result.worktree);
+
+  console.log(
+    chalk.blue(
+      `Started background removal: ${branchLabel} (${result.worktree.id})`
+    )
+  );
+  console.log(chalk.dim(`  PID: ${result.pid}`));
+  console.log(chalk.dim(`  Status: ${result.statusFilePath}`));
+  console.log(chalk.dim(`  Log: ${result.logFilePath}`));
+
+  if (result.branchDeleteQueued && result.worktree.branch) {
+    console.log(
+      chalk.dim(`  Branch deletion queued: ${result.worktree.branch}`)
+    );
+  } else if (result.worktree.branch) {
+    console.log(chalk.yellow(`Branch kept: ${result.worktree.branch}`));
+  } else {
+    console.log(chalk.dim("Detached worktree had no branch to delete"));
+  }
+
+  emitShellCd(result.relocatedToPath);
+}
+
 export async function removeSingleWorktree(
   id: string,
   options: RemoveCommandOptions,
@@ -253,6 +283,17 @@ export async function removeSingleWorktree(
       );
       return "skipped";
     }
+  }
+
+  if (
+    preview.isCurrent &&
+    !preview.worktree.isMain &&
+    !batchMode &&
+    !options.foreground
+  ) {
+    const result = await removeCurrentWorktreeInBackground(id, options);
+    logBackgroundRemovalResult(result);
+    return "removed";
   }
 
   const result = await runWithSpinner(
