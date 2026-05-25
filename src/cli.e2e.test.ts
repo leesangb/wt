@@ -295,6 +295,18 @@ function createFakeGithubEnv(
         "  exit 1",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "list" ]; then',
+        '  target_head=""',
+        '  previous_arg=""',
+        '  for arg in "$@"; do',
+        '    if [ "$previous_arg" = "--head" ]; then',
+        '      target_head="$arg"',
+        "    fi",
+        '    previous_arg="$arg"',
+        "  done",
+        `  if [ -n "$target_head" ] && [ "$target_head" != "${headBranch}" ]; then`,
+        "    printf '%s\\n' '[]'",
+        "    exit 0",
+        "  fi",
         `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","headRefName":"${headBranch}"}]'`,
         "  exit 0",
         "fi",
@@ -1846,8 +1858,38 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(`ID:      ${worktreeId} (current)`);
     expect(result.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
     expect(readFileSync(ghLogPath, "utf-8")).toContain(
-      `pr view ${branchName} --json number,url`
+      `pr list --state open --head ${branchName} --json number,url`
     );
+  });
+
+  test("looks up numeric current branch names as PR heads instead of PR numbers", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "numeric-branch";
+    const branchName = "123";
+    const prNumber = "792";
+    const prUrl = "https://github.com/example/repo/pull/792";
+    const ghLogPath = join(repo.repoRoot, "gh.log");
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const result = runCliCapture(["current"], worktreePath, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        logPath: ghLogPath,
+        prNumber,
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const ghLog = readFileSync(ghLogPath, "utf-8");
+
+    expect(result.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
+    expect(ghLog).toContain(
+      `pr list --state open --head ${branchName} --json number,url`
+    );
+    expect(ghLog).not.toContain(`pr view ${branchName}`);
   });
 
   test("lists a detached main worktree instead of hiding it", async () => {
@@ -2966,6 +3008,8 @@ describe("cli e2e", () => {
     updateSettings(repo.repoRoot, settings => {
       settings.worktreeDir = "./worktrees";
     });
+    await $`git -C ${repo.repoRoot} add .wt/settings.json`.quiet();
+    await $`git -C ${repo.repoRoot} commit -m track-settings`.quiet();
     runCli(
       ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
       repo.repoRoot
@@ -2983,6 +3027,52 @@ describe("cli e2e", () => {
     expect(existsSync(secondWorktreePath)).toBeTrue();
     expect(existsSync(join(secondWorktreePath, ".wt", "meta.json"))).toBeTrue();
     expect(existsSync(join(firstWorktreePath, "worktrees"))).toBeFalse();
+    expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
+    expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
+  });
+
+  test("resolves current local worktreeDir overrides from the linked worktree", async () => {
+    const repo = await createTestRepo();
+    const firstWorktreeId = "relative-local-source";
+    const secondWorktreeId = "relative-local-target";
+    const firstBranchName = "feature-relative-local-source";
+    const secondBranchName = "feature-relative-local-target";
+    const mainWorktreeRoot = join(repo.repoRoot, "worktrees");
+    const firstWorktreePath = join(
+      mainWorktreeRoot,
+      `${repo.repoName}-${firstWorktreeId}`
+    );
+    const expectedWorktreeRoot = join(firstWorktreePath, "local-worktrees");
+    const expectedWorktreePath = join(
+      expectedWorktreeRoot,
+      `${repo.repoName}-${secondWorktreeId}`
+    );
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.worktreeDir = "./worktrees";
+    });
+    await $`git -C ${repo.repoRoot} add .wt/settings.json`.quiet();
+    await $`git -C ${repo.repoRoot} commit -m track-settings`.quiet();
+    runCli(
+      ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+    writeFileSync(
+      join(firstWorktreePath, ".wt", "settings.local.json"),
+      JSON.stringify({ worktreeDir: "./local-worktrees" }, null, 2)
+    );
+
+    const result = runCliCapture(
+      ["new", secondBranchName, "--id", secondWorktreeId, "--no-cd"],
+      firstWorktreePath
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const resolvedWorktreePath = realpathSync(expectedWorktreePath);
+
+    expect(existsSync(expectedWorktreePath)).toBeTrue();
+    expect(existsSync(join(expectedWorktreePath, ".wt", "meta.json"))).toBeTrue();
     expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
     expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
   });

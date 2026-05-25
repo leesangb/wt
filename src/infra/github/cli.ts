@@ -63,25 +63,31 @@ function getGithubErrorMessage(result: GithubCommandResult): string {
   return result.stderr.trim() || result.stdout.trim() || "unknown gh error";
 }
 
-function parsePullRequestLink(
-  stdout: string
-): PullRequestLink | undefined {
-  let entry: Partial<PullRequestLinkEntry>;
+function parsePullRequestLinkList(stdout: string): PullRequestLink[] {
+  let entries: Partial<PullRequestLinkEntry>[];
 
   try {
-    entry = JSON.parse(stdout) as Partial<PullRequestLinkEntry>;
+    entries = JSON.parse(stdout) as Partial<PullRequestLinkEntry>[];
   } catch {
-    return undefined;
+    return [];
   }
 
-  if (typeof entry.number !== "number" || !entry.url) {
-    return undefined;
+  if (!Array.isArray(entries)) {
+    return [];
   }
 
-  return {
-    number: String(entry.number),
-    url: entry.url,
-  };
+  return entries.flatMap((entry) => {
+    if (typeof entry.number !== "number" || !entry.url) {
+      return [];
+    }
+
+    return [
+      {
+        number: String(entry.number),
+        url: entry.url,
+      },
+    ];
+  });
 }
 
 export async function ensureGithubCliReady(cwd: string): Promise<void> {
@@ -225,7 +231,16 @@ export async function findPullRequestLinkForBranch(
   branchName: string
 ): Promise<PullRequestLink | undefined> {
   const result = runGithubCommand(
-    ["pr", "view", branchName, "--json", "number,url"],
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--head",
+      branchName,
+      "--json",
+      "number,url",
+    ],
     repoRoot
   );
 
@@ -233,7 +248,9 @@ export async function findPullRequestLinkForBranch(
     return undefined;
   }
 
-  return parsePullRequestLink(result.stdout);
+  const pullRequests = parsePullRequestLinkList(result.stdout);
+
+  return pullRequests.length === 1 ? pullRequests[0] : undefined;
 }
 
 export async function checkoutPullRequest(
