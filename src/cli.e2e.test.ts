@@ -3076,4 +3076,50 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
     expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
   });
+
+  test("resolves changed linked shared worktreeDir from the linked worktree", async () => {
+    const repo = await createTestRepo();
+    const firstWorktreeId = "relative-shared-source";
+    const secondWorktreeId = "relative-shared-target";
+    const firstBranchName = "feature-relative-shared-source";
+    const secondBranchName = "feature-relative-shared-target";
+    const mainWorktreeRoot = join(repo.repoRoot, "worktrees");
+    const firstWorktreePath = join(
+      mainWorktreeRoot,
+      `${repo.repoName}-${firstWorktreeId}`
+    );
+    const expectedWorktreeRoot = join(firstWorktreePath, "branch-worktrees");
+    const expectedWorktreePath = join(
+      expectedWorktreeRoot,
+      `${repo.repoName}-${secondWorktreeId}`
+    );
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.worktreeDir = "./worktrees";
+    });
+    await $`git -C ${repo.repoRoot} add .wt/settings.json`.quiet();
+    await $`git -C ${repo.repoRoot} commit -m track-settings`.quiet();
+    runCli(
+      ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+    writeFileSync(
+      join(firstWorktreePath, ".wt", "settings.json"),
+      JSON.stringify({ worktreeDir: "./branch-worktrees" }, null, 2)
+    );
+
+    const result = runCliCapture(
+      ["new", secondBranchName, "--id", secondWorktreeId, "--no-cd"],
+      firstWorktreePath
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const resolvedWorktreePath = realpathSync(expectedWorktreePath);
+
+    expect(existsSync(expectedWorktreePath)).toBeTrue();
+    expect(existsSync(join(expectedWorktreePath, ".wt", "meta.json"))).toBeTrue();
+    expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
+    expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
+  });
 });

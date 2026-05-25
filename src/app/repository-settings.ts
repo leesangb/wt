@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "util";
 import {
   mergeSettingsInputs,
   normalizeSettings,
@@ -34,6 +35,21 @@ function selectWorktreeDirRoot(
   );
 }
 
+function selectSharedSettingsSource(
+  currentSource: SettingsInputSource,
+  mainSource: SettingsInputSource
+): SettingsInputSource {
+  if (!currentSource.input) {
+    return mainSource;
+  }
+
+  if (!mainSource.input || !isDeepStrictEqual(currentSource.input, mainSource.input)) {
+    return currentSource;
+  }
+
+  return mainSource;
+}
+
 export async function loadRepositorySettings(
   repoRoot: string
 ): Promise<RepositorySettings> {
@@ -44,9 +60,18 @@ export async function loadRepositorySettings(
     settingsRoot === repoRoot
       ? currentInputs
       : await loadSettingsInputs(settingsRoot);
-  const sharedSource: SettingsInputSource = mainInputs.shared
-    ? { input: mainInputs.shared, root: settingsRoot }
-    : { input: currentInputs.shared, root: repoRoot };
+  const currentSharedSource: SettingsInputSource = {
+    input: currentInputs.shared,
+    root: repoRoot,
+  };
+  const mainSharedSource: SettingsInputSource = {
+    input: mainInputs.shared,
+    root: settingsRoot,
+  };
+  const sharedSource = selectSharedSettingsSource(
+    currentSharedSource,
+    mainSharedSource
+  );
   const mainLocalSource: SettingsInputSource | undefined =
     settingsRoot === repoRoot
       ? undefined
