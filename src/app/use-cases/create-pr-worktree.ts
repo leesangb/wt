@@ -10,9 +10,9 @@ import {
 } from "../worktree-creation.js";
 import { copyConfiguredPaths } from "../worktree-copy.js";
 import { requireRepositoryContext } from "../repository-context.js";
+import { loadRepositorySettings } from "../repository-settings.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
 import {
-  loadSettings,
   resolveWorktreeDir,
 } from "../../infra/storage/settings-store.js";
 import {
@@ -111,7 +111,7 @@ export async function createPrWorktree(
     };
   }
 
-  const settings = await loadSettings(context.repoRoot);
+  const settings = await loadRepositorySettings(context.repoRoot);
   const { id, idAdjustedFrom } = resolveUniqueWorktreeId(
     preferredId,
     worktrees.map((worktree) => worktree.id)

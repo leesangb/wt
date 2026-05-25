@@ -227,6 +227,7 @@ _wt_completion() {
         'switch[Alias for checkout]' \\
         'list[List all worktrees]' \\
         'ls[List all worktrees]' \\
+        'current[Show the current worktree]' \\
         'remove[Remove a worktree]' \\
         'rm[Remove a worktree]' \\
         'rename[Rename the current worktree ID]' \\

@@ -1756,6 +1756,100 @@ describe("cli e2e", () => {
     expect(listResult.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
   });
 
+  test("shows the current linked worktree with a derived issue tracker URL", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "dev-123";
+    const branchName = "feature/DEV-123";
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.issue = {
+        pattern: "[A-Z]+-\\d+",
+        url: "https://myissues.com/$issue",
+      };
+    });
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const nestedDir = join(worktreePath, "nested");
+    mkdirSync(nestedDir, { recursive: true });
+
+    const result = runCliCapture(["current"], nestedDir);
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).toContain(`ID:      ${worktreeId} (current)`);
+    expect(result.stdout).toContain(`Branch:  ${branchName}`);
+    expect(result.stdout).toContain(
+      "Issue:   DEV-123 https://myissues.com/DEV-123"
+    );
+    expect(result.stdout).toContain(`Path:    ${realpathSync(worktreePath)}`);
+  });
+
+  test("shows stored PR metadata for the current worktree without querying GitHub again", async () => {
+    const repo = await createTestRepo();
+    const prNumber = "790";
+    const branchName = "feature-pr-current";
+    const prUrl = "https://github.com/example/repo/pull/790";
+    const ghLogPath = join(repo.repoRoot, "gh.log");
+
+    const createResult = runCliCapture(["pr", prNumber, "--no-cd"], repo.repoRoot, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        logPath: ghLogPath,
+        prNumber,
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(
+      createResult.status,
+      createResult.stderr,
+      createResult.stdout
+    );
+
+    const worktreePath = getWorktreePath(repo, `pr-${prNumber}`);
+    const ghLogBefore = readFileSync(ghLogPath, "utf-8");
+    const result = runCliCapture(["current"], worktreePath, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        logPath: ghLogPath,
+        prNumber,
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).toContain(`ID:      pr-${prNumber} (current)`);
+    expect(result.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
+    expect(readFileSync(ghLogPath, "utf-8")).toBe(ghLogBefore);
+  });
+
+  test("looks up PR metadata for the current branch worktree when none is stored", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "pr-lookup";
+    const branchName = "feature/pr-lookup";
+    const prNumber = "791";
+    const prUrl = "https://github.com/example/repo/pull/791";
+    const ghLogPath = join(repo.repoRoot, "gh.log");
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+
+    const worktreePath = getWorktreePath(repo, worktreeId);
+    const result = runCliCapture(["current"], worktreePath, {
+      env: createFakeGithubEnv({
+        headBranch: branchName,
+        logPath: ghLogPath,
+        prNumber,
+        prUrl,
+      }),
+    });
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    expect(result.stdout).toContain(`ID:      ${worktreeId} (current)`);
+    expect(result.stdout).toContain(`PR:      #${prNumber} ${prUrl}`);
+    expect(readFileSync(ghLogPath, "utf-8")).toContain(
+      `pr view ${branchName} --json number,url`
+    );
+  });
+
   test("lists a detached main worktree instead of hiding it", async () => {
     const repo = await createGitRepo();
 

@@ -4,6 +4,7 @@ import { Command, Option } from "commander";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { listCommand } from "./commands/list.js";
+import { currentCommand } from "./commands/current.js";
 import { removeCommand } from "./commands/remove.js";
 import { renameCommand } from "./commands/rename.js";
 import { cleanCommand } from "./commands/clean.js";
@@ -43,6 +44,11 @@ program
   .option("--completion <format>", "Output completion format (bash, zsh, fish)")
   .addOption(new Option("--exclude-main-worktree").hideHelp())
   .action(listCommand);
+
+program
+  .command("current")
+  .description("Show the current worktree")
+  .action(currentCommand);
 
 program
   .command("remove <ids...>")
