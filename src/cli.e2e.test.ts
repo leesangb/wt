@@ -2946,4 +2946,44 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
     expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
   });
+
+  test("resolves fallback relative worktreeDir from the main worktree", async () => {
+    const repo = await createTestRepo();
+    const firstWorktreeId = "relative-source";
+    const secondWorktreeId = "relative-target";
+    const firstBranchName = "feature-relative-source";
+    const secondBranchName = "feature-relative-target";
+    const expectedWorktreeRoot = join(repo.repoRoot, "worktrees");
+    const firstWorktreePath = join(
+      expectedWorktreeRoot,
+      `${repo.repoName}-${firstWorktreeId}`
+    );
+    const secondWorktreePath = join(
+      expectedWorktreeRoot,
+      `${repo.repoName}-${secondWorktreeId}`
+    );
+
+    updateSettings(repo.repoRoot, settings => {
+      settings.worktreeDir = "./worktrees";
+    });
+    runCli(
+      ["new", firstBranchName, "--id", firstWorktreeId, "--no-cd"],
+      repo.repoRoot
+    );
+
+    const result = runCliCapture(
+      ["new", secondBranchName, "--id", secondWorktreeId, "--no-cd"],
+      firstWorktreePath
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+
+    const resolvedWorktreePath = realpathSync(secondWorktreePath);
+
+    expect(existsSync(secondWorktreePath)).toBeTrue();
+    expect(existsSync(join(secondWorktreePath, ".wt", "meta.json"))).toBeTrue();
+    expect(existsSync(join(firstWorktreePath, "worktrees"))).toBeFalse();
+    expect(result.stdout).toContain(`WT_PATH: ${resolvedWorktreePath}`);
+    expect(result.stdout).toContain(`cd ${resolvedWorktreePath}`);
+  });
 });

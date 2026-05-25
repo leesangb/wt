@@ -125,7 +125,7 @@ export async function listWorktrees(
   cwd: string = process.cwd()
 ): Promise<ListWorktreesResult> {
   const context = await requireRepositoryContext(cwd);
-  const settings = await loadRepositorySettings(context.repoRoot);
+  const { settings } = await loadRepositorySettings(context.repoRoot);
   const worktreesWithIssueLinks = enrichWorktreesWithIssueLinks(
     settings.issue,
     await loadWorktreeStates(context)

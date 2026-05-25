@@ -5,6 +5,11 @@ import {
   settingsExist,
 } from "../infra/storage/settings-store.js";
 
+export interface RepositorySettings {
+  settings: WtSettings;
+  settingsRoot: string;
+}
+
 async function resolveMainWorktreePath(
   repoRoot: string
 ): Promise<string | undefined> {
@@ -14,9 +19,12 @@ async function resolveMainWorktreePath(
 
 export async function loadRepositorySettings(
   repoRoot: string
-): Promise<WtSettings> {
+): Promise<RepositorySettings> {
   if (await settingsExist(repoRoot)) {
-    return loadSettings(repoRoot);
+    return {
+      settings: await loadSettings(repoRoot),
+      settingsRoot: repoRoot,
+    };
   }
 
   const mainWorktreePath = await resolveMainWorktreePath(repoRoot);
@@ -26,8 +34,14 @@ export async function loadRepositorySettings(
     mainWorktreePath !== repoRoot &&
     (await settingsExist(mainWorktreePath))
   ) {
-    return loadSettings(mainWorktreePath);
+    return {
+      settings: await loadSettings(mainWorktreePath),
+      settingsRoot: mainWorktreePath,
+    };
   }
 
-  return loadSettings(repoRoot);
+  return {
+    settings: await loadSettings(repoRoot),
+    settingsRoot: repoRoot,
+  };
 }

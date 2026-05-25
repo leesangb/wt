@@ -68,7 +68,7 @@ export async function getCurrentWorktree(
   cwd: string = process.cwd()
 ): Promise<GetCurrentWorktreeResult> {
   const context = await requireRepositoryContext(cwd);
-  const settings = await loadRepositorySettings(context.repoRoot);
+  const { settings } = await loadRepositorySettings(context.repoRoot);
   const worktree = enrichWorktreeWithIssueLink(
     await enrichWorktreeWithPullRequest(
       context.repoRoot,

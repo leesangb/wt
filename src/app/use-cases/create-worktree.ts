@@ -89,14 +89,16 @@ export async function createWorktree(
   cwd: string = process.cwd()
 ): Promise<CreateWorktreeResult> {
   const context = await requireRepositoryContext(cwd);
-  const settings = await loadRepositorySettings(context.repoRoot);
+  const { settings, settingsRoot } = await loadRepositorySettings(
+    context.repoRoot
+  );
   const baseBranch = options.base ?? settings.baseBranch;
   const pushRemote = options.push ?? settings.pushRemote;
   const id = options.id ?? branchName;
   const fullId = `${context.repoName}-${id}`;
   const worktreeBaseDir = resolveWorktreeDir(
     settings.worktreeDir,
-    context.repoRoot
+    settingsRoot
   );
 
   ensureWorktreeBaseDir(worktreeBaseDir);

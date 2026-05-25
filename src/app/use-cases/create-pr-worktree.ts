@@ -111,7 +111,9 @@ export async function createPrWorktree(
     };
   }
 
-  const settings = await loadRepositorySettings(context.repoRoot);
+  const { settings, settingsRoot } = await loadRepositorySettings(
+    context.repoRoot
+  );
   const { id, idAdjustedFrom } = resolveUniqueWorktreeId(
     preferredId,
     worktrees.map((worktree) => worktree.id)
@@ -119,7 +121,7 @@ export async function createPrWorktree(
   const fullId = `${context.repoName}-${id}`;
   const worktreeBaseDir = resolveWorktreeDir(
     settings.worktreeDir,
-    context.repoRoot
+    settingsRoot
   );
 
   ensureWorktreeBaseDir(worktreeBaseDir);
