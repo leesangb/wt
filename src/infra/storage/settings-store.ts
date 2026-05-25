@@ -21,6 +21,10 @@ export async function getSettingsPath(repoRoot: string): Promise<string> {
   return join(repoRoot, ".wt", "settings.json");
 }
 
+export async function getLocalSettingsPath(repoRoot: string): Promise<string> {
+  return join(repoRoot, ".wt", "settings.local.json");
+}
+
 export async function settingsExist(repoRoot: string): Promise<boolean> {
   const settingsPath = await getSettingsPath(repoRoot);
   return existsSync(settingsPath);
@@ -36,13 +40,27 @@ async function readSettingsInput(
   return JSON.parse(await Bun.file(settingsPath).text()) as WtSettingsInput;
 }
 
-export async function loadSettings(repoRoot: string): Promise<WtSettings> {
-  const settingsPath = await getSettingsPath(repoRoot);
-  const localSettingsPath = join(repoRoot, ".wt", "settings.local.json");
-  const sharedSettings = await readSettingsInput(settingsPath);
-  const localSettings = await readSettingsInput(localSettingsPath);
+export interface SettingsInputs {
+  shared?: WtSettingsInput;
+  local?: WtSettingsInput;
+}
 
-  return normalizeSettings(mergeSettingsInputs(sharedSettings, localSettings));
+export async function loadSettingsInputs(
+  repoRoot: string
+): Promise<SettingsInputs> {
+  const settingsPath = await getSettingsPath(repoRoot);
+  const localSettingsPath = await getLocalSettingsPath(repoRoot);
+
+  return {
+    shared: await readSettingsInput(settingsPath),
+    local: await readSettingsInput(localSettingsPath),
+  };
+}
+
+export async function loadSettings(repoRoot: string): Promise<WtSettings> {
+  const { shared, local } = await loadSettingsInputs(repoRoot);
+
+  return normalizeSettings(mergeSettingsInputs(shared, local));
 }
 
 export async function ensureLocalSettingsIgnored(

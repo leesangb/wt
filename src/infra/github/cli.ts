@@ -27,6 +27,11 @@ interface PullRequestListEntry {
   url: string;
 }
 
+interface PullRequestLinkEntry {
+  number: number;
+  url: string;
+}
+
 function runGithubCommand(
   args: string[],
   cwd: string
@@ -56,6 +61,33 @@ function isGithubCliUnavailable(result: GithubCommandResult): boolean {
 
 function getGithubErrorMessage(result: GithubCommandResult): string {
   return result.stderr.trim() || result.stdout.trim() || "unknown gh error";
+}
+
+function parsePullRequestLinkList(stdout: string): PullRequestLink[] {
+  let entries: Partial<PullRequestLinkEntry>[];
+
+  try {
+    entries = JSON.parse(stdout) as Partial<PullRequestLinkEntry>[];
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries.flatMap((entry) => {
+    if (typeof entry.number !== "number" || !entry.url) {
+      return [];
+    }
+
+    return [
+      {
+        number: String(entry.number),
+        url: entry.url,
+      },
+    ];
+  });
 }
 
 export async function ensureGithubCliReady(cwd: string): Promise<void> {
@@ -192,6 +224,33 @@ export async function listPullRequestLinks(
       (entry): entry is [string, PullRequestLink] => entry[1] !== null
     )
   );
+}
+
+export async function findPullRequestLinkForBranch(
+  repoRoot: string,
+  branchName: string
+): Promise<PullRequestLink | undefined> {
+  const result = runGithubCommand(
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--head",
+      branchName,
+      "--json",
+      "number,url",
+    ],
+    repoRoot
+  );
+
+  if (result.status !== 0) {
+    return undefined;
+  }
+
+  const pullRequests = parsePullRequestLinkList(result.stdout);
+
+  return pullRequests.length === 1 ? pullRequests[0] : undefined;
 }
 
 export async function checkoutPullRequest(

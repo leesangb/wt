@@ -1,7 +1,9 @@
 import { statSync } from "fs";
 import type { RepositoryContext } from "./repository-context.js";
+import { AppError } from "./errors.js";
 import {
   buildWorktreeIdentifiers,
+  type GitWorktreeRef,
   type WorktreeInfo,
   type WorktreeMergeStatus,
   type WorktreeRemovalInfo,
@@ -31,37 +33,55 @@ function resolveCreatedAt(
   }
 }
 
+async function buildWorktreeInfo(
+  context: RepositoryContext,
+  worktree: GitWorktreeRef
+): Promise<WorktreeInfo> {
+  const meta = await readWorktreeMeta(worktree.path);
+  const { id, fullId } = buildWorktreeIdentifiers(
+    context.repoName,
+    worktree.path,
+    meta
+  );
+
+  return {
+    id,
+    fullId,
+    path: worktree.path,
+    branch: worktree.branch,
+    isMain: worktree.isMain,
+    isDetached: worktree.isDetached,
+    head: worktree.head,
+    repoName: context.repoName,
+    createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
+    baseBranch: meta?.baseBranch,
+    baseCommit: meta?.baseCommit,
+    prNumber: meta?.prNumber,
+    prUrl: meta?.prUrl,
+  };
+}
+
 export async function loadWorktreeInfos(
   context: RepositoryContext
 ): Promise<WorktreeInfo[]> {
   const gitWorktrees = await listGitWorktrees(context.repoRoot);
 
-  return Promise.all(
-    gitWorktrees.map(async (worktree) => {
-      const meta = await readWorktreeMeta(worktree.path);
-      const { id, fullId } = buildWorktreeIdentifiers(
-        context.repoName,
-        worktree.path,
-        meta
-      );
+  return Promise.all(gitWorktrees.map((worktree) => buildWorktreeInfo(context, worktree)));
+}
 
-      return {
-        id,
-        fullId,
-        path: worktree.path,
-        branch: worktree.branch,
-        isMain: worktree.isMain,
-        isDetached: worktree.isDetached,
-        head: worktree.head,
-        repoName: context.repoName,
-        createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
-        baseBranch: meta?.baseBranch,
-        baseCommit: meta?.baseCommit,
-        prNumber: meta?.prNumber,
-        prUrl: meta?.prUrl,
-      };
-    })
+export async function loadCurrentWorktreeInfo(
+  context: RepositoryContext
+): Promise<WorktreeInfo> {
+  const gitWorktrees = await listGitWorktrees(context.repoRoot);
+  const currentWorktree = gitWorktrees.find(
+    (worktree) => worktree.path === context.repoRoot
   );
+
+  if (!currentWorktree) {
+    throw new AppError("Current directory is not inside a git worktree");
+  }
+
+  return buildWorktreeInfo(context, currentWorktree);
 }
 
 export async function loadWorktreeStates(

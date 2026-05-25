@@ -99,6 +99,30 @@ export function buildWorktreeBranchSummary(
   return branchParts.join(" ");
 }
 
+export function buildPullRequestSummary(
+  worktree: Pick<WorktreeInfo, "prNumber" | "prUrl">
+): string | undefined {
+  if (!worktree.prUrl) {
+    return undefined;
+  }
+
+  return worktree.prNumber
+    ? `#${worktree.prNumber} ${worktree.prUrl}`
+    : worktree.prUrl;
+}
+
+export function buildIssueSummary(
+  worktree: Pick<WorktreeInfo, "issueKey" | "issueUrl">
+): string | undefined {
+  if (!worktree.issueUrl) {
+    return undefined;
+  }
+
+  return worktree.issueKey
+    ? `${worktree.issueKey} ${worktree.issueUrl}`
+    : worktree.issueUrl;
+}
+
 export function pickDisplayState(
   worktree: Pick<DisplayableWorktree, "id">,
   statesById: Map<string, WorktreeState>

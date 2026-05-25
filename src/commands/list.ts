@@ -14,6 +14,8 @@ import type {
 import { runCommand } from "../cli/command-runtime.js";
 import {
   buildBaseDescription,
+  buildIssueSummary,
+  buildPullRequestSummary,
   buildWorktreeBranchSummary,
   buildWorktreeIdLabel,
 } from "./worktree-display.js";
@@ -140,28 +142,4 @@ function buildRemoveCompletionDescription(
   }
 
   return `${getWorktreeBranchLabel(worktree)} | ${metadata.join(" | ")}`;
-}
-
-function buildPullRequestSummary(
-  worktree: Pick<WorktreeState, "prNumber" | "prUrl">
-): string | undefined {
-  if (!worktree.prUrl) {
-    return undefined;
-  }
-
-  return worktree.prNumber
-    ? `#${worktree.prNumber} ${worktree.prUrl}`
-    : worktree.prUrl;
-}
-
-function buildIssueSummary(
-  worktree: Pick<WorktreeState, "issueKey" | "issueUrl">
-): string | undefined {
-  if (!worktree.issueUrl) {
-    return undefined;
-  }
-
-  return worktree.issueKey
-    ? `${worktree.issueKey} ${worktree.issueUrl}`
-    : worktree.issueUrl;
 }

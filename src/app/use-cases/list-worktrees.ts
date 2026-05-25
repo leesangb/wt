@@ -7,12 +7,12 @@ import { requireRepositoryContext } from "../repository-context.js";
 import { AppError } from "../errors.js";
 import { buildIssueLinkFromPattern } from "../../domain/issue-link.js";
 import { listPullRequestLinks } from "../../infra/github/cli.js";
-import { loadSettings } from "../../infra/storage/settings-store.js";
 import {
   loadWorktreeInfos,
   loadWorktreeRemovalInfos,
   loadWorktreeStates,
 } from "../worktree-catalog.js";
+import { loadRepositorySettings } from "../repository-settings.js";
 import type { WtIssueSettings } from "../../domain/settings.js";
 
 export interface ListWorktreeInfosOptions {
@@ -125,7 +125,7 @@ export async function listWorktrees(
   cwd: string = process.cwd()
 ): Promise<ListWorktreesResult> {
   const context = await requireRepositoryContext(cwd);
-  const settings = await loadSettings(context.repoRoot);
+  const { settings } = await loadRepositorySettings(context.repoRoot);
   const worktreesWithIssueLinks = enrichWorktreesWithIssueLinks(
     settings.issue,
     await loadWorktreeStates(context)
