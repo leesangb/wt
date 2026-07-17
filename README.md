@@ -333,7 +333,7 @@ If the worktree has modified files or unpushed commits, `wt rm` asks for confirm
 
 When removing the worktree that contains your current directory, `wt rm` starts the removal in the background and immediately returns your shell to the main worktree. It prints the background task PID plus status and log file paths under the main worktree's `.wt/` directory. On macOS, Notification Center reports whether the background removal finished or failed. Use `wt rm . --foreground` if you want to wait for removal before returning.
 
-When run inside Herdr, `wt rm` also closes the Herdr workspace associated with the removed worktree. For background removal, the workspace closes as soon as the removal task starts; it does not wait for that task to finish.
+When run inside Herdr, `wt rm` also closes the Herdr workspace associated with the removed worktree. For background removal, the workspace closes as soon as the removal task starts; it does not wait for that task to finish. Set `herdr.closeWorkspaceOnRemove` to `false` to keep it open.
 
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
@@ -369,10 +369,11 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
+- **herdr.closeWorkspaceOnRemove**: Close the associated Herdr workspace after `wt rm` (default: `true`)
 - **issue.pattern**: Optional JavaScript regular expression for extracting issue keys from branch names
 - **issue.url**: Optional issue tracker URL template. Use `$issue` where the extracted key should appear
 
-You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*`, `scripts.*`, and `issue.*` fields are merged, so you can override only `copy.exclude`, `scripts.postMode`, or `issue.url` without copying the rest of each object.
+You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*`, `scripts.*`, `herdr.*`, and `issue.*` fields are merged, so you can override only `copy.exclude`, `scripts.postMode`, `herdr.closeWorkspaceOnRemove`, or `issue.url` without copying the rest of each object.
 
 `copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
@@ -397,6 +398,9 @@ Example `.wt/settings.local.json`:
   "baseBranch": "develop",
   "scripts": {
     "postMode": "sync"
+  },
+  "herdr": {
+    "closeWorkspaceOnRemove": false
   }
 }
 ```

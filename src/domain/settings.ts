@@ -16,22 +16,28 @@ export interface WtIssueSettings {
   url: string;
 }
 
+export interface WtHerdrSettings {
+  closeWorkspaceOnRemove: boolean;
+}
+
 export interface WtSettings {
   worktreeDir: string;
   baseBranch: string;
   pushRemote: boolean;
   copy: WtCopySettings;
   scripts: WtScriptsSettings;
+  herdr: WtHerdrSettings;
   issue?: WtIssueSettings;
 }
 
 export type WtCopySettingsInput = string[] | Partial<WtCopySettings>;
 
 export type WtSettingsInput = Partial<
-  Omit<WtSettings, "copy" | "scripts" | "issue">
+  Omit<WtSettings, "copy" | "scripts" | "herdr" | "issue">
 > & {
   copy?: WtCopySettingsInput;
   scripts?: Partial<WtScriptsSettings>;
+  herdr?: Partial<WtHerdrSettings>;
   issue?: Partial<WtIssueSettings>;
 };
 
@@ -47,6 +53,9 @@ export const DEFAULT_WT_SETTINGS: WtSettings = {
     pre: [],
     post: [],
     postMode: "async",
+  },
+  herdr: {
+    closeWorkspaceOnRemove: true,
   },
 };
 
@@ -110,12 +119,20 @@ export function mergeSettingsInputs(
           ...override?.issue,
         }
       : undefined;
+  const mergedHerdr =
+    base?.herdr || override?.herdr
+      ? {
+          ...base?.herdr,
+          ...override?.herdr,
+        }
+      : undefined;
 
   return {
     ...base,
     ...override,
     ...(mergedCopy ? { copy: mergedCopy } : {}),
     ...(mergedScripts ? { scripts: mergedScripts } : {}),
+    ...(mergedHerdr ? { herdr: mergedHerdr } : {}),
     ...(mergedIssue ? { issue: mergedIssue } : {}),
   };
 }
@@ -139,6 +156,11 @@ export function normalizeSettings(
       post: input?.scripts?.post ?? DEFAULT_WT_SETTINGS.scripts.post,
       postMode:
         input?.scripts?.postMode ?? DEFAULT_WT_SETTINGS.scripts.postMode,
+    },
+    herdr: {
+      closeWorkspaceOnRemove:
+        input?.herdr?.closeWorkspaceOnRemove ??
+        DEFAULT_WT_SETTINGS.herdr.closeWorkspaceOnRemove,
     },
     ...(issueInput ? { issue: issueInput } : {}),
   };

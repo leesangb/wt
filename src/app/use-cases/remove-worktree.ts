@@ -17,7 +17,10 @@ import {
   executeDetachedTask,
   shellEscapeSingle,
 } from "../../infra/scripts/runner.js";
-import { ensureRemoveTaskArtifactsIgnored } from "../../infra/storage/settings-store.js";
+import {
+  ensureRemoveTaskArtifactsIgnored,
+  loadSettings,
+} from "../../infra/storage/settings-store.js";
 import type { WorktreeInfo } from "../../domain/worktree.js";
 import {
   closeHerdrWorkspace,
@@ -299,7 +302,10 @@ export async function removeWorktree(
   cwd: string = process.cwd()
 ): Promise<RemoveWorktreeResult> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
-  const herdr = await findHerdrWorkspaceForWorktree(worktree.path);
+  const settings = await loadSettings(context.repoRoot);
+  const herdr = settings.herdr.closeWorkspaceOnRemove
+    ? await findHerdrWorkspaceForWorktree(worktree.path)
+    : { attempted: false };
   const removalRoot = await resolveSafeRemovalRoot(context, worktree);
 
   await removeGitWorktree(removalRoot.gitRoot, worktree.path);
@@ -348,7 +354,10 @@ export async function removeCurrentWorktreeInBackground(
   cwd: string = process.cwd()
 ): Promise<BackgroundRemoveWorktreeResult> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
-  const herdr = await findHerdrWorkspaceForWorktree(worktree.path);
+  const settings = await loadSettings(context.repoRoot);
+  const herdr = settings.herdr.closeWorkspaceOnRemove
+    ? await findHerdrWorkspaceForWorktree(worktree.path)
+    : { attempted: false };
 
   if (!isPathInside(worktree.path, context.cwd)) {
     throw new AppError(

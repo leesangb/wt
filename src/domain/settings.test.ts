@@ -98,6 +98,9 @@ describe("normalizeSettings", () => {
         post: ["pnpm install"],
         postMode: "async",
       },
+      herdr: {
+        closeWorkspaceOnRemove: true,
+      },
     });
   });
 
@@ -122,6 +125,9 @@ describe("normalizeSettings", () => {
         post: [],
         postMode: "async",
       },
+      herdr: {
+        closeWorkspaceOnRemove: true,
+      },
     });
   });
 
@@ -136,6 +142,18 @@ describe("normalizeSettings", () => {
     ).toEqual({
       pattern: "[A-Z]+-\\d+",
       url: "https://myissues.com/$issue",
+    });
+  });
+
+  test("allows automatic Herdr workspace closing to be disabled", () => {
+    expect(
+      normalizeSettings({
+        herdr: {
+          closeWorkspaceOnRemove: false,
+        },
+      }).herdr
+    ).toEqual({
+      closeWorkspaceOnRemove: false,
     });
   });
 
@@ -156,6 +174,9 @@ describe("normalizeSettings", () => {
         pre: [],
         post: [],
         postMode: "async",
+      },
+      herdr: {
+        closeWorkspaceOnRemove: true,
       },
     });
   });

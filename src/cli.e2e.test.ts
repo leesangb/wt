@@ -2230,6 +2230,28 @@ describe("cli e2e", () => {
     );
   });
 
+  test("keeps the Herdr workspace open when configured", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "rmherdrkeep123";
+    const branchName = "feature-rm-herdr-keep";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    writeFileSync(
+      join(repo.repoRoot, ".wt", "settings.local.json"),
+      JSON.stringify({ herdr: { closeWorkspaceOnRemove: false } })
+    );
+    const herdr = createFakeHerdr(worktreePath);
+    const result = runCliCapture(
+      ["remove", worktreeId, "--keep-branch"],
+      repo.repoRoot,
+      { env: herdr.env }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(herdr.logPath)).toBeFalse();
+  });
+
   test("closes the Herdr workspace as soon as background removal starts", async () => {
     if (!isShellAvailable("bash")) {
       return;

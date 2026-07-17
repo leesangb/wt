@@ -110,6 +110,9 @@ describe("settings store", () => {
         post: [],
         postMode: "async",
       },
+      herdr: {
+        closeWorkspaceOnRemove: true,
+      },
     });
   });
 
@@ -135,6 +138,9 @@ describe("settings store", () => {
         pre: [],
         post: [],
         postMode: "async",
+      },
+      herdr: {
+        closeWorkspaceOnRemove: true,
       },
     });
   });
@@ -180,6 +186,9 @@ describe("settings store", () => {
         post: ["bun install"],
         postMode: "sync",
       },
+      herdr: {
+        closeWorkspaceOnRemove: true,
+      },
     });
   });
 
@@ -207,6 +216,9 @@ describe("settings store", () => {
         pre: [],
         post: ["pnpm install"],
         postMode: "async",
+      },
+      herdr: {
+        closeWorkspaceOnRemove: true,
       },
     });
   });
@@ -241,6 +253,9 @@ describe("settings store", () => {
         pre: [],
         post: [],
         postMode: "async",
+      },
+      herdr: {
+        closeWorkspaceOnRemove: true,
       },
     });
   });

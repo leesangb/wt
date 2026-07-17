@@ -333,7 +333,7 @@ worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면,
 
 현재 디렉터리가 속한 worktree를 제거할 때는 `wt rm`이 삭제 작업을 백그라운드로 시작하고, shell은 즉시 main worktree로 돌아갑니다. 출력에는 백그라운드 작업 PID와 main worktree의 `.wt/` 아래에 생성된 status/log 파일 경로가 표시됩니다. macOS에서는 백그라운드 삭제 성공 또는 실패를 알림으로 알려줍니다. 삭제가 끝날 때까지 기다리고 싶으면 `wt rm . --foreground`를 사용하세요.
 
-Herdr 안에서 실행하면 `wt rm`은 제거한 worktree에 연결된 Herdr workspace도 닫습니다. 백그라운드 제거에서는 작업 완료를 기다리지 않고 제거 작업이 시작되는 즉시 workspace를 닫습니다.
+Herdr 안에서 실행하면 `wt rm`은 제거한 worktree에 연결된 Herdr workspace도 닫습니다. 백그라운드 제거에서는 작업 완료를 기다리지 않고 제거 작업이 시작되는 즉시 workspace를 닫습니다. 계속 열어 두려면 `herdr.closeWorkspaceOnRemove`를 `false`로 설정하세요.
 
 다음 방법으로 worktree를 제거할 수 있습니다:
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
@@ -369,10 +369,11 @@ wt clean -m -d --keep-branch
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 - **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
+- **herdr.closeWorkspaceOnRemove**: `wt rm` 후 연결된 Herdr workspace 닫기 (기본값: `true`)
 - **issue.pattern**: 브랜치 이름에서 이슈 키를 추출할 선택적 JavaScript 정규식
 - **issue.url**: 선택적 이슈 트래커 URL 템플릿. 추출한 키가 들어갈 위치에 `$issue`를 사용합니다
 
-사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `copy.*`, `scripts.*`, `issue.*` 필드도 병합되므로 `copy.exclude`, `scripts.postMode`, `issue.url`만 따로 바꿀 수 있습니다.
+사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `copy.*`, `scripts.*`, `herdr.*`, `issue.*` 필드도 병합되므로 `copy.exclude`, `scripts.postMode`, `herdr.closeWorkspaceOnRemove`, `issue.url`만 따로 바꿀 수 있습니다.
 
 `copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. 앞에 `./`를 붙여도 되고, `./apps`와 `apps`는 같은 의미입니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 source 저장소에서 git에 트래킹되지 않은 파일만 복사하고, 새로 만든 worktree 쪽에서 이미 tracked인 파일은 덮어쓰지 않습니다. 또한 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
 
@@ -397,6 +398,9 @@ wt clean -m -d --keep-branch
   "baseBranch": "develop",
   "scripts": {
     "postMode": "sync"
+  },
+  "herdr": {
+    "closeWorkspaceOnRemove": false
   }
 }
 ```
