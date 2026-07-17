@@ -1,12 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import {
   decodeLaunchContext,
+  buildBaseBranchChoices,
   encodeLaunchContext,
   parsePluginContext,
   parseWtJsonOutput,
 } from "./index.js";
 
 describe("wt Herdr plugin", () => {
+  test("prefers local base branches and keeps remote-only refs usable", () => {
+    expect(
+      buildBaseBranchChoices(
+        "main\nfeature/local\norigin/HEAD\norigin/main\norigin/release/1.0\n"
+      )
+    ).toEqual([
+      { name: "feature/local", ref: "feature/local", local: true },
+      { name: "main", ref: "main", local: true },
+      { name: "release/1.0", ref: "origin/release/1.0", local: false },
+    ]);
+  });
+
   test("keeps the origin workspace and focused pane cwd", () => {
     const context = parsePluginContext(
       JSON.stringify({

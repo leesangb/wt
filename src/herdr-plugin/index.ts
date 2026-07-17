@@ -1,5 +1,4 @@
 import { spawn } from "bun";
-import { createInterface } from "node:readline/promises";
 
 export type WtMode = "new" | "checkout" | "pr";
 
@@ -19,6 +18,12 @@ interface WtJsonResult {
   id: string;
   path: string;
   branch: string;
+}
+
+interface BranchRef {
+  name: string;
+  ref: string;
+  local: boolean;
 }
 
 function requiredEnv(name: string): string {
@@ -82,6 +87,96 @@ async function run(
   return stdout;
 }
 
+async function capture(command: string[], cwd: string): Promise<string> {
+  const proc = spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  if (exitCode !== 0) {
+    throw new Error(stderr.trim() || `${command[0]} exited with code ${exitCode}`);
+  }
+
+  return stdout;
+}
+
+export function buildBaseBranchChoices(refs: string): BranchRef[] {
+  const choices = new Map<string, BranchRef>();
+
+  for (const line of refs.split(/\r?\n/)) {
+    const ref = line.trim();
+    if (!ref || ref.endsWith("/HEAD")) continue;
+
+    const local = !ref.startsWith("origin/");
+    const name = local ? ref : ref.slice("origin/".length);
+    const existing = choices.get(name);
+
+    if (!existing || local) {
+      choices.set(name, { name, ref, local });
+    }
+  }
+
+  return [...choices.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function fzf(
+  args: string[],
+  input: string,
+  cwd: string
+): Promise<string | undefined> {
+  const proc = spawn(["fzf", ...args], {
+    cwd,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  proc.stdin.write(input);
+  proc.stdin.end();
+
+  const output = await new Response(proc.stdout).text();
+  const exitCode = await proc.exited;
+
+  if (exitCode === 130 || exitCode === 1) return undefined;
+  if (exitCode !== 0) throw new Error(`fzf exited with code ${exitCode}`);
+  return output.trim();
+}
+
+async function promptNewBranch(cwd: string): Promise<string | undefined> {
+  return fzf(
+    ["--phony", "--bind=enter:print-query+accept", "--prompt=New branch> "],
+    "",
+    cwd
+  );
+}
+
+async function pickBaseBranch(cwd: string): Promise<string | undefined> {
+  const refs = await capture(
+    [
+      "git",
+      "for-each-ref",
+      "--format=%(refname:short)",
+      "refs/heads",
+      "refs/remotes/origin",
+    ],
+    cwd
+  );
+  const choices = buildBaseBranchChoices(refs);
+  const selected = await fzf(
+    [
+      "--delimiter=\t",
+      "--with-nth=1",
+      "--prompt=Base branch> ",
+      "--header=Enter: select · Esc: cancel",
+    ],
+    choices.map(({ name, ref }) => `${name}\t${ref}`).join("\n"),
+    cwd
+  );
+
+  return selected?.split("\t")[1];
+}
+
 async function launch(mode: WtMode): Promise<void> {
   const context = parsePluginContext(
     requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
@@ -115,15 +210,29 @@ function promptLabel(mode: WtMode): string {
 
 async function runUi(): Promise<void> {
   const context = decodeLaunchContext(requiredEnv("WT_HERDR_CONTEXT"));
-  const input = createInterface({ input: process.stdin, output: process.stdout });
 
   try {
-    console.log(`wt → Herdr (${context.mode})\n`);
-    const target = (await input.question(`${promptLabel(context.mode)}: `)).trim();
+    const target =
+      context.mode === "new"
+        ? await promptNewBranch(context.cwd)
+        : await fzf(
+            ["--phony", "--bind=enter:print-query+accept", `--prompt=${promptLabel(context.mode)}> `],
+            "",
+            context.cwd
+          );
     if (!target) return;
 
     const pluginWt = `${requiredEnv("HERDR_PLUGIN_ROOT")}/.herdr-plugin/bin/wt`;
-    const output = await run([pluginWt, context.mode, target, "--json"], {
+    const wtArgs = [pluginWt, context.mode, target];
+
+    if (context.mode === "new") {
+      const base = await pickBaseBranch(context.cwd);
+      if (!base) return;
+      wtArgs.push("--base", base);
+    }
+
+    wtArgs.push("--json");
+    const output = await run(wtArgs, {
       cwd: context.cwd,
       capture: true,
     });
@@ -145,10 +254,7 @@ async function runUi(): Promise<void> {
     ]);
   } catch (error) {
     console.error(`\n${error instanceof Error ? error.message : String(error)}`);
-    await input.question("\nPress Enter to close…");
     process.exitCode = 1;
-  } finally {
-    input.close();
   }
 }
 
