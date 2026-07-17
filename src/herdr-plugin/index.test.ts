@@ -4,12 +4,53 @@ import {
   buildBaseBranchChoices,
   buildPullRequestChoices,
   buildPullRequestHeader,
+  closedLinkedWorktrees,
   encodeLaunchContext,
   parsePluginContext,
   parseWtJsonOutput,
 } from "./index.js";
 
 describe("wt Herdr plugin", () => {
+  test("selects only closed, healthy linked worktrees for bulk opening", () => {
+    expect(
+      closedLinkedWorktrees(
+        JSON.stringify({
+          result: {
+            source: { source_workspace_id: "w1" },
+            worktrees: [
+              {
+                is_linked_worktree: false,
+                is_prunable: false,
+                label: "repo",
+                open_workspace_id: "w1",
+                path: "/repo",
+              },
+              {
+                is_linked_worktree: true,
+                is_prunable: false,
+                label: "feature-a",
+                path: "/worktrees/feature-a",
+              },
+              {
+                is_linked_worktree: true,
+                is_prunable: false,
+                label: "feature-b",
+                open_workspace_id: "w2",
+                path: "/worktrees/feature-b",
+              },
+              {
+                is_linked_worktree: true,
+                is_prunable: true,
+                label: "stale",
+                path: "/worktrees/stale",
+              },
+            ],
+          },
+        })
+      )
+    ).toEqual([{ label: "feature-a", path: "/worktrees/feature-a" }]);
+  });
+
   test("prefers local base branches and keeps remote-only refs usable", () => {
     expect(
       buildBaseBranchChoices(

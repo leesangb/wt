@@ -26,6 +26,12 @@ title = "wt: Open pull request worktree"
 contexts = ["workspace"]
 command = ["./.herdr-plugin/bin/wt-herdr", "launch", "pr"]
 
+[[actions]]
+id = "open-all"
+title = "wt: Open all existing worktrees"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "open-all"]
+
 [[panes]]
 id = "create"
 title = "wt"

@@ -118,6 +118,9 @@ function runCliCapture(
     encoding: "utf-8",
     env: {
       ...process.env,
+      HERDR_BIN_PATH: undefined,
+      HERDR_ENV: undefined,
+      HERDR_WORKSPACE_ID: undefined,
       ...options.env,
     },
     input: options.input,
@@ -1036,6 +1039,43 @@ describe("cli e2e", () => {
     });
     expect(output.path).toBe(getWorktreePath(repo, branchName));
     expect(typeof output.baseCommit).toBe("string");
+  });
+
+  test("opens a newly created worktree in Herdr instead of changing the source pane cwd", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/herdr-open";
+    const fakeDir = makeTempDir("wt-herdr-");
+    const fakeHerdr = join(fakeDir, "herdr");
+    const logPath = join(fakeDir, "args.log");
+    writeFileSync(
+      fakeHerdr,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' \"$*\" > \"${logPath}\"`,
+        "printf '%s\\n' '{\"result\":{}}'",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(
+      ["new", branchName, "--no-push"],
+      repo.repoRoot,
+      {
+        env: {
+          HERDR_BIN_PATH: fakeHerdr,
+          HERDR_ENV: "1",
+          HERDR_WORKSPACE_ID: "w1",
+        },
+      }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout).toContain("Opened in Herdr");
+    expect(result.stdout).not.toContain("To navigate to the worktree");
+    expect(readFileSync(logPath, "utf8")).toContain(
+      `worktree open --workspace w1 --path ${getWorktreePath(repo, branchName)}`
+    );
   });
 
   test("prints a stable JSON result when checking out a local branch", async () => {

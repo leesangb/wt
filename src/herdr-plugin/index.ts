@@ -34,6 +34,19 @@ interface PullRequest {
   isDraft: boolean;
 }
 
+interface HerdrWorktreeList {
+  result: {
+    source: { source_workspace_id: string };
+    worktrees: Array<{
+      is_linked_worktree: boolean;
+      is_prunable: boolean;
+      label: string;
+      open_workspace_id?: string;
+      path: string;
+    }>;
+  };
+}
+
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_RESET = "\x1b[0m";
 
@@ -225,6 +238,22 @@ export function buildPullRequestChoices(
   });
 }
 
+export function closedLinkedWorktrees(json: string): Array<{
+  label: string;
+  path: string;
+}> {
+  const response = JSON.parse(json) as HerdrWorktreeList;
+
+  return response.result.worktrees
+    .filter(
+      (worktree) =>
+        worktree.is_linked_worktree &&
+        !worktree.is_prunable &&
+        !worktree.open_workspace_id
+    )
+    .map(({ label, path }) => ({ label, path }));
+}
+
 async function fzf(
   args: string[],
   input: string,
@@ -397,6 +426,48 @@ async function launch(mode: WtMode): Promise<void> {
   ]);
 }
 
+async function openAll(): Promise<void> {
+  const context = parsePluginContext(
+    requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
+    "checkout"
+  );
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+  const listOutput = await run(
+    [
+      herdr,
+      "worktree",
+      "list",
+      "--workspace",
+      context.workspaceId,
+      "--json",
+    ],
+    { capture: true }
+  );
+  const worktrees = closedLinkedWorktrees(listOutput);
+
+  for (const worktree of worktrees) {
+    await run([
+      herdr,
+      "worktree",
+      "open",
+      "--workspace",
+      context.workspaceId,
+      "--path",
+      worktree.path,
+      "--label",
+      worktree.label,
+      "--no-focus",
+      "--json",
+    ]);
+  }
+
+  const body =
+    worktrees.length === 0
+      ? "All existing worktrees are already open"
+      : `Opened ${worktrees.length} existing worktree${worktrees.length === 1 ? "" : "s"}`;
+  await run([herdr, "notification", "show", "wt", "--body", body]);
+}
+
 async function runUi(): Promise<void> {
   const context = decodeLaunchContext(requiredEnv("WT_HERDR_CONTEXT"));
 
@@ -456,8 +527,12 @@ async function main(): Promise<void> {
     await runUi();
     return;
   }
+  if (command === "open-all") {
+    await openAll();
+    return;
+  }
 
-  throw new Error("Usage: wt-herdr launch <new|checkout|pr> | ui");
+  throw new Error("Usage: wt-herdr launch <new|checkout|pr> | ui | open-all");
 }
 
 if (import.meta.main) {
