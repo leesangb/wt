@@ -3,12 +3,12 @@ import { createInterface } from "readline/promises";
 import { AppError } from "../app/errors.js";
 import { getWorktreeBranchLabel } from "../domain/worktree.js";
 import {
-  type BackgroundRemoveWorktreeResult,
-  closeRemovedWorktreeInHerdr,
-  inspectRemoveWorktree,
-  removeCurrentWorktreeInBackground,
-  RemoveWorktreeError,
-  removeWorktree,
+  executeRemoval,
+  inspectRemoval,
+  type BackgroundRemovalResult,
+  type RemovalPlan,
+  type RemovalResult,
+  type RemovedWorktreeResult,
 } from "../app/use-cases/remove-worktree.js";
 import { runWithSpinner } from "../cli/spinner.js";
 import { emitShellCd } from "../infra/shell/cd.js";
@@ -22,6 +22,13 @@ export interface RemoveCommandOptions {
 export interface RemovalPrompter {
   confirmCleanup: (worktreeCount: number) => Promise<boolean>;
   confirmRemoval: (
+    worktreeId: string,
+    branch: string,
+    localChangeCount: number,
+    localCommitCount: number,
+    hasUnknownLocalCommits: boolean
+  ) => Promise<boolean>;
+  confirmChangedRemoval: (
     worktreeId: string,
     branch: string,
     localChangeCount: number,
@@ -185,6 +192,28 @@ export function createRemovalPrompter(): RemovalPrompter {
 
       return confirmAction("Remove this worktree anyway? [y/N] ");
     },
+    async confirmChangedRemoval(
+      worktreeId: string,
+      branch: string,
+      localChangeCount: number,
+      localCommitCount: number,
+      hasUnknownLocalCommits: boolean
+    ): Promise<boolean> {
+      const summary = buildPendingWorkSummary(
+        localChangeCount,
+        localCommitCount,
+        hasUnknownLocalCommits
+      );
+      const pendingMessage = summary ? ` It now has ${summary}.` : "";
+
+      console.log(
+        chalk.yellow(
+          `Warning: ${branch} (${worktreeId}) changed after confirmation.${pendingMessage}`
+        )
+      );
+
+      return confirmAction("Review the latest state and remove it anyway? [y/N] ");
+    },
     close() {
       readline?.close();
       if (dataHandlerAttached) {
@@ -196,7 +225,7 @@ export function createRemovalPrompter(): RemovalPrompter {
 }
 
 export function hasPendingWork(
-  preview: Awaited<ReturnType<typeof inspectRemoveWorktree>>
+  preview: RemovalPlan
 ): boolean {
   return (
     preview.localChangeCount > 0 ||
@@ -206,7 +235,7 @@ export function hasPendingWork(
 }
 
 export function logRemovalResult(
-  result: Awaited<ReturnType<typeof removeWorktree>>
+  result: RemovedWorktreeResult
 ): void {
   const branchLabel = getWorktreeBranchLabel(result.worktree);
 
@@ -228,7 +257,7 @@ export function logRemovalResult(
 }
 
 export function logBackgroundRemovalResult(
-  result: BackgroundRemoveWorktreeResult
+  result: BackgroundRemovalResult
 ): void {
   const branchLabel = getWorktreeBranchLabel(result.worktree);
 
@@ -254,22 +283,58 @@ export function logBackgroundRemovalResult(
   emitShellCd(result.relocatedToPath);
 }
 
+function logRemovalWarnings(result: {
+  warnings: Array<{ message: string }>;
+}): void {
+  for (const warning of result.warnings) {
+    console.error(chalk.yellow(`Warning: ${warning.message}`));
+  }
+}
+
+async function executeRemovalWithProgress(
+  plan: RemovalPlan,
+  options: RemoveCommandOptions,
+  batchMode: boolean
+): Promise<RemovalResult> {
+  const execution =
+    batchMode || options.foreground ? "foreground" : "auto";
+  const shouldShowSpinner =
+    execution === "foreground" || !plan.isCurrent || plan.worktree.isMain;
+
+  if (!shouldShowSpinner) {
+    return executeRemoval(plan, {
+      keepBranch: options.keepBranch,
+      execution,
+    });
+  }
+
+  const branchLabel = getWorktreeBranchLabel(plan.worktree);
+  return runWithSpinner(
+    `Removing worktree ${branchLabel} (${plan.worktree.id})`,
+    () =>
+      executeRemoval(plan, {
+        keepBranch: options.keepBranch,
+        execution,
+      })
+  );
+}
+
 export async function removeSingleWorktree(
   id: string,
   options: RemoveCommandOptions,
   batchMode: boolean,
   prompter: RemovalPrompter
 ): Promise<"removed" | "skipped"> {
-  const preview = await inspectRemoveWorktree(id);
-  const branchLabel = getWorktreeBranchLabel(preview.worktree);
+  let plan = await inspectRemoval(id);
+  let branchLabel = getWorktreeBranchLabel(plan.worktree);
 
-  if (hasPendingWork(preview) && !options.force) {
+  if (hasPendingWork(plan) && !options.force) {
     const confirmed = await prompter.confirmRemoval(
-      preview.worktree.id,
+      plan.worktree.id,
       branchLabel,
-      preview.localChangeCount,
-      preview.localCommitCount,
-      preview.hasUnknownLocalCommits
+      plan.localChangeCount,
+      plan.localCommitCount,
+      plan.hasUnknownLocalCommits
     );
 
     if (!confirmed) {
@@ -279,59 +344,65 @@ export async function removeSingleWorktree(
 
       console.log(
         chalk.yellow(
-          `Skipped worktree: ${branchLabel} (${preview.worktree.id})`
+          `Skipped worktree: ${branchLabel} (${plan.worktree.id})`
         )
       );
       return "skipped";
     }
   }
 
-  if (
-    preview.isCurrent &&
-    !preview.worktree.isMain &&
-    !batchMode &&
-    !options.foreground
-  ) {
-    const result = await removeCurrentWorktreeInBackground(id, options);
-    logBackgroundRemovalResult(result);
-    await closeHerdrAfterRemoval(result);
-    return "removed";
-  }
+  while (true) {
+    const result = await executeRemovalWithProgress(plan, options, batchMode);
 
-  const result = await runWithSpinner(
-    `Removing worktree ${branchLabel} (${preview.worktree.id})`,
-    async () => {
-      try {
-        return await removeWorktree(preview.worktree.id, options);
-      } catch (error) {
-        if (error instanceof RemoveWorktreeError && error.relocatedToPath) {
-          emitShellCd(error.relocatedToPath);
-        }
-
-        throw error;
+    if (result.status === "plan_stale") {
+      if (!result.latestPlan) {
+        throw new AppError(result.reason);
       }
+
+      plan = result.latestPlan;
+      branchLabel = getWorktreeBranchLabel(plan.worktree);
+
+      if (!options.force) {
+        const confirmed = await prompter.confirmChangedRemoval(
+          plan.worktree.id,
+          branchLabel,
+          plan.localChangeCount,
+          plan.localCommitCount,
+          plan.hasUnknownLocalCommits
+        );
+
+        if (!confirmed) {
+          if (!batchMode) {
+            throw new AppError("Removal cancelled");
+          }
+
+          console.log(
+            chalk.yellow(
+              `Skipped worktree: ${branchLabel} (${plan.worktree.id})`
+            )
+          );
+          return "skipped";
+        }
+      }
+
+      continue;
     }
-  );
-  logRemovalResult(result);
-  await closeHerdrAfterRemoval(result);
-  return "removed";
-}
 
-async function closeHerdrAfterRemoval(result: {
-  herdrWorkspaceId?: string;
-  herdrError?: string;
-}): Promise<void> {
-  if (result.herdrError) {
-    console.error(
-      chalk.yellow(`Warning: Could not find Herdr workspace: ${result.herdrError}`)
-    );
-    return;
-  }
+    if (result.status === "worktree_removed_branch_failed") {
+      logRemovalWarnings(result);
+      if (result.relocatedToPath) {
+        emitShellCd(result.relocatedToPath);
+      }
+      throw new AppError(result.error);
+    }
 
-  const herdr = await closeRemovedWorktreeInHerdr(result.herdrWorkspaceId);
-  if (herdr.error) {
-    console.error(
-      chalk.yellow(`Warning: Could not close Herdr workspace: ${herdr.error}`)
-    );
+    if (result.status === "background_started") {
+      logBackgroundRemovalResult(result);
+    } else {
+      logRemovalResult(result);
+    }
+    logRemovalWarnings(result);
+
+    return "removed";
   }
 }

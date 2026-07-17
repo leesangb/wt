@@ -7,8 +7,8 @@ import {
   planWorktreeCleanup,
 } from "../app/use-cases/clean-worktrees.js";
 import {
-  inspectRemoveWorktree,
-  type RemoveWorktreePreview,
+  inspectRemoval,
+  type RemovalPlan,
 } from "../app/use-cases/remove-worktree.js";
 import { promptMultiSelect } from "../cli/multi-select.js";
 import { runCommand } from "../cli/command-runtime.js";
@@ -38,7 +38,7 @@ interface CleanupPickerEntry {
 }
 
 interface CleanupPreviewEntry extends CleanupPickerEntry {
-  preview: RemoveWorktreePreview;
+  preview: RemovalPlan;
 }
 
 const WIDE_LAYOUT_MIN_COLUMNS = 140;
@@ -166,7 +166,7 @@ function buildPickerLabel(entry: CleanupPickerEntry): string {
 
 function buildPickerDetails(
   entry: CleanupPickerEntry,
-  preview: RemoveWorktreePreview
+  preview: RemovalPlan
 ): string[] {
   const idDisplay = buildWorktreeIdLabel({
     id: entry.candidate.worktree.id,
@@ -236,7 +236,7 @@ function buildCleanupPickerEntries(
 }
 
 function canUseCachedPreview(
-  preview: RemoveWorktreePreview,
+  preview: RemovalPlan,
   includeStatusEntries: boolean
 ): boolean {
   if (!includeStatusEntries) {
@@ -248,11 +248,11 @@ function canUseCachedPreview(
 
 async function loadCachedPreview(
   entry: CleanupPickerEntry,
-  previewCache: Map<string, RemoveWorktreePreview>,
+  previewCache: Map<string, RemovalPlan>,
   options: {
     includeStatusEntries?: boolean;
   } = {}
-): Promise<RemoveWorktreePreview> {
+): Promise<RemovalPlan> {
   const includeStatusEntries = options.includeStatusEntries === true;
   const cachedPreview = previewCache.get(entry.candidate.worktree.id);
 
@@ -260,7 +260,7 @@ async function loadCachedPreview(
     return cachedPreview;
   }
 
-  const preview = await inspectRemoveWorktree(entry.candidate.worktree.id, process.cwd(), {
+  const preview = await inspectRemoval(entry.candidate.worktree.id, process.cwd(), {
     includeStatusEntries,
   });
   previewCache.set(entry.candidate.worktree.id, preview);
@@ -269,7 +269,7 @@ async function loadCachedPreview(
 
 async function attachCleanupPreviews(
   entries: CleanupPickerEntry[],
-  previewCache: Map<string, RemoveWorktreePreview>
+  previewCache: Map<string, RemovalPlan>
 ): Promise<CleanupPreviewEntry[]> {
   return Promise.all(
     entries.map(async (entry) => ({
@@ -327,7 +327,7 @@ function renderCleanupPreview(
 async function selectCleanupEntries(
   repoName: string,
   entries: CleanupPickerEntry[],
-  previewCache: Map<string, RemoveWorktreePreview>
+  previewCache: Map<string, RemovalPlan>
 ): Promise<CleanupPickerEntry[] | undefined> {
   const result = await promptMultiSelect(
     entries.map((entry) => ({
@@ -362,7 +362,7 @@ export async function cleanCommand(
   options: CleanCommandOptions
 ): Promise<void> {
   await runCommand(async () => {
-    const previewCache = new Map<string, RemoveWorktreePreview>();
+    const previewCache = new Map<string, RemovalPlan>();
     assertInteractiveTerminal();
 
     const plan = await planWorktreeCleanup(
