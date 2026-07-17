@@ -1,26 +1,10 @@
-import { createWorktreeMeta } from "../../domain/worktree.js";
 import {
-  createScriptEnvironment,
-  ensureWorktreeBaseDir,
-  resolveFreshWorktreePath,
-  runPostCreationScripts,
-  runPreCreationScripts,
-  resolveUniqueWorktreeId,
+  createPreparedWorktree,
   type CreateWorktreeResult,
 } from "../worktree-creation.js";
-import { copyConfiguredPaths } from "../worktree-copy.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
-import {
-  loadSettings,
-  resolveWorktreeDir,
-} from "../../infra/storage/settings-store.js";
-import {
-  attachGitWorktree,
-  localBranchExists,
-} from "../../infra/git/worktree-repository.js";
-import { getCommitHash, getMergeBase } from "../../infra/git/status.js";
-import { writeWorktreeMeta } from "../../infra/storage/worktree-meta-store.js";
+import { localBranchExists } from "../../infra/git/worktree-repository.js";
 import { AppError } from "../errors.js";
 
 function normalizeBranchName(branchName: string): string {
@@ -62,65 +46,10 @@ export async function createBranchWorktree(
     );
   }
 
-  const settings = await loadSettings(context.repoRoot);
-  const { id, idAdjustedFrom } = resolveUniqueWorktreeId(
-    normalizedBranchName,
-    worktrees.map((worktree) => worktree.id)
-  );
-  const fullId = `${context.repoName}-${id}`;
-  const worktreeBaseDir = resolveWorktreeDir(
-    settings.worktreeDir,
-    context.repoRoot
-  );
-
-  ensureWorktreeBaseDir(worktreeBaseDir);
-
-  const worktreePath = resolveFreshWorktreePath(
-    worktreeBaseDir,
-    context.repoName,
-    id
-  );
-  const baseBranch = settings.baseBranch;
-  const baseCommit =
-    (await getMergeBase(
-      context.repoRoot,
-      normalizedBranchName,
-      baseBranch
-    )) || (await getCommitHash(context.repoRoot, baseBranch));
-  const scriptEnv = createScriptEnvironment(
-    context.repoRoot,
-    worktreePath,
-    id,
-    fullId,
-    normalizedBranchName
-  );
-
-  await runPreCreationScripts(settings, context.repoRoot, scriptEnv);
-  await attachGitWorktree(context.repoRoot, worktreePath, normalizedBranchName);
-  await copyConfiguredPaths(settings, context.repoRoot, worktreePath);
-
-  await writeWorktreeMeta(
-    worktreePath,
-    createWorktreeMeta(baseBranch, baseCommit, undefined, {
-      id,
-      fullId,
-    })
-  );
-
-  const postScriptResult = await runPostCreationScripts(
-    settings,
-    worktreePath,
-    scriptEnv
-  );
-
-  return {
+  return createPreparedWorktree({
+    kind: "existing-branch",
+    context,
     branchName: normalizedBranchName,
-    id,
-    fullId,
-    worktreePath,
-    baseBranch,
-    baseCommit,
-    idAdjustedFrom,
-    ...postScriptResult,
-  };
+    existingIds: worktrees.map((worktree) => worktree.id),
+  });
 }
