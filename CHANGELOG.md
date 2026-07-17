@@ -1,5 +1,14 @@
 # @leesangb/wt
 
+## 0.7.0
+
+### Minor Changes
+
+- b008002: Add a Herdr plugin that creates worktrees through `wt` and opens them as grouped Herdr workspaces. Add JSON output to `new`, `checkout`, and `pr` for integrations.
+- 20a6ae4: macos27, herdr plugin
+- 43d966b: Add fzf pickers for local branches and open pull requests in the Herdr plugin, including PR title, author, head branch, and draft status.
+- ddd5930: Use fzf for Herdr worktree branch input and base-branch selection, with Escape cancelling either step.
+
 ## 0.6.0
 
 ### Minor Changes
