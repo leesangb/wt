@@ -34,6 +34,17 @@ interface PullRequest {
   isDraft: boolean;
 }
 
+const ANSI_GRAY = "\x1b[90m";
+const ANSI_RESET = "\x1b[0m";
+
+interface PullRequestColumnWidths {
+  number: number;
+  status: number;
+  title: number;
+  author: number;
+  branch: number;
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
@@ -129,22 +140,88 @@ export function buildBaseBranchChoices(refs: string): BranchRef[] {
   return [...choices.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function buildPullRequestChoices(json: string): string[] {
+function fitColumn(value: string, width: number): string {
+  if (Bun.stringWidth(value) <= width) {
+    return value + " ".repeat(width - Bun.stringWidth(value));
+  }
+
+  let result = "";
+  for (const character of value) {
+    if (Bun.stringWidth(`${result}${character}…`) > width) break;
+    result += character;
+  }
+
+  const truncated = `${result}…`;
+  return truncated + " ".repeat(Math.max(0, width - Bun.stringWidth(truncated)));
+}
+
+function pullRequestColumnWidths(terminalWidth: number): PullRequestColumnWidths {
+  const number = 8;
+  const status = 8;
+  const author = 18;
+  const branch = Math.max(20, Math.min(32, Math.floor(terminalWidth * 0.25)));
+  const gaps = 8;
+  const title = Math.max(
+    24,
+    terminalWidth - number - status - author - branch - gaps
+  );
+
+  return { number, status, title, author, branch };
+}
+
+function formatPullRequestColumns(
+  values: Record<keyof PullRequestColumnWidths, string>,
+  widths: PullRequestColumnWidths
+): string {
+  return (
+    Object.keys(widths) as Array<keyof PullRequestColumnWidths>
+  )
+    .map((key) => fitColumn(values[key], widths[key]))
+    .join("  ");
+}
+
+export function buildPullRequestHeader(terminalWidth: number = 120): string {
+  return formatPullRequestColumns(
+    {
+      number: "PR",
+      status: "Status",
+      title: "Title",
+      author: "Author",
+      branch: "Branch",
+    },
+    pullRequestColumnWidths(terminalWidth)
+  ).trimEnd();
+}
+
+export function buildPullRequestChoices(
+  json: string,
+  terminalWidth: number = 120
+): string[] {
   const pullRequests = JSON.parse(json) as PullRequest[];
+  const widths = pullRequestColumnWidths(terminalWidth);
 
   return pullRequests.map((pullRequest) => {
     const title = pullRequest.title.replaceAll("\t", " ");
     const author = pullRequest.author?.login ?? "unknown";
-    const draft = pullRequest.isDraft ? "[Draft]" : "";
+    const status = pullRequest.isDraft ? "Draft" : "";
+    const plainDisplay = formatPullRequestColumns(
+      {
+        number: `#${pullRequest.number}`,
+        status,
+        title,
+        author: `@${author}`,
+        branch: pullRequest.headRefName,
+      },
+      widths
+    );
+    const display = pullRequest.isDraft
+      ? plainDisplay.replace(
+          fitColumn(status, widths.status),
+          `${ANSI_GRAY}${fitColumn(status, widths.status)}${ANSI_RESET}`
+        )
+      : plainDisplay;
 
-    return [
-      `#${pullRequest.number}`,
-      draft,
-      title,
-      `@${author}`,
-      pullRequest.headRefName,
-      String(pullRequest.number),
-    ].join("\t");
+    return `${display}\t${pullRequest.number}`;
   });
 }
 
@@ -273,7 +350,8 @@ async function pickPullRequest(cwd: string): Promise<string | undefined> {
     ],
     cwd
   );
-  const choices = buildPullRequestChoices(json);
+  const terminalWidth = process.stdout.columns || 120;
+  const choices = buildPullRequestChoices(json, terminalWidth);
 
   if (choices.length === 0) {
     throw new Error("No open pull requests found");
@@ -282,9 +360,10 @@ async function pickPullRequest(cwd: string): Promise<string | undefined> {
   const selected = await fzf(
     [
       "--delimiter=\t",
-      "--with-nth=1..5",
+      "--with-nth=1",
+      "--ansi",
       "--prompt=Pull request> ",
-      "--header=PR · Draft · Title · Author · Branch    Esc: cancel",
+      `--header=${buildPullRequestHeader(terminalWidth)}\nEsc: cancel`,
     ],
     choices.join("\n"),
     cwd

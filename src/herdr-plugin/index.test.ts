@@ -3,6 +3,7 @@ import {
   decodeLaunchContext,
   buildBaseBranchChoices,
   buildPullRequestChoices,
+  buildPullRequestHeader,
   encodeLaunchContext,
   parsePluginContext,
   parseWtJsonOutput,
@@ -22,8 +23,7 @@ describe("wt Herdr plugin", () => {
   });
 
   test("formats pull requests with searchable metadata and a hidden number", () => {
-    expect(
-      buildPullRequestChoices(
+    const [choice] = buildPullRequestChoices(
         JSON.stringify([
           {
             number: 142,
@@ -32,11 +32,19 @@ describe("wt Herdr plugin", () => {
             headRefName: "feature/login-fix",
             isDraft: true,
           },
-        ])
-      )
-    ).toEqual([
-      "#142\t[Draft]\tFix login failure\t@sangbin\tfeature/login-fix\t142",
-    ]);
+        ]),
+        100
+      );
+    const display = choice!.split("\t")[0]!;
+    const plainDisplay = display.replaceAll(/\x1b\[[0-9;]*m/g, "");
+
+    expect(choice!.endsWith("\t142")).toBeTrue();
+    expect(display).toContain("\x1b[90mDraft");
+    expect(Bun.stringWidth(plainDisplay)).toBe(100);
+    expect(plainDisplay).toContain("Fix login failure");
+    expect(plainDisplay).toContain("@sangbin");
+    expect(plainDisplay).toContain("feature/login-fix");
+    expect(buildPullRequestHeader(100)).toStartWith("PR        Status");
   });
 
   test("keeps the origin workspace and focused pane cwd", () => {
