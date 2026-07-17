@@ -81,8 +81,9 @@ herdr plugin install leesangb/wt
 (`gh`)가 필요합니다.
 
 Herdr pane 안에서 `wt new`, `wt checkout`, `wt pr`을 실행하면 결과 checkout을
-Herdr worktree workspace로 즉시 열고 focus합니다. Herdr 밖에서는 기존 shell
-자동 `cd` 동작이 그대로 유지됩니다.
+Herdr worktree workspace로 즉시 열고 focus합니다. `--no-cd`를 사용하면 workspace를
+열되 focus는 이동하지 않습니다. Herdr 밖에서는 기존 shell 자동 `cd` 동작이 그대로
+유지됩니다.
 
 예를 들어 Herdr의 기본 새 worktree 단축키를 `wt` 흐름으로 교체할 수 있습니다:
 

@@ -82,6 +82,7 @@ an authenticated GitHub CLI (`gh`).
 
 When `wt new`, `wt checkout`, or `wt pr` runs inside a Herdr pane, `wt`
 automatically opens the resulting checkout as a focused Herdr worktree workspace.
+Pass `--no-cd` to open the workspace without moving focus to it.
 Outside Herdr, the existing shell auto-`cd` behavior is unchanged.
 
 For example, replace Herdr's default new-worktree binding with the `wt` flow:

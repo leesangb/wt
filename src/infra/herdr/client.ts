@@ -15,6 +15,10 @@ export interface OpenHerdrWorktreeResult {
   error?: string;
 }
 
+export interface OpenHerdrWorktreeOptions {
+  focus?: boolean;
+}
+
 export interface FindHerdrWorkspaceResult {
   attempted: boolean;
   workspaceId?: string;
@@ -44,6 +48,7 @@ function normalizePath(path: string): string {
 export async function openHerdrWorktree(
   path: string,
   label: string,
+  options: OpenHerdrWorktreeOptions = {},
   env: HerdrEnvironment = process.env
 ): Promise<OpenHerdrWorktreeResult> {
   if (!isHerdrEnvironment(env)) {
@@ -62,7 +67,7 @@ export async function openHerdrWorktree(
       path,
       "--label",
       label,
-      "--focus",
+      options.focus === false ? "--no-focus" : "--focus",
       "--json",
     ],
     { stdout: "pipe", stderr: "pipe" }

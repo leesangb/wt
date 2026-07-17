@@ -1106,6 +1106,41 @@ describe("cli e2e", () => {
     expect(readFileSync(logPath, "utf8")).toContain(
       `worktree open --workspace w1 --path ${getWorktreePath(repo, branchName)}`
     );
+    expect(readFileSync(logPath, "utf8")).toContain("--focus");
+  });
+
+  test("opens a new Herdr workspace without focusing it when --no-cd is set", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/herdr-no-focus";
+    const fakeDir = makeTempDir("wt-herdr-");
+    const fakeHerdr = join(fakeDir, "herdr");
+    const logPath = join(fakeDir, "args.log");
+    writeFileSync(
+      fakeHerdr,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" > "${logPath}"`,
+        "printf '%s\\n' '{\"result\":{}}'",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(
+      ["new", branchName, "--no-push", "--no-cd"],
+      repo.repoRoot,
+      {
+        env: {
+          HERDR_BIN_PATH: fakeHerdr,
+          HERDR_ENV: "1",
+          HERDR_WORKSPACE_ID: "w1",
+        },
+      }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(logPath, "utf8")).toContain("--no-focus");
+    expect(readFileSync(logPath, "utf8")).not.toContain("--focus");
   });
 
   test("prints a stable JSON result when checking out a local branch", async () => {
