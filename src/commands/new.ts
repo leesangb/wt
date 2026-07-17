@@ -22,7 +22,9 @@ export async function newCommand(
       console.log(chalk.blue("Fetching latest changes..."));
     }
     const result = await createWorktree(branchName, options);
-    const herdr = await openCreatedWorktreeInHerdr(result);
+    const herdr = await openCreatedWorktreeInHerdr(result, {
+      focus: options.cd !== false,
+    });
 
     if (herdr.error) {
       console.error(chalk.yellow(`Warning: Could not open in Herdr: ${herdr.error}`));

@@ -21,6 +21,14 @@ export interface PullRequestLink {
   url: string;
 }
 
+export interface OpenPullRequestSummary {
+  author: string;
+  headRefName: string;
+  isDraft: boolean;
+  number: string;
+  title: string;
+}
+
 interface PullRequestListEntry {
   headRefName: string;
   number: number;
@@ -192,6 +200,66 @@ export async function listPullRequestLinks(
       (entry): entry is [string, PullRequestLink] => entry[1] !== null
     )
   );
+}
+
+export async function listOpenPullRequests(
+  repoRoot: string
+): Promise<OpenPullRequestSummary[]> {
+  const result = runGithubCommand(
+    [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      "100",
+      "--json",
+      "number,title,author,headRefName,isDraft",
+    ],
+    repoRoot
+  );
+
+  if (result.status !== 0) {
+    return [];
+  }
+
+  let entries: Array<{
+    author?: { login?: string };
+    headRefName?: string;
+    isDraft?: boolean;
+    number?: number;
+    title?: string;
+  }>;
+
+  try {
+    entries = JSON.parse(result.stdout) as typeof entries;
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries.flatMap((entry) => {
+    if (
+      typeof entry.number !== "number" ||
+      !entry.title ||
+      !entry.headRefName
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        author: entry.author?.login ?? "unknown",
+        headRefName: entry.headRefName,
+        isDraft: entry.isDraft === true,
+        number: String(entry.number),
+        title: entry.title,
+      },
+    ];
+  });
 }
 
 export async function checkoutPullRequest(

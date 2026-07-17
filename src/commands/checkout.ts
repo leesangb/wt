@@ -16,7 +16,9 @@ export async function checkoutCommand(
 ): Promise<void> {
   await runCommand(async () => {
     const result = await createBranchWorktree(branchName);
-    const herdr = await openCreatedWorktreeInHerdr(result);
+    const herdr = await openCreatedWorktreeInHerdr(result, {
+      focus: options.cd !== false,
+    });
 
     if (herdr.error) {
       console.error(chalk.yellow(`Warning: Could not open in Herdr: ${herdr.error}`));

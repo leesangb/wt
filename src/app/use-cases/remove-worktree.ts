@@ -17,8 +17,16 @@ import {
   executeDetachedTask,
   shellEscapeSingle,
 } from "../../infra/scripts/runner.js";
-import { ensureRemoveTaskArtifactsIgnored } from "../../infra/storage/settings-store.js";
+import {
+  ensureRemoveTaskArtifactsIgnored,
+  loadSettings,
+} from "../../infra/storage/settings-store.js";
 import type { WorktreeInfo } from "../../domain/worktree.js";
+import {
+  closeHerdrWorkspace,
+  findHerdrWorkspaceForWorktree,
+  type CloseHerdrWorkspaceResult,
+} from "../../infra/herdr/client.js";
 
 export interface RemoveWorktreeOptions {
   keepBranch?: boolean;
@@ -43,6 +51,8 @@ export interface RemoveWorktreeResult {
   worktree: WorktreeInfo;
   branchDeleted: boolean;
   relocatedToPath?: string;
+  herdrWorkspaceId?: string;
+  herdrError?: string;
 }
 
 export interface BackgroundRemoveWorktreeResult {
@@ -52,6 +62,14 @@ export interface BackgroundRemoveWorktreeResult {
   pid: number;
   statusFilePath: string;
   logFilePath: string;
+  herdrWorkspaceId?: string;
+  herdrError?: string;
+}
+
+export async function closeRemovedWorktreeInHerdr(
+  workspaceId: string | undefined
+): Promise<CloseHerdrWorkspaceResult> {
+  return closeHerdrWorkspace(workspaceId);
 }
 
 export class RemoveWorktreeError extends AppError {
@@ -284,6 +302,10 @@ export async function removeWorktree(
   cwd: string = process.cwd()
 ): Promise<RemoveWorktreeResult> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
+  const settings = await loadSettings(context.repoRoot);
+  const herdr = settings.herdr.closeWorkspaceOnRemove
+    ? await findHerdrWorkspaceForWorktree(worktree.path)
+    : { attempted: false };
   const removalRoot = await resolveSafeRemovalRoot(context, worktree);
 
   await removeGitWorktree(removalRoot.gitRoot, worktree.path);
@@ -293,6 +315,8 @@ export async function removeWorktree(
       worktree,
       branchDeleted: false,
       relocatedToPath: removalRoot.relocatedToPath,
+      herdrWorkspaceId: herdr.workspaceId,
+      herdrError: herdr.error,
     };
   }
 
@@ -301,6 +325,8 @@ export async function removeWorktree(
       worktree,
       branchDeleted: false,
       relocatedToPath: removalRoot.relocatedToPath,
+      herdrWorkspaceId: herdr.workspaceId,
+      herdrError: herdr.error,
     };
   }
 
@@ -317,6 +343,8 @@ export async function removeWorktree(
     worktree,
     branchDeleted: true,
     relocatedToPath: removalRoot.relocatedToPath,
+    herdrWorkspaceId: herdr.workspaceId,
+    herdrError: herdr.error,
   };
 }
 
@@ -326,6 +354,10 @@ export async function removeCurrentWorktreeInBackground(
   cwd: string = process.cwd()
 ): Promise<BackgroundRemoveWorktreeResult> {
   const { context, worktree } = await resolveRemovalTarget(target, cwd);
+  const settings = await loadSettings(context.repoRoot);
+  const herdr = settings.herdr.closeWorkspaceOnRemove
+    ? await findHerdrWorkspaceForWorktree(worktree.path)
+    : { attempted: false };
 
   if (!isPathInside(worktree.path, context.cwd)) {
     throw new AppError(
@@ -385,5 +417,7 @@ export async function removeCurrentWorktreeInBackground(
     pid,
     statusFilePath,
     logFilePath,
+    herdrWorkspaceId: herdr.workspaceId,
+    herdrError: herdr.error,
   };
 }

@@ -174,6 +174,13 @@ _wt_completion() {
         COMPREPLY=($(compgen -W "$ids" -- "\${COMP_WORDS[$COMP_CWORD]}"))
       fi
       ;;
+    pr)
+      if [ $COMP_CWORD -eq 2 ]; then
+        local items=$(${renderedCommand} _complete-pr bash 2>/dev/null)
+        local numbers=$(echo "$items" | cut -d: -f1)
+        COMPREPLY=($(compgen -W "$numbers" -- "\${COMP_WORDS[2]}"))
+      fi
+      ;;
   esac
 }
 
@@ -247,6 +254,10 @@ _wt_completion() {
           suggestions=("\${(@f)$(${renderedCommand} list --completion zsh --exclude-main-worktree 2>/dev/null)}")
           _describe 'worktree' suggestions
           ;;
+        pr)
+          suggestions=("\${(@f)$(${renderedCommand} _complete-pr zsh 2>/dev/null)}")
+          _describe 'pull request' suggestions
+          ;;
       esac
       ;;
   esac
@@ -293,8 +304,13 @@ function __wt_complete_remove
     ${renderedCommand} list --completion fish --exclude-main-worktree 2>/dev/null
 end
 
+function __wt_complete_pr
+    ${renderedCommand} _complete-pr fish 2>/dev/null
+end
+
 complete -c wt -n "__fish_seen_subcommand_from cd" -a "(__wt_complete_cd)" -f
 complete -c wt -n "__fish_seen_subcommand_from rm remove" -a "(__wt_complete_remove)" -f
+complete -c wt -n "__fish_seen_subcommand_from pr" -a "(__wt_complete_pr)" -f
 `;
 }
 

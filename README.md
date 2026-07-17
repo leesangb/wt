@@ -82,6 +82,7 @@ an authenticated GitHub CLI (`gh`).
 
 When `wt new`, `wt checkout`, or `wt pr` runs inside a Herdr pane, `wt`
 automatically opens the resulting checkout as a focused Herdr worktree workspace.
+Pass `--no-cd` to open the workspace without moving focus to it.
 Outside Herdr, the existing shell auto-`cd` behavior is unchanged.
 
 For example, replace Herdr's default new-worktree binding with the `wt` flow:
@@ -260,6 +261,10 @@ wt pr 123
 wt pr 123 --no-cd
 ```
 
+With shell integration installed, press `Tab` after `wt pr ` to complete from
+open GitHub pull requests. Zsh and Fish also show the PR title, author, branch,
+and draft status in the completion menu.
+
 This command:
 1. Loads the PR's base branch and head branch from GitHub CLI
 2. Checks whether any existing worktree is already on that PR head branch
@@ -333,6 +338,8 @@ If the worktree has modified files or unpushed commits, `wt rm` asks for confirm
 
 When removing the worktree that contains your current directory, `wt rm` starts the removal in the background and immediately returns your shell to the main worktree. It prints the background task PID plus status and log file paths under the main worktree's `.wt/` directory. On macOS, Notification Center reports whether the background removal finished or failed. Use `wt rm . --foreground` if you want to wait for removal before returning.
 
+When run inside Herdr, `wt rm` also closes the Herdr workspace associated with the removed worktree. For background removal, the workspace closes as soon as the removal task starts; it does not wait for that task to finish. Set `herdr.closeWorkspaceOnRemove` to `false` to keep it open.
+
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
 - Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)
@@ -367,10 +374,11 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
+- **herdr.closeWorkspaceOnRemove**: Close the associated Herdr workspace after `wt rm` (default: `true`)
 - **issue.pattern**: Optional JavaScript regular expression for extracting issue keys from branch names
 - **issue.url**: Optional issue tracker URL template. Use `$issue` where the extracted key should appear
 
-You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*`, `scripts.*`, and `issue.*` fields are merged, so you can override only `copy.exclude`, `scripts.postMode`, or `issue.url` without copying the rest of each object.
+You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*`, `scripts.*`, `herdr.*`, and `issue.*` fields are merged, so you can override only `copy.exclude`, `scripts.postMode`, `herdr.closeWorkspaceOnRemove`, or `issue.url` without copying the rest of each object.
 
 `copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
@@ -395,6 +403,9 @@ Example `.wt/settings.local.json`:
   "baseBranch": "develop",
   "scripts": {
     "postMode": "sync"
+  },
+  "herdr": {
+    "closeWorkspaceOnRemove": false
   }
 }
 ```
