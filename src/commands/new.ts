@@ -2,12 +2,14 @@ import chalk from "chalk";
 import { createWorktree } from "../app/use-cases/create-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
+import { printWorktreeCommandResult } from "../cli/worktree-result.js";
 
 interface NewCommandOptions {
   base?: string;
   push?: boolean;
   cd?: boolean;
   id?: string;
+  json?: boolean;
 }
 
 export async function newCommand(
@@ -15,8 +17,15 @@ export async function newCommand(
   options: NewCommandOptions
 ): Promise<void> {
   await runCommand(async () => {
-    console.log(chalk.blue("Fetching latest changes..."));
+    if (!options.json) {
+      console.log(chalk.blue("Fetching latest changes..."));
+    }
     const result = await createWorktree(branchName, options);
+
+    if (options.json) {
+      printWorktreeCommandResult(result);
+      return;
+    }
 
     console.log(chalk.green(`✓ Created worktree: ${branchName}`));
 

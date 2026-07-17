@@ -1,0 +1,33 @@
+id = "wt.herdr"
+name = "wt for Herdr"
+version = "0.6.0"
+min_herdr_version = "0.7.0"
+description = "Create and open wt-managed Git worktrees as grouped Herdr workspaces."
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["bun", "run", "build:herdr-plugin"]
+
+[[actions]]
+id = "new"
+title = "wt: New worktree"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "launch", "new"]
+
+[[actions]]
+id = "checkout"
+title = "wt: Checkout local branch"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "launch", "checkout"]
+
+[[actions]]
+id = "pr"
+title = "wt: Open pull request worktree"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "launch", "pr"]
+
+[[panes]]
+id = "create"
+title = "wt"
+placement = "overlay"
+command = ["./.herdr-plugin/bin/wt-herdr", "ui"]

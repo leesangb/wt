@@ -44,7 +44,16 @@ export async function createGitWorktree(
   pushRemote: boolean = true
 ): Promise<void> {
   const addProc = spawn(
-    ["git", "worktree", "add", "-b", branch, worktreePath, baseBranch],
+    [
+      "git",
+      "worktree",
+      "add",
+      "--quiet",
+      "-b",
+      branch,
+      worktreePath,
+      baseBranch,
+    ],
     {
       cwd: repoRoot,
       stdout: "inherit",
@@ -119,7 +128,7 @@ export async function createDetachedGitWorktree(
   ref: string
 ): Promise<void> {
   const addProc = spawn(
-    ["git", "worktree", "add", "--detach", worktreePath, ref],
+    ["git", "worktree", "add", "--quiet", "--detach", worktreePath, ref],
     {
       cwd: repoRoot,
       stdout: "inherit",
@@ -138,11 +147,14 @@ export async function attachGitWorktree(
   worktreePath: string,
   branch: string
 ): Promise<void> {
-  const addProc = spawn(["git", "worktree", "add", worktreePath, branch], {
-    cwd: repoRoot,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  const addProc = spawn(
+    ["git", "worktree", "add", "--quiet", worktreePath, branch],
+    {
+      cwd: repoRoot,
+      stdout: "inherit",
+      stderr: "inherit",
+    }
+  );
   const addResult = await addProc.exited;
 
   if (addResult !== 0) {
@@ -157,8 +169,17 @@ export async function createOrAttachGitWorktree(
   baseBranch: string
 ): Promise<void> {
   const addArgs = (await localBranchExists(repoRoot, branch))
-    ? ["git", "worktree", "add", worktreePath, branch]
-    : ["git", "worktree", "add", "-b", branch, worktreePath, baseBranch];
+    ? ["git", "worktree", "add", "--quiet", worktreePath, branch]
+    : [
+        "git",
+        "worktree",
+        "add",
+        "--quiet",
+        "-b",
+        branch,
+        worktreePath,
+        baseBranch,
+      ];
   const addProc = spawn(addArgs, {
     cwd: repoRoot,
     stdout: "inherit",

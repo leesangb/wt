@@ -2,9 +2,11 @@ import chalk from "chalk";
 import { createPrWorktree } from "../app/use-cases/create-pr-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
+import { printWorktreeCommandResult } from "../cli/worktree-result.js";
 
 interface PrCommandOptions {
   cd?: boolean;
+  json?: boolean;
 }
 
 export async function prCommand(
@@ -13,6 +15,11 @@ export async function prCommand(
 ): Promise<void> {
   await runCommand(async () => {
     const result = await createPrWorktree(pullRequestNumber);
+
+    if (options.json) {
+      printWorktreeCommandResult(result);
+      return;
+    }
 
     if (result.reusedExisting) {
       console.log(chalk.green(`✓ Using existing PR worktree: ${result.branchName}`));

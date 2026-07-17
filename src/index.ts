@@ -34,6 +34,7 @@ program
   .option("--id <id>", "Custom ID for the worktree (default: branch name)")
   .option("--no-push", "Skip pushing the new branch to remote")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .option("--json", "Output the worktree result as JSON")
   .action(newCommand);
 
 program
@@ -85,6 +86,7 @@ program
   .command("pr <number>")
   .description("Create or navigate to a pull request worktree")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .option("--json", "Output the worktree result as JSON")
   .action(prCommand);
 
 program
@@ -92,6 +94,7 @@ program
   .alias("switch")
   .description("Create or navigate to a local branch worktree")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
+  .option("--json", "Output the worktree result as JSON")
   .action(checkoutCommand);
 
 program

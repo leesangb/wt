@@ -1,0 +1,47 @@
+import { describe, expect, test } from "bun:test";
+import {
+  decodeLaunchContext,
+  encodeLaunchContext,
+  parsePluginContext,
+  parseWtJsonOutput,
+} from "./index.js";
+
+describe("wt Herdr plugin", () => {
+  test("keeps the origin workspace and focused pane cwd", () => {
+    const context = parsePluginContext(
+      JSON.stringify({
+        workspace_id: "w3",
+        workspace_cwd: "/repo",
+        focused_pane_cwd: "/repo/packages/app",
+      }),
+      "new"
+    );
+
+    expect(decodeLaunchContext(encodeLaunchContext(context))).toEqual({
+      mode: "new",
+      workspaceId: "w3",
+      cwd: "/repo/packages/app",
+    });
+  });
+
+  test("falls back to the workspace cwd", () => {
+    expect(
+      parsePluginContext(
+        JSON.stringify({ workspace_id: "w1", workspace_cwd: "/repo" }),
+        "checkout"
+      )
+    ).toEqual({ mode: "checkout", workspaceId: "w1", cwd: "/repo" });
+  });
+
+  test("reads the final structured wt result after git progress output", () => {
+    expect(
+      parseWtJsonOutput(
+        'HEAD is now at abc base\n{"id":"feature-a","path":"/tmp/repo-feature-a","branch":"feature/a"}\n'
+      )
+    ).toEqual({
+      id: "feature-a",
+      path: "/tmp/repo-feature-a",
+      branch: "feature/a",
+    });
+  });
+});

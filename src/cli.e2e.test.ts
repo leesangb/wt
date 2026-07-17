@@ -91,6 +91,15 @@ function readCliValue(stdout: string, key: string): string {
   return line.slice(key.length + 4);
 }
 
+function readJsonResult(stdout: string): Record<string, unknown> {
+  const lines = stdout.trim().split(/\r?\n/);
+
+  if (lines.length !== 1) {
+    throw new Error(`Expected one JSON line, received:\n${stdout}`);
+  }
+  return JSON.parse(lines[0]!);
+}
+
 function assertProcessSuccess(status: number | null, stderr: string, stdout?: string): void {
   if (status !== 0) {
     throw new Error(
@@ -1005,6 +1014,65 @@ describe("cli e2e", () => {
     );
 
     expect(branchResult.status).toBe(1);
+  });
+
+  test("prints a stable JSON result when creating a worktree", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/json-new";
+    const result = runCliCapture(
+      ["new", branchName, "--no-push", "--json"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const output = readJsonResult(result.stdout);
+
+    expect(output).toMatchObject({
+      id: branchName,
+      fullId: `${repo.repoName}-${branchName}`,
+      branch: branchName,
+      baseBranch: "main",
+      reusedExisting: false,
+    });
+    expect(output.path).toBe(getWorktreePath(repo, branchName));
+    expect(typeof output.baseCommit).toBe("string");
+  });
+
+  test("prints a stable JSON result when checking out a local branch", async () => {
+    const repo = await createTestRepo();
+    const branchName = "feature/json-checkout";
+    await $`git -C ${repo.repoRoot} branch ${branchName}`.quiet();
+
+    const result = runCliCapture(
+      ["checkout", branchName, "--json"],
+      repo.repoRoot
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readJsonResult(result.stdout)).toMatchObject({
+      id: branchName,
+      fullId: `${repo.repoName}-${branchName}`,
+      path: getWorktreePath(repo, branchName),
+      branch: branchName,
+      reusedExisting: false,
+    });
+  });
+
+  test("prints a stable JSON result for a pull request worktree", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/json-pr";
+    const result = runCliCapture(["pr", "123", "--json"], repo.repoRoot, {
+      env: createFakeGithubEnv({ headBranch }),
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readJsonResult(result.stdout)).toMatchObject({
+      id: "pr-123",
+      fullId: `${repo.repoName}-pr-123`,
+      path: getWorktreePath(repo, "pr-123"),
+      branch: headBranch,
+      reusedExisting: false,
+    });
   });
 
   test("navigates to a worktree by branch name via the bash wrapper", async () => {

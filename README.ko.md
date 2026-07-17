@@ -57,6 +57,42 @@ cd wt
 source ~/.zshrc  # 또는 ~/.bashrc 또는 ~/.config/fish/config.fish
 ```
 
+### Herdr 플러그인
+
+이 저장소는 [Herdr](https://herdr.dev) 플러그인도 제공합니다. 플러그인은
+worktree를 `wt`로 생성한 다음 Herdr worktree API로 열기 때문에, 원본 저장소
+아래에 그룹화된 worktree workspace로 표시됩니다.
+
+```bash
+herdr plugin install leesangb/wt
+```
+
+다음 액션을 사용할 수 있습니다:
+
+- `wt.herdr.new` — 새 브랜치 worktree 생성
+- `wt.herdr.checkout` — 기존 로컬 브랜치를 worktree로 열기
+- `wt.herdr.pr` — Pull Request worktree 생성 또는 재사용
+
+예를 들어 Herdr의 기본 새 worktree 단축키를 `wt` 흐름으로 교체할 수 있습니다:
+
+```toml
+[[keys.command]]
+key = "prefix+shift+g"
+type = "plugin_action"
+command = "wt.herdr.new"
+description = "Create worktree with wt"
+```
+
+설정을 수정한 다음 다시 불러옵니다:
+
+```bash
+herdr server reload-config
+```
+
+설치된 플러그인은 같은 revision의 `wt` 소스를 직접 빌드해서 사용하므로 별도로
+설치된 `wt` 바이너리에 의존하지 않습니다. 플러그인 설치 시 Herdr `>= 0.7.0`과
+Bun이 필요합니다.
+
 ### 수동 Shell 통합 (선택사항)
 
 수동 설정을 선호하거나 특정 바이너리 경로 기준으로 shell 통합을 다시 만들고 싶다면, `wt shell install <shell>`을 실행한 뒤 `~/.wt/shell/`에 생성된 wrapper를 source하면 됩니다:

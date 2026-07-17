@@ -2,9 +2,11 @@ import chalk from "chalk";
 import { createBranchWorktree } from "../app/use-cases/create-branch-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
+import { printWorktreeCommandResult } from "../cli/worktree-result.js";
 
 interface CheckoutCommandOptions {
   cd?: boolean;
+  json?: boolean;
 }
 
 export async function checkoutCommand(
@@ -13,6 +15,11 @@ export async function checkoutCommand(
 ): Promise<void> {
   await runCommand(async () => {
     const result = await createBranchWorktree(branchName);
+
+    if (options.json) {
+      printWorktreeCommandResult(result);
+      return;
+    }
 
     if (result.reusedExisting) {
       console.log(chalk.green(`✓ Using existing worktree: ${result.branchName}`));

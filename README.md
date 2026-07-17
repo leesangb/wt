@@ -57,6 +57,42 @@ After installation, restart your shell or run:
 source ~/.zshrc  # or ~/.bashrc or ~/.config/fish/config.fish
 ```
 
+### Herdr plugin
+
+The repository also ships a first-class [Herdr](https://herdr.dev) plugin. It
+creates worktrees with `wt`, then opens them with Herdr's worktree API so they
+appear as grouped worktree workspaces under the source repository.
+
+```bash
+herdr plugin install leesangb/wt
+```
+
+The plugin provides these actions:
+
+- `wt.herdr.new` — create a new branch worktree
+- `wt.herdr.checkout` — open an existing local branch as a worktree
+- `wt.herdr.pr` — create or reuse a pull request worktree
+
+For example, replace Herdr's default new-worktree binding with the `wt` flow:
+
+```toml
+[[keys.command]]
+key = "prefix+shift+g"
+type = "plugin_action"
+command = "wt.herdr.new"
+description = "Create worktree with wt"
+```
+
+Reload the configuration after editing it:
+
+```bash
+herdr server reload-config
+```
+
+The installed plugin builds and uses the `wt` source from the same revision, so
+it does not depend on a separately installed `wt` binary. It requires Herdr
+`>= 0.7.0` and Bun during plugin installation.
+
 ### Manual Shell Integration (Optional)
 
 If you prefer manual setup or want to regenerate shell integration for a specific binary path, run `wt shell install <shell>` and source the generated wrapper from `~/.wt/shell/`:

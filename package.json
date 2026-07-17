@@ -8,6 +8,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "build": "bun build src/index.ts --compile --outfile wt && if [ \"$(uname -s)\" = \"Darwin\" ]; then codesign -s - --force wt; fi",
+    "build:herdr-plugin": "bun build src/index.ts --compile --outfile .herdr-plugin/bin/wt && bun build src/herdr-plugin/index.ts --compile --outfile .herdr-plugin/bin/wt-herdr",
     "version": "changeset version",
     "changeset": "changeset"
   },
