@@ -1,5 +1,16 @@
 # @leesangb/wt
 
+## 0.8.0
+
+### Minor Changes
+
+- 7da27f8: Automatically open worktrees in Herdr when wt runs inside a managed pane, and add an action that opens all existing linked worktrees for the current repository.
+
+### Patch Changes
+
+- 8d9eec8: Align the Herdr pull request picker into terminal-width-aware columns and render draft status in gray.
+- edbb354: add herdr integration
+
 ## 0.7.0
 
 ### Minor Changes
