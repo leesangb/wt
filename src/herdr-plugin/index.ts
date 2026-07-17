@@ -26,6 +26,14 @@ interface BranchRef {
   local: boolean;
 }
 
+interface PullRequest {
+  number: number;
+  title: string;
+  author: { login: string } | null;
+  headRefName: string;
+  isDraft: boolean;
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
@@ -121,6 +129,25 @@ export function buildBaseBranchChoices(refs: string): BranchRef[] {
   return [...choices.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function buildPullRequestChoices(json: string): string[] {
+  const pullRequests = JSON.parse(json) as PullRequest[];
+
+  return pullRequests.map((pullRequest) => {
+    const title = pullRequest.title.replaceAll("\t", " ");
+    const author = pullRequest.author?.login ?? "unknown";
+    const draft = pullRequest.isDraft ? "[Draft]" : "";
+
+    return [
+      `#${pullRequest.number}`,
+      draft,
+      title,
+      `@${author}`,
+      pullRequest.headRefName,
+      String(pullRequest.number),
+    ].join("\t");
+  });
+}
+
 async function fzf(
   args: string[],
   input: string,
@@ -143,12 +170,50 @@ async function fzf(
   return output.trim();
 }
 
-async function promptNewBranch(cwd: string): Promise<string | undefined> {
-  return fzf(
-    ["--phony", "--bind=enter:print-query+accept", "--prompt=New branch> "],
-    "",
-    cwd
-  );
+async function promptNewBranch(): Promise<string | undefined> {
+  if (!process.stdin.isTTY || !process.stdin.setRawMode) {
+    throw new Error("New branch input requires an interactive terminal");
+  }
+
+  return new Promise((resolve) => {
+    let value = "";
+    const render = () => {
+      process.stdout.write(`\r\x1b[2KNew branch> ${value}`);
+    };
+    const finish = (result: string | undefined) => {
+      process.stdin.off("data", onData);
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdout.write("\n");
+      resolve(result);
+    };
+    const onData = (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+
+      if (text === "\x1b" || text === "\x03") {
+        finish(undefined);
+        return;
+      }
+      if (text === "\r" || text === "\n") {
+        finish(value.trim() || undefined);
+        return;
+      }
+      if (text === "\x7f" || text === "\b") {
+        value = [...value].slice(0, -1).join("");
+        render();
+        return;
+      }
+      if (!text.startsWith("\x1b") && !/[\u0000-\u001f]/.test(text)) {
+        value += text;
+        render();
+      }
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+    render();
+  });
 }
 
 async function pickBaseBranch(cwd: string): Promise<string | undefined> {
@@ -177,6 +242,57 @@ async function pickBaseBranch(cwd: string): Promise<string | undefined> {
   return selected?.split("\t")[1];
 }
 
+async function pickLocalBranch(cwd: string): Promise<string | undefined> {
+  const refs = await capture(
+    ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    cwd
+  );
+
+  return fzf(
+    [
+      "--prompt=Local branch> ",
+      "--header=Enter: select · Esc: cancel",
+    ],
+    refs.trim(),
+    cwd
+  );
+}
+
+async function pickPullRequest(cwd: string): Promise<string | undefined> {
+  const json = await capture(
+    [
+      "gh",
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      "100",
+      "--json",
+      "number,title,author,headRefName,isDraft",
+    ],
+    cwd
+  );
+  const choices = buildPullRequestChoices(json);
+
+  if (choices.length === 0) {
+    throw new Error("No open pull requests found");
+  }
+
+  const selected = await fzf(
+    [
+      "--delimiter=\t",
+      "--with-nth=1..5",
+      "--prompt=Pull request> ",
+      "--header=PR · Draft · Title · Author · Branch    Esc: cancel",
+    ],
+    choices.join("\n"),
+    cwd
+  );
+
+  return selected?.split("\t").at(-1);
+}
+
 async function launch(mode: WtMode): Promise<void> {
   const context = parsePluginContext(
     requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
@@ -202,24 +318,16 @@ async function launch(mode: WtMode): Promise<void> {
   ]);
 }
 
-function promptLabel(mode: WtMode): string {
-  if (mode === "pr") return "Pull request number";
-  if (mode === "checkout") return "Local branch";
-  return "New branch";
-}
-
 async function runUi(): Promise<void> {
   const context = decodeLaunchContext(requiredEnv("WT_HERDR_CONTEXT"));
 
   try {
     const target =
       context.mode === "new"
-        ? await promptNewBranch(context.cwd)
-        : await fzf(
-            ["--phony", "--bind=enter:print-query+accept", `--prompt=${promptLabel(context.mode)}> `],
-            "",
-            context.cwd
-          );
+        ? await promptNewBranch()
+        : context.mode === "checkout"
+          ? await pickLocalBranch(context.cwd)
+          : await pickPullRequest(context.cwd);
     if (!target) return;
 
     const pluginWt = `${requiredEnv("HERDR_PLUGIN_ROOT")}/.herdr-plugin/bin/wt`;

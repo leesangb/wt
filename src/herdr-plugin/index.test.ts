@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   decodeLaunchContext,
   buildBaseBranchChoices,
+  buildPullRequestChoices,
   encodeLaunchContext,
   parsePluginContext,
   parseWtJsonOutput,
@@ -17,6 +18,24 @@ describe("wt Herdr plugin", () => {
       { name: "feature/local", ref: "feature/local", local: true },
       { name: "main", ref: "main", local: true },
       { name: "release/1.0", ref: "origin/release/1.0", local: false },
+    ]);
+  });
+
+  test("formats pull requests with searchable metadata and a hidden number", () => {
+    expect(
+      buildPullRequestChoices(
+        JSON.stringify([
+          {
+            number: 142,
+            title: "Fix\tlogin failure",
+            author: { login: "sangbin" },
+            headRefName: "feature/login-fix",
+            isDraft: true,
+          },
+        ])
+      )
+    ).toEqual([
+      "#142\t[Draft]\tFix login failure\t@sangbin\tfeature/login-fix\t142",
     ]);
   });
 

@@ -73,8 +73,11 @@ The plugin provides these actions:
 - `wt.herdr.checkout` — open an existing local branch as a worktree
 - `wt.herdr.pr` — create or reuse a pull request worktree
 
-The new-worktree action uses `fzf` for the branch input and base-branch picker.
-Press `Esc` at either step to cancel. The plugin requires `fzf` on `PATH`.
+The new-worktree action uses a text prompt for the new branch and `fzf` for the
+base branch. Checkout lists local branches, while PR lists open GitHub pull
+requests with title, author, head branch, and draft status. Press `Esc` at any
+step to cancel. The plugin requires `fzf` on `PATH`, and the PR picker requires
+an authenticated GitHub CLI (`gh`).
 
 For example, replace Herdr's default new-worktree binding with the `wt` flow:
 

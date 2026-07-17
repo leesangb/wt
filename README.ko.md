@@ -73,8 +73,11 @@ herdr plugin install leesangb/wt
 - `wt.herdr.checkout` — 기존 로컬 브랜치를 worktree로 열기
 - `wt.herdr.pr` — Pull Request worktree 생성 또는 재사용
 
-새 worktree 액션은 브랜치 입력과 base branch 선택에 `fzf`를 사용합니다. 어느
-단계에서든 `Esc`를 누르면 취소됩니다. `fzf`가 `PATH`에 설치되어 있어야 합니다.
+새 worktree 액션은 새 브랜치에 일반 텍스트 입력을, base branch에 `fzf`를
+사용합니다. Checkout은 로컬 브랜치를 보여주고, PR은 열린 GitHub PR의 제목,
+작성자, head branch, Draft 상태를 보여줍니다. 어느 단계에서든 `Esc`를 누르면
+취소됩니다. `fzf`가 `PATH`에 있어야 하며 PR picker에는 인증된 GitHub CLI
+(`gh`)가 필요합니다.
 
 예를 들어 Herdr의 기본 새 worktree 단축키를 `wt` 흐름으로 교체할 수 있습니다:
 
