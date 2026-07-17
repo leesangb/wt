@@ -13,6 +13,7 @@ import { prCommand } from "./commands/pr.js";
 import { checkoutCommand } from "./commands/checkout.js";
 import { shellInstallCommand } from "./commands/shell.js";
 import { uninstallCommand } from "./commands/uninstall.js";
+import { completePrCommand } from "./commands/complete-pr.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -88,6 +89,10 @@ program
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .option("--json", "Output the worktree result as JSON")
   .action(prCommand);
+
+program
+  .command("_complete-pr <format>", { hidden: true })
+  .action(completePrCommand);
 
 program
   .command("checkout <branch-name>")

@@ -337,7 +337,7 @@ function createFakeGithubEnv(
         "  exit 1",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "list" ]; then',
-        `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","headRefName":"${headBranch}"}]'`,
+        `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","title":"Fix login: failure","author":{"login":"sangbin"},"headRefName":"${headBranch}","isDraft":true}]'`,
         "  exit 0",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
@@ -1178,6 +1178,25 @@ describe("cli e2e", () => {
       branch: headBranch,
       reusedExisting: false,
     });
+  });
+
+  test("lists open pull requests for shell completion", async () => {
+    const repo = await createTestRepo();
+    const ghLogPath = join(repo.repoRoot, "gh-completion.log");
+    const result = runCliCapture(["_complete-pr", "zsh"], repo.repoRoot, {
+      env: createFakeGithubEnv({
+        headBranch: "feature/login-fix",
+        logPath: ghLogPath,
+      }),
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stdout.trim()).toBe(
+      "123:Draft | Fix login failure | @sangbin | feature/login-fix"
+    );
+    expect(readFileSync(ghLogPath, "utf-8")).toContain(
+      "pr list --state open --limit 100 --json number,title,author,headRefName,isDraft"
+    );
   });
 
   test("navigates to a worktree by branch name via the bash wrapper", async () => {

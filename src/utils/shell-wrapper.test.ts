@@ -132,7 +132,7 @@ function runWrapper(
 
 function runCompletion(
   shellCase: ShellCase,
-  subcommand: "cd" | "rm" | "remove",
+  subcommand: "cd" | "pr" | "rm" | "remove",
   precedingArgs: string[] = []
 ): CompletionRunResult {
   const tempDir = mkdtempSync(join(tmpdir(), "wt-shell-completion-"));
@@ -163,6 +163,13 @@ function runCompletion(
         "      fi",
         "      ;;",
         "  esac",
+        "fi",
+        'if [ "$1" = "_complete-pr" ]; then',
+        '  if [ "$2" = "fish" ]; then',
+        '    printf \'%s\\n\' "142\tFix login | @sangbin | feature/login" "77\tDraft | Update docs | @lee | docs/update"',
+        "  else",
+        '    printf \'%s\\n\' "142:Fix login | @sangbin | feature/login" "77:Draft | Update docs | @lee | docs/update"',
+        "  fi",
         "fi",
         "",
       ].join("\n"),
@@ -442,6 +449,14 @@ describe("shell wrappers", () => {
       expect(result.suggestions).not.toContain("main");
       expect(result.suggestions).toContain("demo");
       expect(result.suggestions).toContain("sample");
+    });
+
+    test(`${shellCase.scriptName} completes open pull request numbers for pr`, () => {
+      const result = runCompletion(shellCase, "pr");
+
+      assertCompletionProcess(result);
+      expect(result.suggestions).toContain("142");
+      expect(result.suggestions).toContain("77");
     });
   }
 });

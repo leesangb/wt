@@ -261,6 +261,10 @@ wt pr 123
 wt pr 123 --no-cd
 ```
 
+shell integration이 설치되어 있으면 `wt pr ` 뒤에서 `Tab`을 눌러 열린 GitHub PR
+목록을 completion할 수 있습니다. Zsh와 Fish는 completion 메뉴에 PR 제목, 작성자,
+브랜치, Draft 상태도 함께 표시합니다.
+
 이 명령은 다음을 수행합니다:
 1. GitHub CLI에서 PR의 base branch와 head branch를 조회
 2. 기존 worktree 중 그 PR head branch를 이미 체크아웃한 곳이 있는지 확인

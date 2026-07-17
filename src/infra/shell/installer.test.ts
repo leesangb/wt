@@ -90,7 +90,9 @@ describe("shell installer", () => {
     const wrapper = renderShellWrapper("fish", "/tmp/wt bin");
 
     expect(wrapper).toContain('function __wt_complete_cd');
+    expect(wrapper).toContain('function __wt_complete_pr');
     expect(wrapper).toContain('"/tmp/wt bin" list --completion fish 2>/dev/null');
+    expect(wrapper).toContain('"/tmp/wt bin" _complete-pr fish 2>/dev/null');
     expect(wrapper).toContain('complete -c wt -n "__fish_seen_subcommand_from cd" -a "(__wt_complete_cd)" -f');
   });
 

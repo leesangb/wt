@@ -261,6 +261,10 @@ wt pr 123
 wt pr 123 --no-cd
 ```
 
+With shell integration installed, press `Tab` after `wt pr ` to complete from
+open GitHub pull requests. Zsh and Fish also show the PR title, author, branch,
+and draft status in the completion menu.
+
 This command:
 1. Loads the PR's base branch and head branch from GitHub CLI
 2. Checks whether any existing worktree is already on that PR head branch
