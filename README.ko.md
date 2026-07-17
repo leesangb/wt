@@ -333,6 +333,8 @@ worktree에 수정된 파일이나 push되지 않은 커밋이 남아 있으면,
 
 현재 디렉터리가 속한 worktree를 제거할 때는 `wt rm`이 삭제 작업을 백그라운드로 시작하고, shell은 즉시 main worktree로 돌아갑니다. 출력에는 백그라운드 작업 PID와 main worktree의 `.wt/` 아래에 생성된 status/log 파일 경로가 표시됩니다. macOS에서는 백그라운드 삭제 성공 또는 실패를 알림으로 알려줍니다. 삭제가 끝날 때까지 기다리고 싶으면 `wt rm . --foreground`를 사용하세요.
 
+Herdr 안에서 실행하면 `wt rm`은 제거한 worktree에 연결된 Herdr workspace도 닫습니다. 백그라운드 제거에서는 작업 완료를 기다리지 않고 제거 작업이 시작되는 즉시 workspace를 닫습니다.
+
 다음 방법으로 worktree를 제거할 수 있습니다:
 - ID (기본값: 브랜치 이름, 예: `feature/issue-12`)
 - 레포 prefix가 포함된 전체 ID (예: `myrepo-feature/issue-12`)

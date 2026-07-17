@@ -71,6 +71,36 @@ function isShellAvailable(shell: string): boolean {
   }).status === 0;
 }
 
+function createFakeHerdr(worktreePath: string): {
+  env: Record<string, string>;
+  logPath: string;
+} {
+  const fakeDir = makeTempDir("wt-fake-herdr-");
+  const fakeHerdr = join(fakeDir, "herdr");
+  const logPath = join(fakeDir, "args.log");
+  writeFileSync(
+    fakeHerdr,
+    [
+      "#!/bin/sh",
+      `printf '%s\\n' "$*" >> "${logPath}"`,
+      'if [ "$1 $2" = "worktree list" ]; then',
+      `  printf '%s\\n' '{"result":{"worktrees":[{"path":"${worktreePath}","open_workspace_id":"w9"}]}}'`,
+      "fi",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+
+  return {
+    env: {
+      HERDR_BIN_PATH: fakeHerdr,
+      HERDR_ENV: "1",
+      HERDR_WORKSPACE_ID: "w1",
+    },
+    logPath,
+  };
+}
+
 function readOutputValue(stdout: string, key: string): string {
   const line = stdout.split(/\r?\n/).find(entry => entry.startsWith(`${key}=`));
 
@@ -2178,6 +2208,52 @@ describe("cli e2e", () => {
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     expect(result.stdout).not.toContain("Remove this worktree anyway? [y/N]");
     expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("closes the Herdr workspace after removing its worktree", async () => {
+    const repo = await createTestRepo();
+    const worktreeId = "rmherdr123";
+    const branchName = "feature-rm-herdr";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    const herdr = createFakeHerdr(worktreePath);
+    const result = runCliCapture(
+      ["remove", worktreeId, "--keep-branch"],
+      repo.repoRoot,
+      { env: herdr.env }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(herdr.logPath, "utf-8")).toContain(
+      "workspace close w9"
+    );
+  });
+
+  test("closes the Herdr workspace as soon as background removal starts", async () => {
+    if (!isShellAvailable("bash")) {
+      return;
+    }
+
+    const repo = await createTestRepo();
+    const worktreeId = "rmherdrbg123";
+    const branchName = "feature-rm-herdr-bg";
+    const worktreePath = getWorktreePath(repo, worktreeId);
+
+    runCli(["new", branchName, "--id", worktreeId, "--no-cd"], repo.repoRoot);
+    const herdr = createFakeHerdr(worktreePath);
+    const result = runWrappedBashSession(
+      repo.repoRoot,
+      [`builtin cd "${worktreePath}"`, `wt rm ${worktreeId} --keep-branch`],
+      herdr.env
+    );
+
+    assertProcessSuccess(result.processStatus, result.stderr, result.stdout);
+    expect(result.stdout).toContain("Started background removal");
+    expect(readFileSync(herdr.logPath, "utf-8")).toContain(
+      "workspace close w9"
+    );
+    await waitForRemoveTaskStatus(repo.repoRoot, worktreeId, "done");
   });
 
   test(

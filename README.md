@@ -333,6 +333,8 @@ If the worktree has modified files or unpushed commits, `wt rm` asks for confirm
 
 When removing the worktree that contains your current directory, `wt rm` starts the removal in the background and immediately returns your shell to the main worktree. It prints the background task PID plus status and log file paths under the main worktree's `.wt/` directory. On macOS, Notification Center reports whether the background removal finished or failed. Use `wt rm . --foreground` if you want to wait for removal before returning.
 
+When run inside Herdr, `wt rm` also closes the Herdr workspace associated with the removed worktree. For background removal, the workspace closes as soon as the removal task starts; it does not wait for that task to finish.
+
 You can remove a worktree using:
 - ID (defaults to the branch name, e.g., `feature/issue-12`)
 - Full ID with repo prefix (e.g., `myrepo-feature/issue-12`)

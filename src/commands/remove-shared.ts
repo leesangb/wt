@@ -4,6 +4,7 @@ import { AppError } from "../app/errors.js";
 import { getWorktreeBranchLabel } from "../domain/worktree.js";
 import {
   type BackgroundRemoveWorktreeResult,
+  closeRemovedWorktreeInHerdr,
   inspectRemoveWorktree,
   removeCurrentWorktreeInBackground,
   RemoveWorktreeError,
@@ -293,6 +294,7 @@ export async function removeSingleWorktree(
   ) {
     const result = await removeCurrentWorktreeInBackground(id, options);
     logBackgroundRemovalResult(result);
+    await closeHerdrAfterRemoval(result);
     return "removed";
   }
 
@@ -311,5 +313,25 @@ export async function removeSingleWorktree(
     }
   );
   logRemovalResult(result);
+  await closeHerdrAfterRemoval(result);
   return "removed";
+}
+
+async function closeHerdrAfterRemoval(result: {
+  herdrWorkspaceId?: string;
+  herdrError?: string;
+}): Promise<void> {
+  if (result.herdrError) {
+    console.error(
+      chalk.yellow(`Warning: Could not find Herdr workspace: ${result.herdrError}`)
+    );
+    return;
+  }
+
+  const herdr = await closeRemovedWorktreeInHerdr(result.herdrWorkspaceId);
+  if (herdr.error) {
+    console.error(
+      chalk.yellow(`Warning: Could not close Herdr workspace: ${herdr.error}`)
+    );
+  }
 }
