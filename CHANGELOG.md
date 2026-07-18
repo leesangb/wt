@@ -1,5 +1,16 @@
 # @leesangb/wt
 
+## 0.9.0
+
+### Minor Changes
+
+- bba38ed: Show live Git line additions, deletions, and untracked file counts in Herdr worktree Spaces.
+- 72e3683: Add `wt herdr install` as a convenient way to install the bundled Herdr plugin.
+
+### Patch Changes
+
+- 6a1fc2f: Parse Herdr event envelopes correctly so linked worktree Spaces receive pull request and CI metadata.
+
 ## 0.8.4
 
 ### Patch Changes
