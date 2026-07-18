@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.8.3
+
+### Patch Changes
+
+- 9195700: Show live pull request and CI status in Herdr Space rows and add an action that opens the selected workspace's pull request in a browser.
+
 ## 0.8.2
 
 ### Patch Changes
