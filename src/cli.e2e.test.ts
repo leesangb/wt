@@ -584,7 +584,7 @@ describe("cli e2e", () => {
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     expect(readFileSync(logPath, "utf-8")).toBe(
-      "plugin install leesangb/wt\n"
+      "plugin install leesangb/wt --yes\n"
     );
     expect(result.stdout).toContain("Plugin installed");
     expect(result.stdout).toContain("Installed wt for Herdr");
