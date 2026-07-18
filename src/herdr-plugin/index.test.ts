@@ -17,6 +17,7 @@ import {
   pullRequestRefreshIntervalMs,
   pullRequestStatusToken,
   refreshMetadataTtlMs,
+  resolveBaseBranchSelection,
   streamAndCaptureOutput,
 } from "./index.js";
 
@@ -71,6 +72,31 @@ describe("wt Herdr plugin", () => {
       { name: "main", ref: "main", local: true },
       { name: "release/1.0", ref: "origin/release/1.0", local: false },
     ]);
+  });
+
+  test("accepts an exact existing base branch ref when fzf has no match", () => {
+    const refs =
+      "main\nfeature/local\norigin/HEAD\norigin/main\norigin/release/1.0\n";
+
+    expect(resolveBaseBranchSelection(refs, "origin/main\n", 1)).toBe(
+      "origin/main"
+    );
+    expect(
+      resolveBaseBranchSelection(refs, "origin/release/1.0\n", 1)
+    ).toBe("origin/release/1.0");
+    expect(
+      resolveBaseBranchSelection(refs, "origin/missing\n", 1)
+    ).toBeUndefined();
+    expect(
+      resolveBaseBranchSelection(
+        refs,
+        "release/1.0\nrelease/1.0\torigin/release/1.0\n",
+        0
+      )
+    ).toBe("origin/release/1.0");
+    expect(
+      resolveBaseBranchSelection(refs, "origin/main\n", 130)
+    ).toBeUndefined();
   });
 
   test("formats pull requests with searchable metadata and a hidden number", () => {

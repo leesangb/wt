@@ -81,8 +81,9 @@ wt herdr install
 새 worktree 액션은 새 브랜치에 일반 텍스트 입력을, base branch에 `fzf`를
 사용합니다. Checkout은 로컬 브랜치를 보여주고, PR은 열린 GitHub PR의 제목,
 작성자, head branch, Draft 상태를 보여줍니다. 어느 단계에서든 `Esc`를 누르면
-취소됩니다. `fzf`가 `PATH`에 있어야 하며 PR picker에는 인증된 GitHub CLI
-(`gh`)가 필요합니다.
+취소됩니다. base branch picker에서는 `origin/main`처럼 실제로 존재하는 ref를
+정확히 입력하면 표시된 항목과 매칭되지 않아도 선택됩니다. `fzf`가 `PATH`에
+있어야 하며 PR picker에는 인증된 GitHub CLI (`gh`)가 필요합니다.
 
 새로 연 worktree Space는 연결된 Pull Request와 CI 상태를 자동으로 감시합니다.
 확장된 Space 행에 메타데이터 토큰을 추가하세요:
