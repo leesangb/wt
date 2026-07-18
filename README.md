@@ -98,7 +98,8 @@ rows = [
 ```
 
 `$diff` shows tracked line changes and untracked file counts, for example
-`+24 -7 ?2`. It refreshes every two seconds while the Space is open.
+`+24 -7 ?2`. It refreshes immediately when a Space is focused, every 30
+seconds while focused, and every five minutes in the background.
 Pull requests appear as `🟢 #123` when open, `⚪ #123` when draft,
 `🟣 #123` when merged, and `🔴 #123` when closed. CI is reduced to `✅`,
 `🟡`, or `❌`. Run `wt.herdr.watch-pr` once for a Space that was already open
