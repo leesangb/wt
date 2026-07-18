@@ -64,8 +64,10 @@ worktree를 `wt`로 생성한 다음 Herdr worktree API로 열기 때문에, 원
 아래에 그룹화된 worktree workspace로 표시됩니다.
 
 ```bash
-herdr plugin install leesangb/wt
+wt herdr install
 ```
+
+내부적으로 `herdr plugin install leesangb/wt`을 실행합니다.
 
 다음 액션을 사용할 수 있습니다:
 

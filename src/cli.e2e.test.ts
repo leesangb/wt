@@ -563,6 +563,33 @@ describe("cli e2e", () => {
     expect(result.stdout).toContain(appendCommand);
   });
 
+  test("herdr install installs the bundled plugin through the Herdr CLI", () => {
+    const fakeDir = makeTempDir("wt-herdr-install-");
+    const fakeHerdr = join(fakeDir, "herdr");
+    const logPath = join(fakeDir, "args.log");
+    writeFileSync(
+      fakeHerdr,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" > "${logPath}"`,
+        'printf \'%s\\n\' "Plugin installed"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(["herdr", "install"], fakeDir, {
+      env: { HERDR_BIN_PATH: fakeHerdr },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(logPath, "utf-8")).toBe(
+      "plugin install leesangb/wt\n"
+    );
+    expect(result.stdout).toContain("Plugin installed");
+    expect(result.stdout).toContain("Installed wt for Herdr");
+  });
+
   test("shell install defaults to the current launch command", () => {
     const tempHome = makeTempDir("wt-shell-install-default-");
     const wrapperPath = join(tempHome, ".wt", "shell", "wt.bash");

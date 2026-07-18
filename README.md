@@ -64,8 +64,10 @@ creates worktrees with `wt`, then opens them with Herdr's worktree API so they
 appear as grouped worktree workspaces under the source repository.
 
 ```bash
-herdr plugin install leesangb/wt
+wt herdr install
 ```
+
+This delegates to `herdr plugin install leesangb/wt`.
 
 The plugin provides these actions:
 

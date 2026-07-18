@@ -14,6 +14,7 @@ import { checkoutCommand } from "./commands/checkout.js";
 import { shellInstallCommand } from "./commands/shell.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { completePrCommand } from "./commands/complete-pr.js";
+import { herdrInstallCommand } from "./commands/herdr.js";
 import pkg from "../package.json";
 
 const program = new Command();
@@ -131,5 +132,12 @@ program
   .description("Install shell integration for bash, zsh, or fish")
   .option("--binary-path <path>", "Binary path to embed in the shell wrapper")
   .action(shellInstallCommand);
+
+program
+  .command("herdr")
+  .description("Manage the wt plugin for Herdr")
+  .command("install")
+  .description("Install the wt plugin for Herdr")
+  .action(herdrInstallCommand);
 
 await program.parseAsync();

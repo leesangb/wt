@@ -31,6 +31,11 @@ export interface CloseHerdrWorkspaceResult {
   error?: string;
 }
 
+export interface InstallHerdrPluginResult {
+  installed: boolean;
+  error?: string;
+}
+
 function isHerdrEnvironment(
   env: HerdrEnvironment
 ): env is HerdrEnvironment & { HERDR_WORKSPACE_ID: string } {
@@ -42,6 +47,35 @@ function normalizePath(path: string): string {
     return realpathSync(path);
   } catch {
     return resolve(path);
+  }
+}
+
+export async function installHerdrPlugin(
+  repository: string,
+  env: HerdrEnvironment = process.env
+): Promise<InstallHerdrPluginResult> {
+  try {
+    const herdr = env.HERDR_BIN_PATH ?? "herdr";
+    const proc = spawn([herdr, "plugin", "install", repository], {
+      env,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const exitCode = await proc.exited;
+
+    if (exitCode === 0) {
+      return { installed: true };
+    }
+
+    return {
+      installed: false,
+      error: `herdr exited with code ${exitCode}`,
+    };
+  } catch (error) {
+    return {
+      installed: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
