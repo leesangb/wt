@@ -18,6 +18,8 @@ describe("update installation use case", () => {
     const delegatedCommands: string[] = [];
     const executedPlans: Array<{ args: string[]; displayCommand: string }> = [];
     const refreshedBinaries: string[] = [];
+    const versionedBinaries: string[] = [];
+    const syncedVersions: string[] = [];
 
     const result = await updateInstallation("0.3.0", {}, {
       processInfo: {
@@ -26,12 +28,20 @@ describe("update installation use case", () => {
       },
       onBeforeHomebrewUpdate: (command) => delegatedCommands.push(command),
       runHomebrewUpdate: (plan) => executedPlans.push(plan),
+      readInstalledVersion: (binaryPath) => {
+        versionedBinaries.push(binaryPath);
+        return "0.4.0";
+      },
       refreshShellWrappers: (binaryPath) => {
         refreshedBinaries.push(binaryPath);
         return {
           refreshedShells: ["zsh"],
           warnings: [],
         };
+      },
+      syncHerdrPlugin: async (version) => {
+        syncedVersions.push(version);
+        return { status: "updated", version };
       },
     });
 
@@ -42,6 +52,7 @@ describe("update installation use case", () => {
         refreshedShells: ["zsh"],
         warnings: [],
       },
+      herdrPlugin: { status: "updated", version: "0.4.0" },
     });
     expect(delegatedCommands).toEqual(["brew upgrade wt"]);
     expect(executedPlans).toEqual([
@@ -51,6 +62,8 @@ describe("update installation use case", () => {
       },
     ]);
     expect(refreshedBinaries).toEqual(["/opt/homebrew/bin/wt"]);
+    expect(versionedBinaries).toEqual(["/opt/homebrew/bin/wt"]);
+    expect(syncedVersions).toEqual(["0.4.0"]);
   });
 
   test("refreshes existing shell wrappers after a standalone binary update", async () => {
@@ -58,6 +71,7 @@ describe("update installation use case", () => {
     const replacements: Array<{ tempPath: string; execPath: string }> = [];
     const quarantines: string[] = [];
     const refreshedBinaries: string[] = [];
+    const syncedHerdrPlugins: Array<{ version: string; force: boolean }> = [];
 
     const result = await updateInstallation(
       "0.6.0",
@@ -86,6 +100,10 @@ describe("update installation use case", () => {
             warnings: [],
           };
         },
+        syncHerdrPlugin: async (version, { force }) => {
+          syncedHerdrPlugins.push({ version, force });
+          return { status: "updated", version };
+        },
       }
     );
 
@@ -100,6 +118,7 @@ describe("update installation use case", () => {
     ]);
     expect(quarantines).toEqual(["/Users/test/.local/bin/wt"]);
     expect(refreshedBinaries).toEqual(["/Users/test/.local/bin/wt"]);
+    expect(syncedHerdrPlugins).toEqual([{ version: "0.6.1", force: false }]);
     expect(result).toEqual({
       strategy: "standalone",
       currentVersion: "0.6.0",
@@ -110,6 +129,38 @@ describe("update installation use case", () => {
         refreshedShells: ["bash", "zsh"],
         warnings: [],
       },
+      herdrPlugin: {
+        status: "updated",
+        version: "0.6.1",
+      },
+    });
+  });
+
+  test("syncs the Herdr plugin when the standalone binary is already current", async () => {
+    const syncedVersions: string[] = [];
+
+    const result = await updateInstallation(
+      "0.6.1",
+      { version: "0.6.1" },
+      {
+        arch: "arm64",
+        platform: "darwin",
+        processInfo: {
+          argv0: "wt",
+          execPath: "/Users/test/.local/bin/wt",
+        },
+        syncHerdrPlugin: async (version) => {
+          syncedVersions.push(version);
+          return { status: "up-to-date", version };
+        },
+      }
+    );
+
+    expect(syncedVersions).toEqual(["0.6.1"]);
+    expect(result).toMatchObject({
+      strategy: "standalone",
+      updated: false,
+      herdrPlugin: { status: "up-to-date", version: "0.6.1" },
     });
   });
 });

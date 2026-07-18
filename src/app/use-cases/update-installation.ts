@@ -23,6 +23,11 @@ import {
   type HomebrewUpdatePlan,
 } from "../../infra/update/homebrew.js";
 import { compareVersions } from "../../infra/update/version.js";
+import {
+  syncInstalledWtHerdrPlugin,
+  type HerdrPluginSyncResult,
+} from "../../infra/herdr/client.js";
+import { readInstalledWtVersion } from "../../infra/update/installed-version.js";
 
 const BINARY_NAME = "wt";
 const RUNTIME_LAUNCHERS = new Set(["bun", "node"]);
@@ -40,12 +45,14 @@ export interface StandaloneUpdateInstallationResult {
   updated: boolean;
   assetName?: string;
   shellIntegration?: RefreshShellWrappersResult;
+  herdrPlugin?: HerdrPluginSyncResult;
 }
 
 export interface HomebrewDelegatedUpdateResult {
   strategy: "homebrew";
   delegatedCommand: string;
   shellIntegration: RefreshShellWrappersResult;
+  herdrPlugin?: HerdrPluginSyncResult;
 }
 
 export type UpdateInstallationResult =
@@ -61,9 +68,14 @@ export interface UpdateInstallationContext {
   downloadBinary?: (url: string) => Promise<string>;
   onBeforeHomebrewUpdate?: (command: string) => void;
   refreshShellWrappers?: (binaryPath: string) => RefreshShellWrappersResult;
+  readInstalledVersion?: (binaryPath: string) => string;
   removeMacosQuarantine?: (execPath: string) => Promise<void>;
   replaceCurrentBinary?: (tempPath: string, execPath: string) => void;
   runHomebrewUpdate?: (plan: HomebrewUpdatePlan) => void;
+  syncHerdrPlugin?: (
+    version: string,
+    options: { force: boolean }
+  ) => Promise<HerdrPluginSyncResult>;
 }
 
 function assertVersionFormat(version: string, label: string): void {
@@ -132,6 +144,24 @@ function refreshShellWrappers(
   )(binaryPath);
 }
 
+async function syncHerdrPlugin(
+  version: string,
+  options: UpdateInstallationOptions,
+  context: UpdateInstallationContext
+): Promise<HerdrPluginSyncResult | undefined> {
+  try {
+    return await (context.syncHerdrPlugin ?? syncInstalledWtHerdrPlugin)(
+      version,
+      { force: options.force === true }
+    );
+  } catch (error) {
+    return {
+      status: "failed",
+      warning: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function updateStandaloneInstallation(
   currentVersion: string,
   options: UpdateInstallationOptions,
@@ -174,12 +204,18 @@ async function updateStandaloneInstallation(
     assertVersionFormat(targetVersion, "release");
 
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
+      const herdrPlugin = await syncHerdrPlugin(
+        currentVersion,
+        options,
+        context
+      );
       return {
         strategy: "standalone",
         currentVersion,
         targetVersion,
         updated: false,
         assetName,
+        ...(herdrPlugin ? { herdrPlugin } : {}),
       };
     }
 
@@ -196,12 +232,18 @@ async function updateStandaloneInstallation(
     assertVersionFormat(targetVersion, "requested");
 
     if (compareVersions(targetVersion, currentVersion) <= 0 && !options.force) {
+      const herdrPlugin = await syncHerdrPlugin(
+        currentVersion,
+        options,
+        context
+      );
       return {
         strategy: "standalone",
         currentVersion,
         targetVersion,
         updated: false,
         assetName,
+        ...(herdrPlugin ? { herdrPlugin } : {}),
       };
     }
 
@@ -223,6 +265,7 @@ async function updateStandaloneInstallation(
   }
 
   const shellIntegration = refreshShellWrappers(binaryPath, context);
+  const herdrPlugin = await syncHerdrPlugin(targetVersion, options, context);
 
   return {
     strategy: "standalone",
@@ -231,6 +274,7 @@ async function updateStandaloneInstallation(
     updated: true,
     assetName,
     shellIntegration,
+    ...(herdrPlugin ? { herdrPlugin } : {}),
   };
 }
 
@@ -246,15 +290,29 @@ export async function updateInstallation(
 
     context.onBeforeHomebrewUpdate?.(plan.displayCommand);
     (context.runHomebrewUpdate ?? runHomebrewUpdate)(plan);
-    const shellIntegration = refreshShellWrappers(
-      resolveHomebrewShellBinaryPath(context.processInfo),
-      context
-    );
+    const binaryPath = resolveHomebrewShellBinaryPath(context.processInfo);
+    const shellIntegration = refreshShellWrappers(binaryPath, context);
+    let installedVersion: string | undefined;
+    let herdrPlugin: HerdrPluginSyncResult | undefined;
+
+    try {
+      installedVersion = (
+        context.readInstalledVersion ?? readInstalledWtVersion
+      )(binaryPath);
+      assertVersionFormat(installedVersion, "installed");
+      herdrPlugin = await syncHerdrPlugin(installedVersion, options, context);
+    } catch (error) {
+      herdrPlugin = {
+        status: "failed",
+        warning: `Could not sync the wt Herdr plugin: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
 
     return {
       strategy: "homebrew",
       delegatedCommand: plan.displayCommand,
       shellIntegration,
+      ...(herdrPlugin ? { herdrPlugin } : {}),
     };
   }
 
