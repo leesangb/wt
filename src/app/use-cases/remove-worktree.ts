@@ -416,24 +416,23 @@ export function createWorktreeRemoval(
       target,
       cwd
     );
-    const [status, allStatusEntries, removalRoot] = await Promise.all([
+    const statusEntryLimit = options.statusEntryLimit ?? 8;
+    const [status, statusEntries, removalRoot] = await Promise.all([
       dependencies.repository.inspectStatus(
         context.repoRoot,
         worktree.path,
         worktree.branch,
         worktree.baseBranch
       ),
-      dependencies.repository.inspectStatusEntries(
-        worktree.path,
-        Number.MAX_SAFE_INTEGER
-      ),
+      options.includeStatusEntries
+        ? dependencies.repository.inspectStatusEntries(
+            worktree.path,
+            statusEntryLimit
+          )
+        : undefined,
       findSafeRemovalRoot(dependencies, context, worktree),
     ]);
     const isCurrent = isPathInside(worktree.path, context.cwd);
-    const statusEntryLimit = options.statusEntryLimit ?? 8;
-    const displayedStatusEntries = options.includeStatusEntries
-      ? allStatusEntries.entries.slice(0, statusEntryLimit)
-      : undefined;
 
     return {
       target: worktree.path,
@@ -441,11 +440,11 @@ export function createWorktreeRemoval(
       worktree,
       isCurrent,
       ...status,
-      ...(displayedStatusEntries
+      ...(statusEntries
         ? {
-            statusEntries: displayedStatusEntries,
+            statusEntries: statusEntries.entries,
             remainingStatusEntryCount: Math.max(
-              allStatusEntries.totalCount - displayedStatusEntries.length,
+              statusEntries.totalCount - statusEntries.entries.length,
               0
             ),
           }
@@ -455,7 +454,7 @@ export function createWorktreeRemoval(
         worktree,
         isCurrent,
         status,
-        statusEntries: allStatusEntries.entries,
+        statusEntries: statusEntries?.entries ?? [],
         removalRoot,
       }),
     };

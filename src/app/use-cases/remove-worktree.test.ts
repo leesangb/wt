@@ -37,6 +37,7 @@ function createDependencies(): {
   deletedBranches: string[];
   changedDirectories: string[];
   startedTasks: unknown[];
+  statusEntryInspectionLimits: Array<number | undefined>;
 } {
   const worktree = createWorktree();
   const status = {
@@ -48,6 +49,7 @@ function createDependencies(): {
   const deletedBranches: string[] = [];
   const changedDirectories: string[] = [];
   const startedTasks: unknown[] = [];
+  const statusEntryInspectionLimits: Array<number | undefined> = [];
 
   return {
     dependencies: {
@@ -59,7 +61,10 @@ function createDependencies(): {
           { path: worktree.path, isMain: false },
         ],
         inspectStatus: async () => ({ ...status }),
-        inspectStatusEntries: async () => ({ entries: [], totalCount: 0 }),
+        inspectStatusEntries: async (_worktreePath, limit) => {
+          statusEntryInspectionLimits.push(limit);
+          return { entries: [], totalCount: 0 };
+        },
       },
       settings: {
         load: async () => DEFAULT_WT_SETTINGS,
@@ -96,10 +101,31 @@ function createDependencies(): {
     deletedBranches,
     changedDirectories,
     startedTasks,
+    statusEntryInspectionLimits,
   };
 }
 
 describe("worktree removal", () => {
+  test("does not inspect status entries when removal details are not requested", async () => {
+    const fixture = createDependencies();
+    const removal = createWorktreeRemoval(fixture.dependencies);
+
+    await removal.inspect("feature-a", context.cwd);
+
+    expect(fixture.statusEntryInspectionLimits).toEqual([]);
+  });
+
+  test("bounds status entry inspection when removal details are requested", async () => {
+    const fixture = createDependencies();
+    const removal = createWorktreeRemoval(fixture.dependencies);
+
+    await removal.inspect("feature-a", context.cwd, {
+      includeStatusEntries: true,
+    });
+
+    expect(fixture.statusEntryInspectionLimits).toEqual([8]);
+  });
+
   test("does not remove a worktree when its approved plan becomes stale", async () => {
     const fixture = createDependencies();
     const removal = createWorktreeRemoval(fixture.dependencies);
