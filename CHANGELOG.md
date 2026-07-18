@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.11.1
+
+### Patch Changes
+
+- 49ac680: Allow `wt herdr install` to install the remote plugin from non-interactive environments.
+
 ## 0.11.0
 
 ### Minor Changes
