@@ -7,6 +7,7 @@ import {
   ciStatusToken,
   closedLinkedWorktrees,
   encodeLaunchContext,
+  gitDiffRefreshIntervalMs,
   gitDiffStatusToken,
   parsePullRequestDetails,
   parseWorkspaceFocusedEvent,
@@ -219,6 +220,11 @@ describe("wt Herdr plugin", () => {
       )
     ).toBe("+6 -4 ?2");
     expect(gitDiffStatusToken("", "")).toBeUndefined();
+  });
+
+  test("refreshes focused Spaces more often than background Spaces", () => {
+    expect(gitDiffRefreshIntervalMs(true)).toBe(30_000);
+    expect(gitDiffRefreshIntervalMs(false)).toBe(300_000);
   });
 
   test("extracts the opened workspace and checkout from a Herdr event", () => {

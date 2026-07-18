@@ -78,8 +78,9 @@ const ANSI_RESET = "\x1b[0m";
 const METADATA_SOURCE = "wt:github";
 const GIT_METADATA_SOURCE = "wt:git";
 const METADATA_TTL_MS = 600_000;
-const GIT_METADATA_TTL_MS = 10_000;
-const GIT_REFRESH_INTERVAL_MS = 2_000;
+const GIT_METADATA_TTL_MS = 600_000;
+const FOCUSED_GIT_REFRESH_INTERVAL_MS = 30_000;
+const BACKGROUND_GIT_REFRESH_INTERVAL_MS = 300_000;
 const STABLE_REFRESH_INTERVAL_MS = 300_000;
 const RETRY_INTERVAL_MS = 60_000;
 const CHECK_WATCH_INTERVAL_SECONDS = 10;
@@ -287,6 +288,12 @@ export function gitDiffStatusToken(
   if (untracked > 0) tokens.push(`?${untracked}`);
 
   return tokens.length > 0 ? tokens.join(" ") : undefined;
+}
+
+export function gitDiffRefreshIntervalMs(focused: boolean): number {
+  return focused
+    ? FOCUSED_GIT_REFRESH_INTERVAL_MS
+    : BACKGROUND_GIT_REFRESH_INTERVAL_MS;
 }
 
 export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
@@ -764,19 +771,32 @@ async function refreshGitDiffStatus(
   await reportGitDiffStatus(target, await loadGitDiffStatus(target.cwd));
 }
 
-async function workspaceExists(target: WorkspaceWatchTarget): Promise<boolean> {
+async function loadWorkspaceState(
+  target: WorkspaceWatchTarget
+): Promise<{ focused: boolean } | undefined> {
   const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
 
   try {
-    await captureWithExitCodes(
+    const json = await captureWithExitCodes(
       [herdr, "workspace", "get", target.workspaceId],
       target.cwd,
       [0]
     );
-    return true;
+    const response = JSON.parse(json) as {
+      result?: { workspace?: { workspace_id?: string; focused?: boolean } };
+    };
+    const workspace = response.result?.workspace;
+
+    return workspace?.workspace_id
+      ? { focused: workspace.focused === true }
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+async function workspaceExists(target: WorkspaceWatchTarget): Promise<boolean> {
+  return (await loadWorkspaceState(target)) !== undefined;
 }
 
 async function loadWorkspaceTarget(
@@ -940,7 +960,10 @@ async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<voi
   }
 }
 
-async function watchGitDiffStatus(target: WorkspaceWatchTarget): Promise<void> {
+async function watchGitDiffStatus(
+  target: WorkspaceWatchTarget,
+  lastRefreshAt = 0
+): Promise<void> {
   const releaseLock = acquireWatcherLock(target.workspaceId, "git-diff");
   if (!releaseLock) return;
 
@@ -954,23 +977,36 @@ async function watchGitDiffStatus(target: WorkspaceWatchTarget): Promise<void> {
 
   try {
     while (true) {
-      try {
-        await refreshGitDiffStatus(target);
-        consecutiveFailures = 0;
-      } catch {
-        consecutiveFailures += 1;
-        if (consecutiveFailures >= 3) break;
+      const workspace = await loadWorkspaceState(target);
+      if (!workspace) break;
+
+      const now = Date.now();
+      if (
+        lastRefreshAt === 0 ||
+        now - lastRefreshAt >= gitDiffRefreshIntervalMs(workspace.focused)
+      ) {
+        try {
+          await refreshGitDiffStatus(target);
+          lastRefreshAt = Date.now();
+          consecutiveFailures = 0;
+        } catch {
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= 3) break;
+        }
       }
-      await Bun.sleep(GIT_REFRESH_INTERVAL_MS);
+      await Bun.sleep(FOCUSED_GIT_REFRESH_INTERVAL_MS);
     }
   } finally {
     releaseLock();
   }
 }
 
-async function watchWorkspaceStatus(target: WorkspaceWatchTarget): Promise<void> {
+async function watchWorkspaceStatus(
+  target: WorkspaceWatchTarget,
+  gitLastRefreshAt = 0
+): Promise<void> {
   await Promise.all([
-    watchGitDiffStatus(target),
+    watchGitDiffStatus(target, gitLastRefreshAt),
     watchPullRequestStatus(target).catch(() => {
       // Git status remains useful for branches without a pull request.
     }),
@@ -1002,12 +1038,13 @@ async function refreshFocusedWorkspace(): Promise<void> {
   if (!target) return;
 
   await refreshGitDiffStatus(target);
+  const gitRefreshedAt = Date.now();
   try {
     await refreshPullRequestStatus(target);
   } catch {
     // Spaces without a linked pull request still report Git changes.
   }
-  await watchWorkspaceStatus(target);
+  await watchWorkspaceStatus(target, gitRefreshedAt);
 }
 
 async function openPullRequest(): Promise<void> {
