@@ -36,6 +36,23 @@ export interface InstallHerdrPluginResult {
   error?: string;
 }
 
+export interface HerdrPluginSyncResult {
+  status:
+    | "updated"
+    | "up-to-date"
+    | "not-installed"
+    | "unavailable"
+    | "skipped-linked"
+    | "skipped-foreign"
+    | "failed";
+  version?: string;
+  warning?: string;
+}
+
+export interface SyncHerdrPluginOptions {
+  force?: boolean;
+}
+
 function isHerdrEnvironment(
   env: HerdrEnvironment
 ): env is HerdrEnvironment & { HERDR_WORKSPACE_ID: string } {
@@ -75,6 +92,114 @@ export async function installHerdrPlugin(
     return {
       installed: false,
       error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function syncInstalledWtHerdrPlugin(
+  version: string,
+  options: SyncHerdrPluginOptions = {},
+  env: HerdrEnvironment = process.env
+): Promise<HerdrPluginSyncResult> {
+  const herdr = env.HERDR_BIN_PATH ?? "herdr";
+  const normalizedVersion = version.replace(/^v/, "");
+  const ref = `v${normalizedVersion}`;
+
+  try {
+    const listProc = spawn(
+      [herdr, "plugin", "list", "--plugin", "wt.herdr", "--json"],
+      { env, stdout: "pipe", stderr: "pipe" }
+    );
+    const [stdout, stderr, listExitCode] = await Promise.all([
+      new Response(listProc.stdout).text(),
+      new Response(listProc.stderr).text(),
+      listProc.exited,
+    ]);
+
+    if (listExitCode !== 0) {
+      return {
+        status: "failed",
+        warning:
+          stderr.trim() || `herdr plugin list exited with code ${listExitCode}`,
+      };
+    }
+
+    const response = JSON.parse(stdout) as {
+      result?: {
+        plugins?: Array<{
+          plugin_id?: string;
+          source?: {
+            kind?: string;
+            owner?: string;
+            repo?: string;
+            requested_ref?: string;
+          };
+        }>;
+      };
+    };
+    const plugin = response.result?.plugins?.find(
+      ({ plugin_id }) => plugin_id === "wt.herdr"
+    );
+
+    if (!plugin) {
+      return { status: "not-installed" };
+    }
+
+    if (!plugin.source || plugin.source.kind !== "github") {
+      return {
+        status: "skipped-linked",
+        warning: "The wt Herdr plugin is locally linked; leaving it unchanged.",
+      };
+    }
+
+    if (plugin.source.owner !== "leesangb" || plugin.source.repo !== "wt") {
+      return {
+        status: "skipped-foreign",
+        warning: "The installed wt.herdr plugin comes from a different repository; leaving it unchanged.",
+      };
+    }
+
+    if (plugin.source.requested_ref === ref && !options.force) {
+      return { status: "up-to-date", version: normalizedVersion };
+    }
+
+    const installProc = spawn(
+      [
+        herdr,
+        "plugin",
+        "install",
+        "leesangb/wt",
+        "--ref",
+        ref,
+        "--yes",
+      ],
+      { env, stdout: "pipe", stderr: "pipe" }
+    );
+    const [, installStderr, installExitCode] = await Promise.all([
+      new Response(installProc.stdout).text(),
+      new Response(installProc.stderr).text(),
+      installProc.exited,
+    ]);
+
+    if (installExitCode !== 0) {
+      return {
+        status: "failed",
+        warning:
+          installStderr.trim() ||
+          `herdr plugin install exited with code ${installExitCode}`,
+      };
+    }
+
+    return { status: "updated", version: normalizedVersion };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return { status: "unavailable" };
+    }
+
+    return {
+      status: "failed",
+      warning: error instanceof Error ? error.message : String(error),
     };
   }
 }

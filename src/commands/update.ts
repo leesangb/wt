@@ -38,6 +38,32 @@ function printShellIntegrationRefresh(result: UpdateInstallationResult): void {
   }
 }
 
+function printHerdrPluginSync(result: UpdateInstallationResult): void {
+  const plugin = result.herdrPlugin;
+
+  if (!plugin) {
+    return;
+  }
+
+  if (plugin.status === "updated") {
+    console.log(
+      chalk.green(`✓ Updated wt Herdr plugin to version ${plugin.version}.`)
+    );
+    return;
+  }
+
+  if (plugin.status === "up-to-date") {
+    console.log(
+      chalk.dim(`wt Herdr plugin is up to date (${plugin.version}).`)
+    );
+    return;
+  }
+
+  if (plugin.warning) {
+    console.log(chalk.yellow(`Warning: ${plugin.warning}`));
+  }
+}
+
 export async function updateCommand(
   options: UpdateInstallationOptions
 ): Promise<void> {
@@ -55,6 +81,7 @@ export async function updateCommand(
         },
       });
       printShellIntegrationRefresh(result);
+      printHerdrPluginSync(result);
       return;
     }
 
@@ -82,11 +109,13 @@ export async function updateCommand(
         );
         console.log(chalk.dim("Use --force to re-download the current version."));
       }
+      printHerdrPluginSync(result);
       return;
     }
 
     console.log(chalk.green(`✓ Updated wt to version ${result.targetVersion}`));
     printShellIntegrationRefresh(result);
+    printHerdrPluginSync(result);
     console.log(chalk.dim("Run: wt --version to verify."));
   });
 }

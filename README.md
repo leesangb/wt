@@ -349,6 +349,11 @@ Skip removing quarantine attribute for standalone binary installs:
 wt update --no-remove-quarantine
 ```
 
+If the `wt.herdr` plugin was installed from `leesangb/wt`, `wt update` also
+syncs it to the same release tag. Locally linked plugins and plugins from other
+repositories are left unchanged. Use `wt update --force` to reinstall an
+already matching plugin version.
+
 ### List all worktrees
 
 ```bash
