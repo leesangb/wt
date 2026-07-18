@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.8.4
+
+### Patch Changes
+
+- 87eb14c: Install dependencies before building the Herdr plugin from a clean GitHub checkout.
+
 ## 0.8.3
 
 ### Patch Changes
