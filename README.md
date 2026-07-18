@@ -73,12 +73,45 @@ The plugin provides these actions:
 - `wt.herdr.checkout` — open an existing local branch as a worktree
 - `wt.herdr.pr` — create or reuse a pull request worktree
 - `wt.herdr.open-all` — open every existing checkout that is not already open
+- `wt.herdr.open-pr` — open the selected Space's pull request in a browser
+- `wt.herdr.watch-pr` — start live pull request status for an existing Space
 
 The new-worktree action uses a text prompt for the new branch and `fzf` for the
 base branch. Checkout lists local branches, while PR lists open GitHub pull
 requests with title, author, head branch, and draft status. Press `Esc` at any
 step to cancel. The plugin requires `fzf` on `PATH`, and the PR picker requires
 an authenticated GitHub CLI (`gh`).
+
+Newly opened worktree Spaces automatically watch their linked pull request and
+CI status. Add the metadata tokens to the expanded Space rows:
+
+```toml
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace"],
+  ["branch", "git_status"],
+  ["$pr", "$ci"],
+]
+```
+
+Pull requests appear as `🟢 #123` when open, `⚪ #123` when draft,
+`🟣 #123` when merged, and `🔴 #123` when closed. CI is reduced to `✅`,
+`🟡`, or `❌`. Run `wt.herdr.watch-pr` once for a Space that was already open
+when the plugin was installed or the Herdr server restarted. Pending checks use
+GitHub CLI's watch mode and update as soon as they finish. Focusing a Space
+refreshes it immediately; stable states use a five-minute safety refresh, and
+stale values expire during an outage.
+
+Herdr metadata tokens are display-only, so open the selected Space's pull
+request with the `wt.herdr.open-pr` action. You can optionally bind it directly:
+
+```toml
+[[keys.command]]
+key = "prefix+alt+o"
+type = "plugin_action"
+command = "wt.herdr.open-pr"
+description = "Open this Space's pull request"
+```
 
 When `wt new`, `wt checkout`, or `wt pr` runs inside a Herdr pane, `wt`
 automatically opens the resulting checkout as a focused Herdr worktree workspace.
@@ -103,7 +136,7 @@ herdr server reload-config
 
 The installed plugin builds and uses the `wt` source from the same revision, so
 it does not depend on a separately installed `wt` binary. It requires Herdr
-`>= 0.7.0` and Bun during plugin installation.
+`>= 0.7.4` and Bun during plugin installation.
 
 ### Manual Shell Integration (Optional)
 
