@@ -260,21 +260,21 @@ export function ciStatusToken(json: string): string | undefined {
 }
 
 export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
-  const envelope = JSON.parse(json) as {
+  type WorktreeOpenedEvent = {
     workspace?: {
       workspace_id?: string;
       worktree?: { checkout_path?: string };
     };
     worktree?: { path?: string };
-    event?: {
-      workspace?: {
-        workspace_id?: string;
-        worktree?: { checkout_path?: string };
-      };
-      worktree?: { path?: string };
-    };
   };
-  const event = envelope.event ?? envelope;
+  const envelope = JSON.parse(json) as WorktreeOpenedEvent & {
+    event?: string | WorktreeOpenedEvent;
+    data?: WorktreeOpenedEvent;
+  };
+  const event =
+    typeof envelope.event === "object"
+      ? envelope.event
+      : envelope.data ?? envelope;
   const workspaceId = event.workspace?.workspace_id;
   const cwd = event.worktree?.path ?? event.workspace?.worktree?.checkout_path;
 
@@ -288,9 +288,13 @@ export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
 export function parseWorkspaceFocusedEvent(json: string): string {
   const envelope = JSON.parse(json) as {
     workspace_id?: string;
-    event?: { workspace_id?: string };
+    event?: string | { workspace_id?: string };
+    data?: { workspace_id?: string };
   };
-  const workspaceId = envelope.event?.workspace_id ?? envelope.workspace_id;
+  const workspaceId =
+    (typeof envelope.event === "object"
+      ? envelope.event.workspace_id
+      : envelope.data?.workspace_id) ?? envelope.workspace_id;
 
   if (!workspaceId) {
     throw new Error("Herdr workspace event is missing a workspace id");
