@@ -7,6 +7,7 @@ import {
   ciStatusToken,
   closedLinkedWorktrees,
   encodeLaunchContext,
+  gitDiffStatusToken,
   parsePullRequestDetails,
   parseWorkspaceFocusedEvent,
   parseWorktreeOpenedEvent,
@@ -208,6 +209,16 @@ describe("wt Herdr plugin", () => {
     expect(ciStatusToken('[{"bucket":"pass"},{"bucket":"fail"}]')).toBe("❌");
     expect(ciStatusToken('[{"bucket":"cancel"}]')).toBe("❌");
     expect(ciStatusToken("[]")).toBeUndefined();
+  });
+
+  test("formats tracked line changes and untracked files for Space metadata", () => {
+    expect(
+      gitDiffStatusToken(
+        "4\t1\tsrc/a.ts\n2\t3\tsrc/b.ts\n-\t-\tpublic/image.png\n",
+        "notes.txt\0docs/draft.md\0"
+      )
+    ).toBe("+6 -4 ?2");
+    expect(gitDiffStatusToken("", "")).toBeUndefined();
   });
 
   test("extracts the opened workspace and checkout from a Herdr event", () => {

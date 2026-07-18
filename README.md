@@ -92,10 +92,13 @@ CI status. Add the metadata tokens to the expanded Space rows:
 rows = [
   ["state_icon", "workspace"],
   ["branch", "git_status"],
+  ["$diff"],
   ["$pr", "$ci"],
 ]
 ```
 
+`$diff` shows tracked line changes and untracked file counts, for example
+`+24 -7 ?2`. It refreshes every two seconds while the Space is open.
 Pull requests appear as `🟢 #123` when open, `⚪ #123` when draft,
 `🟣 #123` when merged, and `🔴 #123` when closed. CI is reduced to `✅`,
 `🟡`, or `❌`. Run `wt.herdr.watch-pr` once for a Space that was already open

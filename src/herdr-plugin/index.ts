@@ -76,7 +76,10 @@ interface HerdrWorktreeList {
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_RESET = "\x1b[0m";
 const METADATA_SOURCE = "wt:github";
+const GIT_METADATA_SOURCE = "wt:git";
 const METADATA_TTL_MS = 600_000;
+const GIT_METADATA_TTL_MS = 10_000;
+const GIT_REFRESH_INTERVAL_MS = 2_000;
 const STABLE_REFRESH_INTERVAL_MS = 300_000;
 const RETRY_INTERVAL_MS = 60_000;
 const CHECK_WATCH_INTERVAL_SECONDS = 10;
@@ -257,6 +260,33 @@ export function ciStatusToken(json: string): string | undefined {
   }
 
   return "🟡";
+}
+
+export function gitDiffStatusToken(
+  numstat: string,
+  untrackedFiles: string
+): string | undefined {
+  let added = 0;
+  let deleted = 0;
+  let hasTrackedLineChanges = false;
+
+  for (const line of numstat.split(/\r?\n/)) {
+    const [addedText, deletedText] = line.split("\t", 2);
+    const lineAdded = Number(addedText);
+    const lineDeleted = Number(deletedText);
+    if (!Number.isFinite(lineAdded) || !Number.isFinite(lineDeleted)) continue;
+
+    added += lineAdded;
+    deleted += lineDeleted;
+    hasTrackedLineChanges = true;
+  }
+
+  const untracked = untrackedFiles.split("\0").filter(Boolean).length;
+  const tokens: string[] = [];
+  if (hasTrackedLineChanges) tokens.push(`+${added}`, `-${deleted}`);
+  if (untracked > 0) tokens.push(`?${untracked}`);
+
+  return tokens.length > 0 ? tokens.join(" ") : undefined;
 }
 
 export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
@@ -693,6 +723,47 @@ async function reportPullRequestStatus(
   await captureWithExitCodes(args, target.cwd, [0]);
 }
 
+async function loadGitDiffStatus(cwd: string): Promise<string | undefined> {
+  const [numstat, untrackedFiles] = await Promise.all([
+    capture(["git", "diff", "--numstat", "HEAD", "--"], cwd),
+    capture(
+      ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+      cwd
+    ),
+  ]);
+
+  return gitDiffStatusToken(numstat, untrackedFiles);
+}
+
+async function reportGitDiffStatus(
+  target: WorkspaceWatchTarget,
+  status: string | undefined
+): Promise<void> {
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+  const args = [
+    herdr,
+    "workspace",
+    "report-metadata",
+    target.workspaceId,
+    "--source",
+    GIT_METADATA_SOURCE,
+    status ? "--token" : "--clear-token",
+    status ? `diff=${status}` : "diff",
+    "--seq",
+    String(Date.now()),
+    "--ttl-ms",
+    String(GIT_METADATA_TTL_MS),
+  ];
+
+  await captureWithExitCodes(args, target.cwd, [0]);
+}
+
+async function refreshGitDiffStatus(
+  target: WorkspaceWatchTarget
+): Promise<void> {
+  await reportGitDiffStatus(target, await loadGitDiffStatus(target.cwd));
+}
+
 async function workspaceExists(target: WorkspaceWatchTarget): Promise<boolean> {
   const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
 
@@ -737,10 +808,13 @@ async function loadWorkspaceTarget(
   };
 }
 
-function watcherLockPath(workspaceId: string): string {
+function watcherLockPath(workspaceId: string, watcher: string): string {
   const stateDir = requiredEnv("HERDR_PLUGIN_STATE_DIR");
   mkdirSync(stateDir, { recursive: true });
-  return join(stateDir, `github-status-${workspaceId.replaceAll(/[^A-Za-z0-9_-]/g, "-")}.pid`);
+  return join(
+    stateDir,
+    `${watcher}-${workspaceId.replaceAll(/[^A-Za-z0-9_-]/g, "-")}.pid`
+  );
 }
 
 function processIsRunning(pid: number): boolean {
@@ -752,8 +826,11 @@ function processIsRunning(pid: number): boolean {
   }
 }
 
-function acquireWatcherLock(workspaceId: string): (() => void) | undefined {
-  const lockPath = watcherLockPath(workspaceId);
+function acquireWatcherLock(
+  workspaceId: string,
+  watcher: string
+): (() => void) | undefined {
+  const lockPath = watcherLockPath(workspaceId, watcher);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -828,7 +905,7 @@ async function waitForPendingChecks(
 }
 
 async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<void> {
-  const releaseLock = acquireWatcherLock(target.workspaceId);
+  const releaseLock = acquireWatcherLock(target.workspaceId, "github-status");
   if (!releaseLock) return;
 
   const stop = () => {
@@ -863,8 +940,45 @@ async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<voi
   }
 }
 
+async function watchGitDiffStatus(target: WorkspaceWatchTarget): Promise<void> {
+  const releaseLock = acquireWatcherLock(target.workspaceId, "git-diff");
+  if (!releaseLock) return;
+
+  const stop = () => {
+    releaseLock();
+    process.exit(0);
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  let consecutiveFailures = 0;
+
+  try {
+    while (true) {
+      try {
+        await refreshGitDiffStatus(target);
+        consecutiveFailures = 0;
+      } catch {
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 3) break;
+      }
+      await Bun.sleep(GIT_REFRESH_INTERVAL_MS);
+    }
+  } finally {
+    releaseLock();
+  }
+}
+
+async function watchWorkspaceStatus(target: WorkspaceWatchTarget): Promise<void> {
+  await Promise.all([
+    watchGitDiffStatus(target),
+    watchPullRequestStatus(target).catch(() => {
+      // Git status remains useful for branches without a pull request.
+    }),
+  ]);
+}
+
 async function watchEvent(): Promise<void> {
-  await watchPullRequestStatus(
+  await watchWorkspaceStatus(
     parseWorktreeOpenedEvent(requiredEnv("HERDR_PLUGIN_EVENT_JSON"))
   );
 }
@@ -874,7 +988,7 @@ async function watchContext(): Promise<void> {
     requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
     "pr"
   );
-  await watchPullRequestStatus({
+  await watchWorkspaceStatus({
     workspaceId: context.workspaceId,
     cwd: context.cwd,
   });
@@ -887,12 +1001,13 @@ async function refreshFocusedWorkspace(): Promise<void> {
   const target = await loadWorkspaceTarget(workspaceId);
   if (!target) return;
 
+  await refreshGitDiffStatus(target);
   try {
     await refreshPullRequestStatus(target);
-    await watchPullRequestStatus(target);
   } catch {
-    // Spaces without a linked pull request do not need a watcher.
+    // Spaces without a linked pull request still report Git changes.
   }
+  await watchWorkspaceStatus(target);
 }
 
 async function openPullRequest(): Promise<void> {
