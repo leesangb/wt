@@ -8,6 +8,7 @@ import {
   encodeLaunchContext,
   parsePluginContext,
   parseWtJsonOutput,
+  streamAndCaptureOutput,
 } from "./index.js";
 
 describe("wt Herdr plugin", () => {
@@ -124,5 +125,44 @@ describe("wt Herdr plugin", () => {
       path: "/tmp/repo-feature-a",
       branch: "feature/a",
     });
+  });
+
+  test("forwards wt output before the command finishes while retaining it for parsing", async () => {
+    const encoder = new TextEncoder();
+    let finishStream = () => {};
+    let markFirstWrite = () => {};
+    const firstWrite = new Promise<void>((resolve) => {
+      markFirstWrite = resolve;
+    });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("Creating worktree...\n"));
+        finishStream = () => {
+          controller.enqueue(
+            encoder.encode(
+              '{"id":"feature-a","path":"/tmp/feature-a","branch":"feature/a"}\n'
+            )
+          );
+          controller.close();
+        };
+      },
+    });
+    const forwarded: string[] = [];
+
+    const capturedOutput = streamAndCaptureOutput(stream, {
+      write(chunk) {
+        forwarded.push(new TextDecoder().decode(chunk));
+        markFirstWrite();
+        return true;
+      },
+    });
+
+    await firstWrite;
+    expect(forwarded).toEqual(["Creating worktree...\n"]);
+
+    finishStream();
+    expect(await capturedOutput).toBe(
+      'Creating worktree...\n{"id":"feature-a","path":"/tmp/feature-a","branch":"feature/a"}\n'
+    );
   });
 });

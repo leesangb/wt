@@ -98,9 +98,32 @@ export function parseWtJsonOutput(output: string): WtJsonResult {
   throw new Error("wt did not return a worktree JSON result");
 }
 
+export async function streamAndCaptureOutput(
+  stream: ReadableStream<Uint8Array>,
+  output: { write(chunk: Uint8Array): unknown }
+): Promise<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let captured = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    output.write(value);
+    captured += decoder.decode(value, { stream: true });
+  }
+
+  return captured + decoder.decode();
+}
+
 async function run(
   command: string[],
-  options: { cwd?: string; capture?: boolean } = {}
+  options: {
+    cwd?: string;
+    capture?: boolean;
+    streamCapturedOutput?: boolean;
+  } = {}
 ): Promise<string> {
   const proc = spawn(command, {
     cwd: options.cwd,
@@ -109,7 +132,14 @@ async function run(
     stdout: options.capture ? "pipe" : "inherit",
     stderr: "inherit",
   });
-  const stdout = options.capture ? await new Response(proc.stdout).text() : "";
+  const stdout = options.capture
+    ? options.streamCapturedOutput
+      ? await streamAndCaptureOutput(
+          proc.stdout as ReadableStream<Uint8Array>,
+          process.stdout
+        )
+      : await new Response(proc.stdout).text()
+    : "";
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
@@ -493,6 +523,7 @@ async function runUi(): Promise<void> {
     const output = await run(wtArgs, {
       cwd: context.cwd,
       capture: true,
+      streamCapturedOutput: true,
     });
     const result = parseWtJsonOutput(output);
     const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
