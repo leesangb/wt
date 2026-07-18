@@ -1,4 +1,14 @@
 import { spawn } from "bun";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
+import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
 
 export type WtMode = "new" | "checkout" | "pr";
 
@@ -34,6 +44,22 @@ interface PullRequest {
   isDraft: boolean;
 }
 
+export interface PullRequestDetails {
+  number: number;
+  url: string;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  isDraft: boolean;
+}
+
+interface CheckStatus {
+  bucket: "pass" | "fail" | "pending" | "skipping" | "cancel";
+}
+
+interface WorkspaceWatchTarget {
+  workspaceId: string;
+  cwd: string;
+}
+
 interface HerdrWorktreeList {
   result: {
     source: { source_workspace_id: string };
@@ -49,6 +75,11 @@ interface HerdrWorktreeList {
 
 const ANSI_GRAY = "\x1b[90m";
 const ANSI_RESET = "\x1b[0m";
+const METADATA_SOURCE = "wt:github";
+const METADATA_TTL_MS = 600_000;
+const STABLE_REFRESH_INTERVAL_MS = 300_000;
+const RETRY_INTERVAL_MS = 60_000;
+const CHECK_WATCH_INTERVAL_SECONDS = 10;
 
 interface PullRequestColumnWidths {
   number: number;
@@ -162,6 +193,110 @@ async function capture(command: string[], cwd: string): Promise<string> {
   }
 
   return stdout;
+}
+
+async function captureWithExitCodes(
+  command: string[],
+  cwd: string,
+  acceptedExitCodes: number[]
+): Promise<string> {
+  const proc = spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  if (!acceptedExitCodes.includes(exitCode)) {
+    throw new Error(stderr.trim() || `${command[0]} exited with code ${exitCode}`);
+  }
+
+  return stdout;
+}
+
+export function parsePullRequestDetails(json: string): PullRequestDetails {
+  const value = JSON.parse(json) as Partial<PullRequestDetails>;
+
+  if (
+    typeof value.number !== "number" ||
+    typeof value.url !== "string" ||
+    !["OPEN", "MERGED", "CLOSED"].includes(value.state ?? "") ||
+    typeof value.isDraft !== "boolean"
+  ) {
+    throw new Error("GitHub returned invalid pull request details");
+  }
+
+  return value as PullRequestDetails;
+}
+
+export function pullRequestStatusToken(pullRequest: PullRequestDetails): string {
+  const indicator =
+    pullRequest.state === "MERGED"
+      ? "🟣"
+      : pullRequest.state === "CLOSED"
+        ? "🔴"
+        : pullRequest.isDraft
+          ? "⚪"
+          : "🟢";
+
+  return `${indicator} #${pullRequest.number}`;
+}
+
+export function ciStatusToken(json: string): string | undefined {
+  const checks = JSON.parse(json) as CheckStatus[];
+  if (!Array.isArray(checks) || checks.length === 0) return undefined;
+
+  if (checks.some(({ bucket }) => bucket === "fail" || bucket === "cancel")) {
+    return "❌";
+  }
+  if (checks.some(({ bucket }) => bucket === "pending")) {
+    return "🟡";
+  }
+  if (checks.every(({ bucket }) => bucket === "pass" || bucket === "skipping")) {
+    return "✅";
+  }
+
+  return "🟡";
+}
+
+export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
+  const envelope = JSON.parse(json) as {
+    workspace?: {
+      workspace_id?: string;
+      worktree?: { checkout_path?: string };
+    };
+    worktree?: { path?: string };
+    event?: {
+      workspace?: {
+        workspace_id?: string;
+        worktree?: { checkout_path?: string };
+      };
+      worktree?: { path?: string };
+    };
+  };
+  const event = envelope.event ?? envelope;
+  const workspaceId = event.workspace?.workspace_id;
+  const cwd = event.worktree?.path ?? event.workspace?.worktree?.checkout_path;
+
+  if (!workspaceId || !cwd) {
+    throw new Error("Herdr worktree event is missing workspace context");
+  }
+
+  return { workspaceId, cwd };
+}
+
+export function parseWorkspaceFocusedEvent(json: string): string {
+  const envelope = JSON.parse(json) as {
+    workspace_id?: string;
+    event?: { workspace_id?: string };
+  };
+  const workspaceId = envelope.event?.workspace_id ?? envelope.workspace_id;
+
+  if (!workspaceId) {
+    throw new Error("Herdr workspace event is missing a workspace id");
+  }
+
+  return workspaceId;
 }
 
 export function buildBaseBranchChoices(refs: string): BranchRef[] {
@@ -498,6 +633,277 @@ async function openAll(): Promise<void> {
   await run([herdr, "notification", "show", "wt", "--body", body]);
 }
 
+async function loadPullRequestDetails(cwd: string): Promise<PullRequestDetails> {
+  const meta = await readWorktreeMeta(cwd);
+  const args = ["gh", "pr", "view"];
+  if (meta?.prNumber) args.push(meta.prNumber);
+  args.push("--json", "number,url,state,isDraft");
+
+  return parsePullRequestDetails(await capture(args, cwd));
+}
+
+async function loadCiStatus(
+  pullRequest: PullRequestDetails,
+  cwd: string
+): Promise<string | undefined> {
+  const json = await captureWithExitCodes(
+    [
+      "gh",
+      "pr",
+      "checks",
+      String(pullRequest.number),
+      "--json",
+      "bucket",
+    ],
+    cwd,
+    [0, 8]
+  );
+
+  return ciStatusToken(json);
+}
+
+async function reportPullRequestStatus(
+  target: WorkspaceWatchTarget,
+  pullRequest: PullRequestDetails,
+  ci: string | undefined | null
+): Promise<void> {
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+  const args = [
+    herdr,
+    "workspace",
+    "report-metadata",
+    target.workspaceId,
+    "--source",
+    METADATA_SOURCE,
+    "--token",
+    `pr=${pullRequestStatusToken(pullRequest)}`,
+    "--seq",
+    String(Date.now()),
+    "--ttl-ms",
+    String(METADATA_TTL_MS),
+  ];
+  if (ci !== null) {
+    args.push(ci ? "--token" : "--clear-token", ci ? `ci=${ci}` : "ci");
+  }
+
+  await captureWithExitCodes(args, target.cwd, [0]);
+}
+
+async function workspaceExists(target: WorkspaceWatchTarget): Promise<boolean> {
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+
+  try {
+    await captureWithExitCodes(
+      [herdr, "workspace", "get", target.workspaceId],
+      target.cwd,
+      [0]
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadWorkspaceTarget(
+  workspaceId: string
+): Promise<WorkspaceWatchTarget | undefined> {
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+  const json = await captureWithExitCodes(
+    [herdr, "workspace", "get", workspaceId],
+    process.cwd(),
+    [0]
+  );
+  const response = JSON.parse(json) as {
+    result?: {
+      workspace?: {
+        workspace_id?: string;
+        worktree?: { checkout_path?: string };
+      };
+    };
+  };
+  const workspace = response.result?.workspace;
+
+  if (!workspace?.workspace_id || !workspace.worktree?.checkout_path) {
+    return undefined;
+  }
+
+  return {
+    workspaceId: workspace.workspace_id,
+    cwd: workspace.worktree.checkout_path,
+  };
+}
+
+function watcherLockPath(workspaceId: string): string {
+  const stateDir = requiredEnv("HERDR_PLUGIN_STATE_DIR");
+  mkdirSync(stateDir, { recursive: true });
+  return join(stateDir, `github-status-${workspaceId.replaceAll(/[^A-Za-z0-9_-]/g, "-")}.pid`);
+}
+
+function processIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function acquireWatcherLock(workspaceId: string): (() => void) | undefined {
+  const lockPath = watcherLockPath(workspaceId);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const fd = openSync(lockPath, "wx");
+      writeFileSync(fd, String(process.pid));
+      closeSync(fd);
+
+      return () => {
+        try {
+          if (readFileSync(lockPath, "utf8").trim() === String(process.pid)) {
+            unlinkSync(lockPath);
+          }
+        } catch {}
+      };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw error;
+
+      try {
+        const existingPid = Number(readFileSync(lockPath, "utf8").trim());
+        if (Number.isInteger(existingPid) && processIsRunning(existingPid)) {
+          return undefined;
+        }
+        unlinkSync(lockPath);
+      } catch {
+        try {
+          unlinkSync(lockPath);
+        } catch {}
+      }
+    }
+  }
+
+  return undefined;
+}
+
+async function refreshPullRequestStatus(
+  target: WorkspaceWatchTarget
+): Promise<{ pullRequest: PullRequestDetails; ci: string | undefined | null }> {
+  const pullRequest = await loadPullRequestDetails(target.cwd);
+  let ci: string | undefined | null;
+
+  try {
+    ci = await loadCiStatus(pullRequest, target.cwd);
+  } catch {
+    // Keep the existing CI token until its TTL expires after a transient request failure.
+    ci = null;
+  }
+
+  await reportPullRequestStatus(target, pullRequest, ci);
+  return { pullRequest, ci };
+}
+
+async function waitForPendingChecks(
+  pullRequest: PullRequestDetails,
+  cwd: string
+): Promise<void> {
+  await captureWithExitCodes(
+    [
+      "gh",
+      "pr",
+      "checks",
+      String(pullRequest.number),
+      "--watch",
+      "--interval",
+      String(CHECK_WATCH_INTERVAL_SECONDS),
+      "--json",
+      "bucket",
+    ],
+    cwd,
+    [0, 1]
+  );
+}
+
+async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<void> {
+  const releaseLock = acquireWatcherLock(target.workspaceId);
+  if (!releaseLock) return;
+
+  const stop = () => {
+    releaseLock();
+    process.exit(0);
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  let consecutiveFailures = 0;
+
+  try {
+    while (await workspaceExists(target)) {
+      try {
+        const status = await refreshPullRequestStatus(target);
+        consecutiveFailures = 0;
+        if (status.ci === "🟡") {
+          try {
+            await waitForPendingChecks(status.pullRequest, target.cwd);
+          } catch {}
+          continue;
+        }
+        await Bun.sleep(STABLE_REFRESH_INTERVAL_MS);
+      } catch {
+        // Metadata has a TTL, so stale GitHub data disappears during outages.
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 3) break;
+        await Bun.sleep(RETRY_INTERVAL_MS);
+      }
+    }
+  } finally {
+    releaseLock();
+  }
+}
+
+async function watchEvent(): Promise<void> {
+  await watchPullRequestStatus(
+    parseWorktreeOpenedEvent(requiredEnv("HERDR_PLUGIN_EVENT_JSON"))
+  );
+}
+
+async function watchContext(): Promise<void> {
+  const context = parsePluginContext(
+    requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
+    "pr"
+  );
+  await watchPullRequestStatus({
+    workspaceId: context.workspaceId,
+    cwd: context.cwd,
+  });
+}
+
+async function refreshFocusedWorkspace(): Promise<void> {
+  const workspaceId = parseWorkspaceFocusedEvent(
+    requiredEnv("HERDR_PLUGIN_EVENT_JSON")
+  );
+  const target = await loadWorkspaceTarget(workspaceId);
+  if (!target) return;
+
+  try {
+    await refreshPullRequestStatus(target);
+    await watchPullRequestStatus(target);
+  } catch {
+    // Spaces without a linked pull request do not need a watcher.
+  }
+}
+
+async function openPullRequest(): Promise<void> {
+  const context = parsePluginContext(
+    requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
+    "pr"
+  );
+  const pullRequest = await loadPullRequestDetails(context.cwd);
+
+  await run(
+    ["gh", "pr", "view", String(pullRequest.number), "--web"],
+    { cwd: context.cwd }
+  );
+}
+
 async function runUi(): Promise<void> {
   const context = decodeLaunchContext(requiredEnv("WT_HERDR_CONTEXT"));
 
@@ -562,8 +968,26 @@ async function main(): Promise<void> {
     await openAll();
     return;
   }
+  if (command === "watch-event") {
+    await watchEvent();
+    return;
+  }
+  if (command === "watch-context") {
+    await watchContext();
+    return;
+  }
+  if (command === "refresh-focused") {
+    await refreshFocusedWorkspace();
+    return;
+  }
+  if (command === "open-pr") {
+    await openPullRequest();
+    return;
+  }
 
-  throw new Error("Usage: wt-herdr launch <new|checkout|pr> | ui | open-all");
+  throw new Error(
+    "Usage: wt-herdr launch <new|checkout|pr> | ui | open-all | watch-event | watch-context | refresh-focused | open-pr"
+  );
 }
 
 if (import.meta.main) {

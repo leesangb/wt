@@ -73,12 +73,45 @@ herdr plugin install leesangb/wt
 - `wt.herdr.checkout` — 기존 로컬 브랜치를 worktree로 열기
 - `wt.herdr.pr` — Pull Request worktree 생성 또는 재사용
 - `wt.herdr.open-all` — 아직 열리지 않은 기존 checkout 모두 열기
+- `wt.herdr.open-pr` — 선택한 Space의 Pull Request를 브라우저에서 열기
+- `wt.herdr.watch-pr` — 기존 Space의 Pull Request 라이브 상태 시작
 
 새 worktree 액션은 새 브랜치에 일반 텍스트 입력을, base branch에 `fzf`를
 사용합니다. Checkout은 로컬 브랜치를 보여주고, PR은 열린 GitHub PR의 제목,
 작성자, head branch, Draft 상태를 보여줍니다. 어느 단계에서든 `Esc`를 누르면
 취소됩니다. `fzf`가 `PATH`에 있어야 하며 PR picker에는 인증된 GitHub CLI
 (`gh`)가 필요합니다.
+
+새로 연 worktree Space는 연결된 Pull Request와 CI 상태를 자동으로 감시합니다.
+확장된 Space 행에 메타데이터 토큰을 추가하세요:
+
+```toml
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace"],
+  ["branch", "git_status"],
+  ["$pr", "$ci"],
+]
+```
+
+Pull Request는 Open이면 `🟢 #123`, Draft이면 `⚪ #123`, Merge되면
+`🟣 #123`, 닫히면 `🔴 #123`으로 표시됩니다. CI 상태는 `✅`, `🟡`,
+`❌` 중 하나로만 표시됩니다. 플러그인을 설치하거나 Herdr 서버를 재시작하기
+전에 이미 열려 있던 Space에서는 `wt.herdr.watch-pr`을 한 번 실행하세요. 진행 중인
+check는 GitHub CLI watch mode로 완료 즉시 갱신됩니다. Space를 focus하면 바로
+새로고침하며, 안정 상태에서는 5분 간격으로만 안전 확인하고 장애 중에는 오래된
+값이 만료됩니다.
+
+Herdr 메타데이터 토큰은 표시 전용이므로 선택한 Space의 PR로 이동할 때는
+`wt.herdr.open-pr` 액션을 사용합니다. 원하면 단축키를 바로 연결할 수 있습니다:
+
+```toml
+[[keys.command]]
+key = "prefix+alt+o"
+type = "plugin_action"
+command = "wt.herdr.open-pr"
+description = "Open this Space's pull request"
+```
 
 Herdr pane 안에서 `wt new`, `wt checkout`, `wt pr`을 실행하면 결과 checkout을
 Herdr worktree workspace로 즉시 열고 focus합니다. `--no-cd`를 사용하면 workspace를
@@ -102,7 +135,7 @@ herdr server reload-config
 ```
 
 설치된 플러그인은 같은 revision의 `wt` 소스를 직접 빌드해서 사용하므로 별도로
-설치된 `wt` 바이너리에 의존하지 않습니다. 플러그인 설치 시 Herdr `>= 0.7.0`과
+설치된 `wt` 바이너리에 의존하지 않습니다. 플러그인 설치 시 Herdr `>= 0.7.4`과
 Bun이 필요합니다.
 
 ### 수동 Shell 통합 (선택사항)

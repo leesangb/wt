@@ -1,8 +1,8 @@
 id = "wt.herdr"
 name = "wt for Herdr"
-version = "0.6.0"
-min_herdr_version = "0.7.0"
-description = "Create and open wt-managed Git worktrees as grouped Herdr workspaces."
+version = "0.7.0"
+min_herdr_version = "0.7.4"
+description = "Manage wt worktrees in Herdr with live GitHub pull request and CI status."
 platforms = ["linux", "macos"]
 
 [[build]]
@@ -31,6 +31,26 @@ id = "open-all"
 title = "wt: Open all existing worktrees"
 contexts = ["workspace"]
 command = ["./.herdr-plugin/bin/wt-herdr", "open-all"]
+
+[[actions]]
+id = "open-pr"
+title = "wt: Open pull request in browser"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "open-pr"]
+
+[[actions]]
+id = "watch-pr"
+title = "wt: Watch pull request status"
+contexts = ["workspace"]
+command = ["./.herdr-plugin/bin/wt-herdr", "watch-context"]
+
+[[events]]
+on = "worktree.opened"
+command = ["./.herdr-plugin/bin/wt-herdr", "watch-event"]
+
+[[events]]
+on = "workspace.focused"
+command = ["./.herdr-plugin/bin/wt-herdr", "refresh-focused"]
 
 [[panes]]
 id = "create"

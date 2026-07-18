@@ -4,10 +4,15 @@ import {
   buildBaseBranchChoices,
   buildPullRequestChoices,
   buildPullRequestHeader,
+  ciStatusToken,
   closedLinkedWorktrees,
   encodeLaunchContext,
+  parsePullRequestDetails,
+  parseWorkspaceFocusedEvent,
+  parseWorktreeOpenedEvent,
   parsePluginContext,
   parseWtJsonOutput,
+  pullRequestStatusToken,
   streamAndCaptureOutput,
 } from "./index.js";
 
@@ -164,5 +169,67 @@ describe("wt Herdr plugin", () => {
     expect(await capturedOutput).toBe(
       'Creating worktree...\n{"id":"feature-a","path":"/tmp/feature-a","branch":"feature/a"}\n'
     );
+  });
+
+  test("maps GitHub pull request states to compact colored indicators", () => {
+    expect(
+      pullRequestStatusToken(
+        parsePullRequestDetails(
+          '{"number":123,"url":"https://github.com/acme/app/pull/123","state":"OPEN","isDraft":false}'
+        )
+      )
+    ).toBe("🟢 #123");
+    expect(
+      pullRequestStatusToken(
+        parsePullRequestDetails(
+          '{"number":123,"url":"https://github.com/acme/app/pull/123","state":"OPEN","isDraft":true}'
+        )
+      )
+    ).toBe("⚪ #123");
+    expect(
+      pullRequestStatusToken(
+        parsePullRequestDetails(
+          '{"number":123,"url":"https://github.com/acme/app/pull/123","state":"MERGED","isDraft":false}'
+        )
+      )
+    ).toBe("🟣 #123");
+    expect(
+      pullRequestStatusToken(
+        parsePullRequestDetails(
+          '{"number":123,"url":"https://github.com/acme/app/pull/123","state":"CLOSED","isDraft":false}'
+        )
+      )
+    ).toBe("🔴 #123");
+  });
+
+  test("reduces check buckets to one CI status symbol", () => {
+    expect(ciStatusToken('[{"bucket":"pass"},{"bucket":"skipping"}]')).toBe("✅");
+    expect(ciStatusToken('[{"bucket":"pass"},{"bucket":"pending"}]')).toBe("🟡");
+    expect(ciStatusToken('[{"bucket":"pass"},{"bucket":"fail"}]')).toBe("❌");
+    expect(ciStatusToken('[{"bucket":"cancel"}]')).toBe("❌");
+    expect(ciStatusToken("[]")).toBeUndefined();
+  });
+
+  test("extracts the opened workspace and checkout from a Herdr event", () => {
+    expect(
+      parseWorktreeOpenedEvent(
+        JSON.stringify({
+          type: "worktree_opened",
+          workspace: {
+            workspace_id: "w3",
+            worktree: { checkout_path: "/worktrees/pr-123" },
+          },
+          worktree: { path: "/worktrees/pr-123" },
+        })
+      )
+    ).toEqual({ workspaceId: "w3", cwd: "/worktrees/pr-123" });
+  });
+
+  test("extracts a workspace id from a focused event envelope", () => {
+    expect(
+      parseWorkspaceFocusedEvent(
+        JSON.stringify({ event: { type: "workspace_focused", workspace_id: "w7" } })
+      )
+    ).toBe("w7");
   });
 });
