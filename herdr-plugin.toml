@@ -6,6 +6,9 @@ description = "Manage wt worktrees in Herdr with live GitHub pull request and CI
 platforms = ["linux", "macos"]
 
 [[build]]
+command = ["bun", "install", "--frozen-lockfile"]
+
+[[build]]
 command = ["bun", "run", "build:herdr-plugin"]
 
 [[actions]]
