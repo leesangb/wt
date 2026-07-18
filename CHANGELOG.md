@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.10.0
+
+### Minor Changes
+
+- 5f44920: Keep an installed wt Herdr plugin in sync with the wt release selected by `wt update`.
+
 ## 0.9.0
 
 ### Minor Changes
