@@ -108,6 +108,11 @@ GitHub CLI's watch mode and update as soon as they finish. Focusing a Space
 refreshes it immediately; stable states use a five-minute safety refresh, and
 stale values expire during an outage.
 
+These intervals can be customized with `herdr.refresh` settings. Values are in
+seconds; focused, background, and pull request refreshes have safe minimums of
+5, 30, and 60 seconds respectively. Settings are re-read while watchers run,
+and focusing a Space always triggers an immediate refresh.
+
 Herdr metadata tokens are display-only, so open the selected Space's pull
 request with the `wt.herdr.open-pr` action. You can optionally bind it directly:
 
@@ -419,6 +424,9 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
 - **herdr.closeWorkspaceOnRemove**: Close the associated Herdr workspace after `wt rm` (default: `true`)
+- **herdr.refresh.focusedSeconds**: Git diff refresh interval for a focused Herdr Space (default: `30`, minimum: `5`)
+- **herdr.refresh.backgroundSeconds**: Git diff refresh interval for a background Herdr Space (default: `300`, minimum: `30`)
+- **herdr.refresh.pullRequestSeconds**: Safety refresh interval for stable pull request and CI status (default: `300`, minimum: `60`)
 - **issue.pattern**: Optional JavaScript regular expression for extracting issue keys from branch names
 - **issue.url**: Optional issue tracker URL template. Use `$issue` where the extracted key should appear
 
@@ -449,7 +457,12 @@ Example `.wt/settings.local.json`:
     "postMode": "sync"
   },
   "herdr": {
-    "closeWorkspaceOnRemove": false
+    "closeWorkspaceOnRemove": false,
+    "refresh": {
+      "focusedSeconds": 15,
+      "backgroundSeconds": 600,
+      "pullRequestSeconds": 600
+    }
   }
 }
 ```

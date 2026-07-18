@@ -70,6 +70,35 @@ describe("mergeSettingsInputs", () => {
       },
     });
   });
+
+  test("merges local Herdr refresh overrides without dropping shared intervals", () => {
+    expect(
+      mergeSettingsInputs(
+        {
+          herdr: {
+            refresh: {
+              focusedSeconds: 20,
+              backgroundSeconds: 240,
+            },
+          },
+        },
+        {
+          herdr: {
+            refresh: {
+              backgroundSeconds: 600,
+            },
+          },
+        }
+      )
+    ).toEqual({
+      herdr: {
+        refresh: {
+          focusedSeconds: 20,
+          backgroundSeconds: 600,
+        },
+      },
+    });
+  });
 });
 
 describe("normalizeSettings", () => {
@@ -100,6 +129,11 @@ describe("normalizeSettings", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });
@@ -127,6 +161,11 @@ describe("normalizeSettings", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });
@@ -154,6 +193,47 @@ describe("normalizeSettings", () => {
       }).herdr
     ).toEqual({
       closeWorkspaceOnRemove: false,
+      refresh: {
+        focusedSeconds: 30,
+        backgroundSeconds: 300,
+        pullRequestSeconds: 300,
+      },
+    });
+  });
+
+  test("normalizes configurable Herdr refresh intervals in seconds", () => {
+    expect(
+      normalizeSettings({
+        herdr: {
+          refresh: {
+            focusedSeconds: 12,
+            backgroundSeconds: 90,
+            pullRequestSeconds: 120,
+          },
+        },
+      }).herdr.refresh
+    ).toEqual({
+      focusedSeconds: 12,
+      backgroundSeconds: 90,
+      pullRequestSeconds: 120,
+    });
+  });
+
+  test("clamps Herdr refresh intervals to safe minimums", () => {
+    expect(
+      normalizeSettings({
+        herdr: {
+          refresh: {
+            focusedSeconds: 1,
+            backgroundSeconds: 2,
+            pullRequestSeconds: 3,
+          },
+        },
+      }).herdr.refresh
+    ).toEqual({
+      focusedSeconds: 5,
+      backgroundSeconds: 30,
+      pullRequestSeconds: 60,
     });
   });
 
@@ -177,6 +257,11 @@ describe("normalizeSettings", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });

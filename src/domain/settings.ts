@@ -16,8 +16,15 @@ export interface WtIssueSettings {
   url: string;
 }
 
+export interface WtHerdrRefreshSettings {
+  focusedSeconds: number;
+  backgroundSeconds: number;
+  pullRequestSeconds: number;
+}
+
 export interface WtHerdrSettings {
   closeWorkspaceOnRemove: boolean;
+  refresh: WtHerdrRefreshSettings;
 }
 
 export interface WtSettings {
@@ -31,13 +38,18 @@ export interface WtSettings {
 }
 
 export type WtCopySettingsInput = string[] | Partial<WtCopySettings>;
+export type WtHerdrSettingsInput = Partial<
+  Omit<WtHerdrSettings, "refresh">
+> & {
+  refresh?: Partial<WtHerdrRefreshSettings>;
+};
 
 export type WtSettingsInput = Partial<
   Omit<WtSettings, "copy" | "scripts" | "herdr" | "issue">
 > & {
   copy?: WtCopySettingsInput;
   scripts?: Partial<WtScriptsSettings>;
-  herdr?: Partial<WtHerdrSettings>;
+  herdr?: WtHerdrSettingsInput;
   issue?: Partial<WtIssueSettings>;
 };
 
@@ -56,6 +68,11 @@ export const DEFAULT_WT_SETTINGS: WtSettings = {
   },
   herdr: {
     closeWorkspaceOnRemove: true,
+    refresh: {
+      focusedSeconds: 30,
+      backgroundSeconds: 300,
+      pullRequestSeconds: 300,
+    },
   },
 };
 
@@ -86,6 +103,16 @@ function normalizeIssueInput(
     pattern: input.pattern,
     url: input.url,
   };
+}
+
+function normalizeRefreshSeconds(
+  value: number | undefined,
+  fallback: number,
+  minimum: number
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(minimum, Math.floor(value))
+    : fallback;
 }
 
 export function mergeSettingsInputs(
@@ -119,11 +146,19 @@ export function mergeSettingsInputs(
           ...override?.issue,
         }
       : undefined;
+  const mergedHerdrRefresh =
+    base?.herdr?.refresh || override?.herdr?.refresh
+      ? {
+          ...base?.herdr?.refresh,
+          ...override?.herdr?.refresh,
+        }
+      : undefined;
   const mergedHerdr =
     base?.herdr || override?.herdr
       ? {
           ...base?.herdr,
           ...override?.herdr,
+          ...(mergedHerdrRefresh ? { refresh: mergedHerdrRefresh } : {}),
         }
       : undefined;
 
@@ -161,6 +196,23 @@ export function normalizeSettings(
       closeWorkspaceOnRemove:
         input?.herdr?.closeWorkspaceOnRemove ??
         DEFAULT_WT_SETTINGS.herdr.closeWorkspaceOnRemove,
+      refresh: {
+        focusedSeconds: normalizeRefreshSeconds(
+          input?.herdr?.refresh?.focusedSeconds,
+          DEFAULT_WT_SETTINGS.herdr.refresh.focusedSeconds,
+          5
+        ),
+        backgroundSeconds: normalizeRefreshSeconds(
+          input?.herdr?.refresh?.backgroundSeconds,
+          DEFAULT_WT_SETTINGS.herdr.refresh.backgroundSeconds,
+          30
+        ),
+        pullRequestSeconds: normalizeRefreshSeconds(
+          input?.herdr?.refresh?.pullRequestSeconds,
+          DEFAULT_WT_SETTINGS.herdr.refresh.pullRequestSeconds,
+          60
+        ),
+      },
     },
     ...(issueInput ? { issue: issueInput } : {}),
   };
