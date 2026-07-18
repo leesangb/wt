@@ -73,7 +73,7 @@ export async function installHerdrPlugin(
 ): Promise<InstallHerdrPluginResult> {
   try {
     const herdr = env.HERDR_BIN_PATH ?? "herdr";
-    const proc = spawn([herdr, "plugin", "install", repository], {
+    const proc = spawn([herdr, "plugin", "install", repository, "--yes"], {
       env,
       stdout: "inherit",
       stderr: "inherit",
