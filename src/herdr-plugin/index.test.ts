@@ -214,12 +214,16 @@ describe("wt Herdr plugin", () => {
     expect(
       parseWorktreeOpenedEvent(
         JSON.stringify({
-          type: "worktree_opened",
-          workspace: {
-            workspace_id: "w3",
-            worktree: { checkout_path: "/worktrees/pr-123" },
+          event: "worktree_opened",
+          data: {
+            type: "worktree_opened",
+            workspace: {
+              workspace_id: "w3",
+              worktree: { checkout_path: "/worktrees/pr-123" },
+            },
+            worktree: { path: "/worktrees/pr-123" },
+            already_open: false,
           },
-          worktree: { path: "/worktrees/pr-123" },
         })
       )
     ).toEqual({ workspaceId: "w3", cwd: "/worktrees/pr-123" });
@@ -228,7 +232,10 @@ describe("wt Herdr plugin", () => {
   test("extracts a workspace id from a focused event envelope", () => {
     expect(
       parseWorkspaceFocusedEvent(
-        JSON.stringify({ event: { type: "workspace_focused", workspace_id: "w7" } })
+        JSON.stringify({
+          event: "workspace_focused",
+          data: { type: "workspace_focused", workspace_id: "w7" },
+        })
       )
     ).toBe("w7");
   });
