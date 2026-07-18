@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.11.2
+
+### Patch Changes
+
+- b2b3fed: Allow the Herdr base-branch picker to accept an exact existing Git ref even when fzf has no displayed match.
+
 ## 0.11.1
 
 ### Patch Changes
