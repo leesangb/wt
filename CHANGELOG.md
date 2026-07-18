@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.11.0
+
+### Minor Changes
+
+- 031592b: Allow Herdr Git diff and pull request refresh intervals to be configured per repository.
+
 ## 0.10.0
 
 ### Minor Changes
