@@ -92,10 +92,13 @@ wt herdr install
 rows = [
   ["state_icon", "workspace"],
   ["branch", "git_status"],
+  ["$diff"],
   ["$pr", "$ci"],
 ]
 ```
 
+`$diff`는 tracked 파일의 줄 변경과 untracked 파일 수를 `+24 -7 ?2`처럼
+표시하며, Space가 열려 있는 동안 2초마다 갱신됩니다.
 Pull Request는 Open이면 `🟢 #123`, Draft이면 `⚪ #123`, Merge되면
 `🟣 #123`, 닫히면 `🔴 #123`으로 표시됩니다. CI 상태는 `✅`, `🟡`,
 `❌` 중 하나로만 표시됩니다. 플러그인을 설치하거나 Herdr 서버를 재시작하기
