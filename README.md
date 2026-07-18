@@ -81,8 +81,10 @@ The plugin provides these actions:
 The new-worktree action uses a text prompt for the new branch and `fzf` for the
 base branch. Checkout lists local branches, while PR lists open GitHub pull
 requests with title, author, head branch, and draft status. Press `Esc` at any
-step to cancel. The plugin requires `fzf` on `PATH`, and the PR picker requires
-an authenticated GitHub CLI (`gh`).
+step to cancel. In the base-branch picker, an exact existing ref such as
+`origin/main` is accepted even when it does not match the displayed choices.
+The plugin requires `fzf` on `PATH`, and the PR picker requires an authenticated
+GitHub CLI (`gh`).
 
 Newly opened worktree Spaces automatically watch their linked pull request and
 CI status. Add the metadata tokens to the expanded Space rows:

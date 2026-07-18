@@ -42,6 +42,11 @@ interface BranchRef {
   local: boolean;
 }
 
+interface FzfResult {
+  output: string;
+  exitCode: number;
+}
+
 interface PullRequest {
   number: number;
   title: string;
@@ -379,6 +384,32 @@ export function buildBaseBranchChoices(refs: string): BranchRef[] {
   return [...choices.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function resolveBaseBranchSelection(
+  refs: string,
+  output: string,
+  exitCode: number
+): string | undefined {
+  const lines = output.trimEnd().split(/\r?\n/);
+
+  if (exitCode === 0) {
+    return lines[1]?.split("\t")[1];
+  }
+
+  if (exitCode !== 1) return undefined;
+
+  const query = lines[0]?.trim();
+  if (!query) return undefined;
+
+  const existingRefs = new Set(
+    refs
+      .split(/\r?\n/)
+      .map((ref) => ref.trim())
+      .filter((ref) => ref && !ref.endsWith("/HEAD"))
+  );
+
+  return existingRefs.has(query) ? query : undefined;
+}
+
 function fitColumn(value: string, width: number): string {
   if (Bun.stringWidth(value) <= width) {
     return value + " ".repeat(width - Bun.stringWidth(value));
@@ -480,11 +511,11 @@ export function closedLinkedWorktrees(json: string): Array<{
     .map(({ label, path }) => ({ label, path }));
 }
 
-async function fzf(
+async function runFzf(
   args: string[],
   input: string,
   cwd: string
-): Promise<string | undefined> {
+): Promise<FzfResult> {
   const proc = spawn(["fzf", ...args], {
     cwd,
     stdin: "pipe",
@@ -496,6 +527,16 @@ async function fzf(
 
   const output = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
+
+  return { output, exitCode };
+}
+
+async function fzf(
+  args: string[],
+  input: string,
+  cwd: string
+): Promise<string | undefined> {
+  const { output, exitCode } = await runFzf(args, input, cwd);
 
   if (exitCode === 130 || exitCode === 1) return undefined;
   if (exitCode !== 0) throw new Error(`fzf exited with code ${exitCode}`);
@@ -560,18 +601,27 @@ async function pickBaseBranch(cwd: string): Promise<string | undefined> {
     cwd
   );
   const choices = buildBaseBranchChoices(refs);
-  const selected = await fzf(
+  const result = await runFzf(
     [
       "--delimiter=\t",
       "--with-nth=1",
+      "--print-query",
       "--prompt=Base branch> ",
-      "--header=Enter: select · Esc: cancel",
+      "--header=Enter: select or accept exact ref · Esc: cancel",
     ],
     choices.map(({ name, ref }) => `${name}\t${ref}`).join("\n"),
     cwd
   );
 
-  return selected?.split("\t")[1];
+  if (
+    result.exitCode !== 0 &&
+    result.exitCode !== 1 &&
+    result.exitCode !== 130
+  ) {
+    throw new Error(`fzf exited with code ${result.exitCode}`);
+  }
+
+  return resolveBaseBranchSelection(refs, result.output, result.exitCode);
 }
 
 async function pickLocalBranch(cwd: string): Promise<string | undefined> {
