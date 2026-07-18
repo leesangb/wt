@@ -112,6 +112,11 @@ describe("settings store", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });
@@ -141,6 +146,11 @@ describe("settings store", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });
@@ -162,6 +172,13 @@ describe("settings store", () => {
         post: ["bun install"],
         postMode: "async",
       },
+      herdr: {
+        refresh: {
+          focusedSeconds: 20,
+          backgroundSeconds: 240,
+          pullRequestSeconds: 180,
+        },
+      },
     });
     writeJson(join(wtDir, "settings.local.json"), {
       baseBranch: "develop",
@@ -170,6 +187,11 @@ describe("settings store", () => {
       },
       scripts: {
         postMode: "sync",
+      },
+      herdr: {
+        refresh: {
+          backgroundSeconds: 600,
+        },
       },
     });
 
@@ -188,6 +210,11 @@ describe("settings store", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 20,
+          backgroundSeconds: 600,
+          pullRequestSeconds: 180,
+        },
       },
     });
   });
@@ -219,6 +246,11 @@ describe("settings store", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });
@@ -256,6 +288,11 @@ describe("settings store", () => {
       },
       herdr: {
         closeWorkspaceOnRemove: true,
+        refresh: {
+          focusedSeconds: 30,
+          backgroundSeconds: 300,
+          pullRequestSeconds: 300,
+        },
       },
     });
   });

@@ -8,6 +8,12 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import {
+  DEFAULT_WT_SETTINGS,
+  type WtHerdrRefreshSettings,
+} from "../domain/settings.js";
+import { getGitRoot } from "../infra/git/repository.js";
+import { loadSettings } from "../infra/storage/settings-store.js";
 import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
 
 export type WtMode = "new" | "checkout" | "pr";
@@ -77,11 +83,6 @@ const ANSI_GRAY = "\x1b[90m";
 const ANSI_RESET = "\x1b[0m";
 const METADATA_SOURCE = "wt:github";
 const GIT_METADATA_SOURCE = "wt:git";
-const METADATA_TTL_MS = 600_000;
-const GIT_METADATA_TTL_MS = 600_000;
-const FOCUSED_GIT_REFRESH_INTERVAL_MS = 30_000;
-const BACKGROUND_GIT_REFRESH_INTERVAL_MS = 300_000;
-const STABLE_REFRESH_INTERVAL_MS = 300_000;
 const RETRY_INTERVAL_MS = 60_000;
 const CHECK_WATCH_INTERVAL_SECONDS = 10;
 
@@ -290,10 +291,29 @@ export function gitDiffStatusToken(
   return tokens.length > 0 ? tokens.join(" ") : undefined;
 }
 
-export function gitDiffRefreshIntervalMs(focused: boolean): number {
-  return focused
-    ? FOCUSED_GIT_REFRESH_INTERVAL_MS
-    : BACKGROUND_GIT_REFRESH_INTERVAL_MS;
+export function gitDiffRefreshIntervalMs(
+  focused: boolean,
+  refresh: WtHerdrRefreshSettings = DEFAULT_WT_SETTINGS.herdr.refresh
+): number {
+  return (
+    (focused ? refresh.focusedSeconds : refresh.backgroundSeconds) * 1_000
+  );
+}
+
+export function pullRequestRefreshIntervalMs(
+  refresh: WtHerdrRefreshSettings = DEFAULT_WT_SETTINGS.herdr.refresh
+): number {
+  return refresh.pullRequestSeconds * 1_000;
+}
+
+export function refreshMetadataTtlMs(refreshIntervalMs: number): number {
+  return refreshIntervalMs * 2;
+}
+
+async function loadHerdrRefreshSettings(
+  cwd: string
+): Promise<WtHerdrRefreshSettings> {
+  return (await loadSettings(await getGitRoot(cwd))).herdr.refresh;
 }
 
 export function parseWorktreeOpenedEvent(json: string): WorkspaceWatchTarget {
@@ -706,7 +726,8 @@ async function loadCiStatus(
 async function reportPullRequestStatus(
   target: WorkspaceWatchTarget,
   pullRequest: PullRequestDetails,
-  ci: string | undefined | null
+  ci: string | undefined | null,
+  refresh: WtHerdrRefreshSettings
 ): Promise<void> {
   const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
   const args = [
@@ -721,7 +742,7 @@ async function reportPullRequestStatus(
     "--seq",
     String(Date.now()),
     "--ttl-ms",
-    String(METADATA_TTL_MS),
+    String(refreshMetadataTtlMs(pullRequestRefreshIntervalMs(refresh))),
   ];
   if (ci !== null) {
     args.push(ci ? "--token" : "--clear-token", ci ? `ci=${ci}` : "ci");
@@ -744,7 +765,8 @@ async function loadGitDiffStatus(cwd: string): Promise<string | undefined> {
 
 async function reportGitDiffStatus(
   target: WorkspaceWatchTarget,
-  status: string | undefined
+  status: string | undefined,
+  refresh: WtHerdrRefreshSettings
 ): Promise<void> {
   const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
   const args = [
@@ -759,16 +781,21 @@ async function reportGitDiffStatus(
     "--seq",
     String(Date.now()),
     "--ttl-ms",
-    String(GIT_METADATA_TTL_MS),
+    String(refreshMetadataTtlMs(gitDiffRefreshIntervalMs(false, refresh))),
   ];
 
   await captureWithExitCodes(args, target.cwd, [0]);
 }
 
 async function refreshGitDiffStatus(
-  target: WorkspaceWatchTarget
+  target: WorkspaceWatchTarget,
+  refresh: WtHerdrRefreshSettings
 ): Promise<void> {
-  await reportGitDiffStatus(target, await loadGitDiffStatus(target.cwd));
+  await reportGitDiffStatus(
+    target,
+    await loadGitDiffStatus(target.cwd),
+    refresh
+  );
 }
 
 async function loadWorkspaceState(
@@ -887,7 +914,8 @@ function acquireWatcherLock(
 }
 
 async function refreshPullRequestStatus(
-  target: WorkspaceWatchTarget
+  target: WorkspaceWatchTarget,
+  refresh: WtHerdrRefreshSettings
 ): Promise<{ pullRequest: PullRequestDetails; ci: string | undefined | null }> {
   const pullRequest = await loadPullRequestDetails(target.cwd);
   let ci: string | undefined | null;
@@ -899,7 +927,7 @@ async function refreshPullRequestStatus(
     ci = null;
   }
 
-  await reportPullRequestStatus(target, pullRequest, ci);
+  await reportPullRequestStatus(target, pullRequest, ci, refresh);
   return { pullRequest, ci };
 }
 
@@ -939,7 +967,8 @@ async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<voi
   try {
     while (await workspaceExists(target)) {
       try {
-        const status = await refreshPullRequestStatus(target);
+        const refresh = await loadHerdrRefreshSettings(target.cwd);
+        const status = await refreshPullRequestStatus(target, refresh);
         consecutiveFailures = 0;
         if (status.ci === "🟡") {
           try {
@@ -947,7 +976,7 @@ async function watchPullRequestStatus(target: WorkspaceWatchTarget): Promise<voi
           } catch {}
           continue;
         }
-        await Bun.sleep(STABLE_REFRESH_INTERVAL_MS);
+        await Bun.sleep(pullRequestRefreshIntervalMs(refresh));
       } catch {
         // Metadata has a TTL, so stale GitHub data disappears during outages.
         consecutiveFailures += 1;
@@ -979,14 +1008,16 @@ async function watchGitDiffStatus(
     while (true) {
       const workspace = await loadWorkspaceState(target);
       if (!workspace) break;
+      const refresh = await loadHerdrRefreshSettings(target.cwd);
 
       const now = Date.now();
       if (
         lastRefreshAt === 0 ||
-        now - lastRefreshAt >= gitDiffRefreshIntervalMs(workspace.focused)
+        now - lastRefreshAt >=
+          gitDiffRefreshIntervalMs(workspace.focused, refresh)
       ) {
         try {
-          await refreshGitDiffStatus(target);
+          await refreshGitDiffStatus(target, refresh);
           lastRefreshAt = Date.now();
           consecutiveFailures = 0;
         } catch {
@@ -994,7 +1025,7 @@ async function watchGitDiffStatus(
           if (consecutiveFailures >= 3) break;
         }
       }
-      await Bun.sleep(FOCUSED_GIT_REFRESH_INTERVAL_MS);
+      await Bun.sleep(gitDiffRefreshIntervalMs(true, refresh));
     }
   } finally {
     releaseLock();
@@ -1036,11 +1067,12 @@ async function refreshFocusedWorkspace(): Promise<void> {
   );
   const target = await loadWorkspaceTarget(workspaceId);
   if (!target) return;
+  const refresh = await loadHerdrRefreshSettings(target.cwd);
 
-  await refreshGitDiffStatus(target);
+  await refreshGitDiffStatus(target, refresh);
   const gitRefreshedAt = Date.now();
   try {
-    await refreshPullRequestStatus(target);
+    await refreshPullRequestStatus(target, refresh);
   } catch {
     // Spaces without a linked pull request still report Git changes.
   }

@@ -14,7 +14,9 @@ import {
   parseWorktreeOpenedEvent,
   parsePluginContext,
   parseWtJsonOutput,
+  pullRequestRefreshIntervalMs,
   pullRequestStatusToken,
+  refreshMetadataTtlMs,
   streamAndCaptureOutput,
 } from "./index.js";
 
@@ -225,6 +227,31 @@ describe("wt Herdr plugin", () => {
   test("refreshes focused Spaces more often than background Spaces", () => {
     expect(gitDiffRefreshIntervalMs(true)).toBe(30_000);
     expect(gitDiffRefreshIntervalMs(false)).toBe(300_000);
+  });
+
+  test("uses configured intervals for focused and background Spaces", () => {
+    const refresh = {
+      focusedSeconds: 12,
+      backgroundSeconds: 90,
+      pullRequestSeconds: 120,
+    };
+
+    expect(gitDiffRefreshIntervalMs(true, refresh)).toBe(12_000);
+    expect(gitDiffRefreshIntervalMs(false, refresh)).toBe(90_000);
+  });
+
+  test("uses the configured pull request safety refresh interval", () => {
+    expect(
+      pullRequestRefreshIntervalMs({
+        focusedSeconds: 12,
+        backgroundSeconds: 90,
+        pullRequestSeconds: 120,
+      })
+    ).toBe(120_000);
+  });
+
+  test("keeps metadata alive for two configured refresh periods", () => {
+    expect(refreshMetadataTtlMs(120_000)).toBe(240_000);
   });
 
   test("extracts the opened workspace and checkout from a Herdr event", () => {
