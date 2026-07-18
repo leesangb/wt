@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.8.2
+
+### Patch Changes
+
+- d5ccc11: Stream worktree creation progress in the Herdr plugin while retaining the final structured result for opening the new workspace.
+
 ## 0.8.1
 
 ### Patch Changes
