@@ -330,7 +330,7 @@ function createFakeGithubEnv(
         "    exit 0",
         "  fi",
         `  if [ "$selector" = "${prNumber}" ]; then`,
-        `    printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}","number":${prNumber},"url":"${prUrl}"}'`,
+        `    printf '%s\\n' '{"author":{"login":"sangbin"},"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}","number":${prNumber},"title":"Fix login: failure","url":"${prUrl}"}'`,
         "    exit 0",
         "  fi",
         '  echo "no pull request found" >&2',
@@ -1205,6 +1205,38 @@ describe("cli e2e", () => {
       branch: headBranch,
       reusedExisting: false,
     });
+  });
+
+  test("uses the PR author and title as the Herdr label", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/herdr-pr-label";
+    const fakeDir = makeTempDir("wt-herdr-pr-");
+    const fakeHerdr = join(fakeDir, "herdr");
+    const logPath = join(fakeDir, "args.log");
+    writeFileSync(
+      fakeHerdr,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" > "${logPath}"`,
+        "printf '%s\\n' '{\"result\":{}}'",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        ...createFakeGithubEnv({ headBranch }),
+        HERDR_BIN_PATH: fakeHerdr,
+        HERDR_ENV: "1",
+        HERDR_WORKSPACE_ID: "w1",
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(logPath, "utf8")).toBe(
+      `worktree open --workspace w1 --path ${getWorktreePath(repo, "pr-123")} --label sangbin: Fix login: failure --no-focus --json\n`
+    );
   });
 
   test("lists open pull requests for shell completion", async () => {

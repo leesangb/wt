@@ -9,10 +9,12 @@ interface GithubCommandResult {
 }
 
 export interface PullRequestInfo {
+  author: string;
   baseRefName: string;
   headRefName: string;
   headRefOid: string;
   number: string;
+  title: string;
   url: string;
 }
 
@@ -96,7 +98,7 @@ export async function getPullRequestInfo(
       "view",
       pullRequestNumber,
       "--json",
-      "baseRefName,headRefName,headRefOid,number,url",
+      "author,baseRefName,headRefName,headRefOid,number,title,url",
     ],
     repoRoot
   );
@@ -108,10 +110,12 @@ export async function getPullRequestInfo(
   }
 
   let info: Partial<{
+    author: { login?: string } | null;
     baseRefName: string;
     headRefName: string;
     headRefOid: string;
     number: number;
+    title: string;
     url: string;
   }>;
 
@@ -126,16 +130,19 @@ export async function getPullRequestInfo(
     !info.headRefName ||
     !info.headRefOid ||
     typeof info.number !== "number" ||
+    !info.title ||
     !info.url
   ) {
     throw new AppError(`Could not determine branch information for PR #${pullRequestNumber}`);
   }
 
   return {
+    author: info.author?.login ?? "unknown",
     baseRefName: info.baseRefName,
     headRefName: info.headRefName,
     headRefOid: info.headRefOid,
     number: String(info.number),
+    title: info.title,
     url: info.url,
   };
 }

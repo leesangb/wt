@@ -18,6 +18,7 @@ export async function prCommand(
     const result = await createPrWorktree(pullRequestNumber);
     const herdr = await openCreatedWorktreeInHerdr(result, {
       focus: options.cd !== false,
+      label: `${result.pullRequest.author}: ${result.pullRequest.title}`,
     });
 
     if (herdr.error) {
