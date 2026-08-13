@@ -9,10 +9,13 @@ import {
   getPullRequestInfo,
   type PullRequestInfo,
 } from "../../infra/github/cli.js";
+import { loadSettings } from "../../infra/storage/settings-store.js";
 import { AppError } from "../errors.js";
 
 export interface CreatePrWorktreeResult extends CreateWorktreeResult {
-  pullRequest: Pick<PullRequestInfo, "author" | "title">;
+  pullRequest: Pick<PullRequestInfo, "author" | "title"> & {
+    issuePattern?: string;
+  };
 }
 
 function normalizePullRequestNumber(pullRequestNumber: string): string {
@@ -32,12 +35,18 @@ export async function createPrWorktree(
   const prNumber = normalizePullRequestNumber(pullRequestNumber);
   const context = await requireRepositoryContext(cwd);
   await ensureGithubCliReady(context.repoRoot);
-  const pullRequest = await getPullRequestInfo(context.repoRoot, prNumber);
+  const [pullRequest, settings, worktrees] = await Promise.all([
+    getPullRequestInfo(context.repoRoot, prNumber),
+    loadSettings(context.repoRoot),
+    loadWorktreeInfos(context),
+  ]);
   const pullRequestSummary = {
     author: pullRequest.author,
     title: pullRequest.title,
+    ...(settings.issue?.pattern
+      ? { issuePattern: settings.issue.pattern }
+      : {}),
   };
-  const worktrees = await loadWorktreeInfos(context);
   const existingWorktree = worktrees.find(
     (worktree) => worktree.branch === pullRequest.headRefName
   );

@@ -110,7 +110,7 @@ export async function getPullRequestInfo(
   }
 
   let info: Partial<{
-    author: { login?: string } | null;
+    author: { login?: string; name?: string } | null;
     baseRefName: string;
     headRefName: string;
     headRefOid: string;
@@ -137,7 +137,7 @@ export async function getPullRequestInfo(
   }
 
   return {
-    author: info.author?.login ?? "unknown",
+    author: info.author?.name?.trim() || info.author?.login || "unknown",
     baseRefName: info.baseRefName,
     headRefName: info.headRefName,
     headRefOid: info.headRefOid,
