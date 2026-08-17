@@ -1,6 +1,6 @@
 {
   "name": "@leesangb/wt",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "Git worktree manager CLI",
   "type": "module",
   "scripts": {
