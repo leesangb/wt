@@ -6,7 +6,9 @@ import {
 
 export async function openCreatedWorktreeInHerdr(
   worktree: Pick<CreateWorktreeResult, "id" | "worktreePath">,
-  options: { focus?: boolean } = {}
+  options: { focus?: boolean; label?: string } = {}
 ): Promise<OpenHerdrWorktreeResult> {
-  return openHerdrWorktree(worktree.worktreePath, worktree.id, options);
+  const { label = worktree.id, ...herdrOptions } = options;
+
+  return openHerdrWorktree(worktree.worktreePath, label, herdrOptions);
 }

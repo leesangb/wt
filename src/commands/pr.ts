@@ -4,6 +4,7 @@ import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
 import { printWorktreeCommandResult } from "../cli/worktree-result.js";
 import { openCreatedWorktreeInHerdr } from "../app/use-cases/open-worktree-in-herdr.js";
+import { buildPullRequestLabel } from "../domain/pull-request-label.js";
 
 interface PrCommandOptions {
   cd?: boolean;
@@ -18,6 +19,11 @@ export async function prCommand(
     const result = await createPrWorktree(pullRequestNumber);
     const herdr = await openCreatedWorktreeInHerdr(result, {
       focus: options.cd !== false,
+      label: buildPullRequestLabel(
+        result.pullRequest.author,
+        result.pullRequest.title,
+        result.pullRequest.issuePattern
+      ),
     });
 
     if (herdr.error) {

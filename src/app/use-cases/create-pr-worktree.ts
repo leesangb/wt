@@ -7,8 +7,16 @@ import { loadWorktreeInfos } from "../worktree-catalog.js";
 import {
   ensureGithubCliReady,
   getPullRequestInfo,
+  type PullRequestInfo,
 } from "../../infra/github/cli.js";
+import { loadSettings } from "../../infra/storage/settings-store.js";
 import { AppError } from "../errors.js";
+
+export interface CreatePrWorktreeResult extends CreateWorktreeResult {
+  pullRequest: Pick<PullRequestInfo, "author" | "title"> & {
+    issuePattern?: string;
+  };
+}
 
 function normalizePullRequestNumber(pullRequestNumber: string): string {
   const value = pullRequestNumber.trim();
@@ -23,12 +31,22 @@ function normalizePullRequestNumber(pullRequestNumber: string): string {
 export async function createPrWorktree(
   pullRequestNumber: string,
   cwd: string = process.cwd()
-): Promise<CreateWorktreeResult> {
+): Promise<CreatePrWorktreeResult> {
   const prNumber = normalizePullRequestNumber(pullRequestNumber);
   const context = await requireRepositoryContext(cwd);
   await ensureGithubCliReady(context.repoRoot);
-  const pullRequest = await getPullRequestInfo(context.repoRoot, prNumber);
-  const worktrees = await loadWorktreeInfos(context);
+  const [pullRequest, settings, worktrees] = await Promise.all([
+    getPullRequestInfo(context.repoRoot, prNumber),
+    loadSettings(context.repoRoot),
+    loadWorktreeInfos(context),
+  ]);
+  const pullRequestSummary = {
+    author: pullRequest.author,
+    title: pullRequest.title,
+    ...(settings.issue?.pattern
+      ? { issuePattern: settings.issue.pattern }
+      : {}),
+  };
   const existingWorktree = worktrees.find(
     (worktree) => worktree.branch === pullRequest.headRefName
   );
@@ -42,13 +60,16 @@ export async function createPrWorktree(
       baseBranch: existingWorktree.baseBranch ?? "",
       baseCommit: existingWorktree.baseCommit ?? "",
       reusedExisting: true,
+      pullRequest: pullRequestSummary,
     };
   }
 
-  return createPreparedWorktree({
+  const worktree = await createPreparedWorktree({
     kind: "pull-request",
     context,
     pullRequest,
     existingIds: worktrees.map((worktree) => worktree.id),
   });
+
+  return { ...worktree, pullRequest: pullRequestSummary };
 }

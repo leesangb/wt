@@ -43,6 +43,8 @@ interface CliRunOptions {
 
 interface FakeGithubCliOptions {
   authenticated?: boolean;
+  authorLogin?: string;
+  authorName?: string;
   available?: boolean;
   baseBranch?: string;
   checkoutCreatesBranchBeforeFail?: boolean;
@@ -52,6 +54,7 @@ interface FakeGithubCliOptions {
   headRefOid?: string;
   logPath?: string;
   prNumber?: string;
+  prTitle?: string;
   prUrl?: string;
 }
 
@@ -277,6 +280,8 @@ function createFakeGithubEnv(
   const binDir = join(tempDir, "bin");
   const ghPath = join(binDir, "gh");
   const baseBranch = options.baseBranch ?? "main";
+  const authorLogin = options.authorLogin ?? "sangbin";
+  const authorName = options.authorName ?? "Sangbin Lee";
   const checkoutCreatesBranchBeforeFail =
     options.checkoutCreatesBranchBeforeFail === true;
   const checkoutFailureMessage = options.checkoutFailureMessage ?? "";
@@ -285,6 +290,7 @@ function createFakeGithubEnv(
   const headRefOid =
     options.headRefOid ?? "0000000000000000000000000000000000000000";
   const prNumber = options.prNumber ?? "123";
+  const prTitle = options.prTitle ?? "Fix login: failure";
   const prUrl =
     options.prUrl ?? `https://github.com/example/repo/pull/${prNumber}`;
 
@@ -330,14 +336,14 @@ function createFakeGithubEnv(
         "    exit 0",
         "  fi",
         `  if [ "$selector" = "${prNumber}" ]; then`,
-        `    printf '%s\\n' '{"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}","number":${prNumber},"url":"${prUrl}"}'`,
+        `    printf '%s\\n' '{"author":{"login":"${authorLogin}","name":"${authorName}"},"baseRefName":"${baseBranch}","headRefName":"${headBranch}","headRefOid":"${headRefOid}","number":${prNumber},"title":"${prTitle}","url":"${prUrl}"}'`,
         "    exit 0",
         "  fi",
         '  echo "no pull request found" >&2',
         "  exit 1",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "list" ]; then',
-        `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","title":"Fix login: failure","author":{"login":"sangbin"},"headRefName":"${headBranch}","isDraft":true}]'`,
+        `  printf '%s\\n' '[{"number":${prNumber},"url":"${prUrl}","title":"${prTitle}","author":{"login":"${authorLogin}"},"headRefName":"${headBranch}","isDraft":true}]'`,
         "  exit 0",
         "fi",
         'if [ "$1" = "pr" ] && [ "${2:-}" = "checkout" ]; then',
@@ -1205,6 +1211,48 @@ describe("cli e2e", () => {
       branch: headBranch,
       reusedExisting: false,
     });
+  });
+
+  test("uses the PR author and title as the Herdr label", async () => {
+    const repo = await createTestRepo();
+    const headBranch = "feature/herdr-pr-label";
+    updateSettings(repo.repoRoot, (settings) => {
+      settings.issue = {
+        pattern: "[A-Z]+-\\d+",
+        url: "https://issues.example/$issue",
+      };
+    });
+    const fakeDir = makeTempDir("wt-herdr-pr-");
+    const fakeHerdr = join(fakeDir, "herdr");
+    const logPath = join(fakeDir, "args.log");
+    writeFileSync(
+      fakeHerdr,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" > "${logPath}"`,
+        "printf '%s\\n' '{\"result\":{}}'",
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: {
+        ...createFakeGithubEnv({
+          headBranch,
+          prTitle:
+            "feat: MIRI-123 refactor(survey)!: survey 도메인 src/v2 이전",
+        }),
+        HERDR_BIN_PATH: fakeHerdr,
+        HERDR_ENV: "1",
+        HERDR_WORKSPACE_ID: "w1",
+      },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readFileSync(logPath, "utf8")).toBe(
+      `worktree open --workspace w1 --path ${getWorktreePath(repo, "pr-123")} --label Sangbin Lee: survey 도메인 src/v2 이전 --no-focus --json\n`
+    );
   });
 
   test("lists open pull requests for shell completion", async () => {

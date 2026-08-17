@@ -227,10 +227,12 @@ describe("worktree creation", () => {
         kind: "pull-request",
         context: repositoryContext,
         pullRequest: {
+          author: "octocat",
           baseRefName: "main",
           headRefName: "feature/pr",
           headRefOid: "head-commit",
           number: "17",
+          title: "Fix checkout",
           url: "https://example.test/pull/17",
         },
         existingIds: [],
