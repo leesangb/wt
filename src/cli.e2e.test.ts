@@ -1281,6 +1281,50 @@ describe("cli e2e", () => {
     );
   });
 
+  test("preserves the PR display name and title when the background plugin opens it", async () => {
+    const repo = await createTestRepo();
+    const pluginRoot = makeTempDir("wt-plugin-pr-label-");
+    const binDir = join(pluginRoot, ".herdr-plugin", "bin");
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      join(binDir, "wt"),
+      `#!/bin/sh\nexec "${process.execPath}" "${cliEntry}" "$@"\n`,
+      { mode: 0o755 }
+    );
+    const worktreePath = getWorktreePath(repo, "pr-123");
+    const herdr = createFakeHerdr(worktreePath);
+    const result = spawnSync(
+      process.execPath,
+      [join(projectRoot, "src/herdr-plugin/index.ts"), "create"],
+      {
+        cwd: repo.repoRoot,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          ...createFakeGithubEnv({
+            headBranch: "feature/plugin-pr-label",
+            prTitle: "refactor(survey)!: survey 도메인 이전",
+          }),
+          ...herdr.env,
+          HERDR_PLUGIN_ROOT: pluginRoot,
+          WT_HERDR_CREATE_REQUEST: Buffer.from(JSON.stringify({
+            mode: "pr",
+            workspaceId: "w1",
+            cwd: repo.repoRoot,
+            target: "123",
+          })).toString("base64"),
+        },
+      }
+    );
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const opens = readFileSync(herdr.logPath, "utf8")
+      .trim().split("\n").filter((line) => line.startsWith("worktree open "));
+    expect(opens.at(-1)).toBe(
+      `worktree open --workspace w1 --path ${worktreePath} --label Sangbin Lee: survey 도메인 이전 --focus --json`
+    );
+  });
+
   test("lists open pull requests for shell completion", async () => {
     const repo = await createTestRepo();
     const ghLogPath = join(repo.repoRoot, "gh-completion.log");

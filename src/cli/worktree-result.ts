@@ -2,6 +2,7 @@ import type { CreateWorktreeResult } from "../app/worktree-creation.js";
 
 export interface WorktreeCommandResult {
   id: string;
+  label?: string;
   fullId: string;
   path: string;
   branch: string;
@@ -13,10 +14,12 @@ export interface WorktreeCommandResult {
 }
 
 export function toWorktreeCommandResult(
-  result: CreateWorktreeResult
+  result: CreateWorktreeResult,
+  label?: string
 ): WorktreeCommandResult {
   return {
     id: result.id,
+    ...(label ? { label } : {}),
     fullId: result.fullId,
     path: result.worktreePath,
     branch: result.branchName,
@@ -31,7 +34,8 @@ export function toWorktreeCommandResult(
 }
 
 export function printWorktreeCommandResult(
-  result: CreateWorktreeResult
+  result: CreateWorktreeResult,
+  label?: string
 ): void {
-  console.log(JSON.stringify(toWorktreeCommandResult(result)));
+  console.log(JSON.stringify(toWorktreeCommandResult(result, label)));
 }

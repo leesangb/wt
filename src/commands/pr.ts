@@ -17,13 +17,14 @@ export async function prCommand(
 ): Promise<void> {
   await runCommand(async () => {
     const result = await createPrWorktree(pullRequestNumber);
+    const label = buildPullRequestLabel(
+      result.pullRequest.author,
+      result.pullRequest.title,
+      result.pullRequest.issuePattern
+    );
     const herdr = await openCreatedWorktreeInHerdr(result, {
       focus: options.cd !== false,
-      label: buildPullRequestLabel(
-        result.pullRequest.author,
-        result.pullRequest.title,
-        result.pullRequest.issuePattern
-      ),
+      label,
     });
 
     if (herdr.error) {
@@ -31,7 +32,7 @@ export async function prCommand(
     }
 
     if (options.json) {
-      printWorktreeCommandResult(result);
+      printWorktreeCommandResult(result, label);
       return;
     }
 

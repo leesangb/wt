@@ -48,6 +48,7 @@ export type WtCreateRequest =
 
 interface WtJsonResult {
   id: string;
+  label?: string;
   path: string;
   branch: string;
 }
@@ -1267,7 +1268,7 @@ async function createWorktree(): Promise<void> {
           "--path",
           result.path,
           "--label",
-          result.id,
+          result.label ?? result.id,
           "--focus",
           "--json",
         ],
