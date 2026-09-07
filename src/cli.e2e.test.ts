@@ -508,7 +508,7 @@ afterEach(() => {
 });
 
 describe("cli e2e", () => {
-  test("init adds the local settings ignore entry without duplicating it", async () => {
+  test("init adds wt local files to the repository exclude without duplicating them", async () => {
     const repo = await createGitRepo();
 
     const initResult = runCliCapture(["init"], repo.repoRoot);
@@ -518,11 +518,33 @@ describe("cli e2e", () => {
       initResult.stdout
     );
 
-    const gitignorePath = join(repo.repoRoot, ".wt", ".gitignore");
-    expect(readFileSync(gitignorePath, "utf-8")).toBe(
-      "settings.local.json\n"
-    );
+    const excludePath = join(repo.repoRoot, ".git", "info", "exclude");
+    const excludeContent = readFileSync(excludePath, "utf-8");
+    expect(excludeContent).toContain(".wt/settings.local.json\n");
+    expect(excludeContent).toContain(".wt/remove-task-*.json\n");
+    expect(excludeContent).toContain(".wt/remove-task-*.log\n");
+    expect(existsSync(join(repo.repoRoot, ".wt", ".gitignore"))).toBeFalse();
     expect(existsSync(join(repo.repoRoot, ".gitignore"))).toBeFalse();
+    writeFileSync(join(repo.repoRoot, ".wt", "settings.local.json"), "{}\n");
+    writeFileSync(join(repo.repoRoot, ".wt", "remove-task-test.json"), "{}\n");
+    writeFileSync(join(repo.repoRoot, ".wt", "remove-task-test.log"), "done\n");
+    const checkIgnoreResult = spawnSync(
+      "git",
+      [
+        "-C",
+        repo.repoRoot,
+        "check-ignore",
+        ".wt/settings.local.json",
+        ".wt/remove-task-test.json",
+        ".wt/remove-task-test.log",
+      ],
+      { encoding: "utf-8" }
+    );
+    assertProcessSuccess(
+      checkIgnoreResult.status,
+      checkIgnoreResult.stderr,
+      checkIgnoreResult.stdout
+    );
 
     const rerunResult = runCliCapture(["init"], repo.repoRoot);
     assertProcessSuccess(
@@ -531,11 +553,15 @@ describe("cli e2e", () => {
       rerunResult.stdout
     );
 
-    expect(
-      readFileSync(gitignorePath, "utf-8")
-        .split(/\r?\n/)
-        .filter((line) => line === "settings.local.json")
-    ).toHaveLength(1);
+    const excludeLines = readFileSync(excludePath, "utf-8").split(/\r?\n/);
+
+    for (const entry of [
+      ".wt/settings.local.json",
+      ".wt/remove-task-*.json",
+      ".wt/remove-task-*.log",
+    ]) {
+      expect(excludeLines.filter((line) => line === entry)).toHaveLength(1);
+    }
   });
 
   test("shell install writes a wrapper with the requested binary path", () => {

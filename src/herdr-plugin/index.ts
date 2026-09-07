@@ -1,4 +1,5 @@
 import { spawn } from "bun";
+import { spawn as spawnDetached } from "node:child_process";
 import {
   closeSync,
   mkdirSync,
@@ -29,6 +30,21 @@ interface LaunchContext {
   workspaceId: string;
   cwd: string;
 }
+
+export type WtCreateRequest =
+  | {
+      mode: "new";
+      workspaceId: string;
+      cwd: string;
+      target: string;
+      base: string;
+    }
+  | {
+      mode: "checkout" | "pr";
+      workspaceId: string;
+      cwd: string;
+      target: string;
+    };
 
 interface WtJsonResult {
   id: string;
@@ -88,6 +104,7 @@ const ANSI_GRAY = "\x1b[90m";
 const ANSI_RESET = "\x1b[0m";
 const METADATA_SOURCE = "wt:github";
 const GIT_METADATA_SOURCE = "wt:git";
+const CREATE_REQUEST_ENV = "WT_HERDR_CREATE_REQUEST";
 const RETRY_INTERVAL_MS = 60_000;
 const CHECK_WATCH_INTERVAL_SECONDS = 10;
 
@@ -122,6 +139,24 @@ export function encodeLaunchContext(context: LaunchContext): string {
 
 export function decodeLaunchContext(encoded: string): LaunchContext {
   return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+}
+
+export function encodeCreateRequest(request: WtCreateRequest): string {
+  return Buffer.from(JSON.stringify(request), "utf8").toString("base64");
+}
+
+export function decodeCreateRequest(encoded: string): WtCreateRequest {
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+}
+
+export function buildWorktreeCreateArgs(
+  request: WtCreateRequest,
+  pluginWt: string
+): string[] {
+  const args = [pluginWt, request.mode, request.target];
+  if (request.mode === "new") args.push("--base", request.base);
+  args.push("--json");
+  return args;
 }
 
 export function parseWtJsonOutput(output: string): WtJsonResult {
@@ -677,6 +712,71 @@ async function pickPullRequest(cwd: string): Promise<string | undefined> {
   return selected?.split("\t").at(-1);
 }
 
+function pluginBinary(
+  name: "wt" | "wt-herdr",
+  pluginRoot = requiredEnv("HERDR_PLUGIN_ROOT")
+): string {
+  return `${pluginRoot}/.herdr-plugin/bin/${name}`;
+}
+
+async function showNotification(body: string): Promise<void> {
+  const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+
+  try {
+    await run([herdr, "notification", "show", "wt", "--body", body]);
+  } catch {
+    // Notifications are best effort and must not prevent worktree creation.
+  }
+}
+
+interface BackgroundCreateOptions {
+  pluginRoot?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+async function waitForChildSpawn(
+  child: ReturnType<typeof spawnDetached>
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onSpawn = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = () => {
+      child.off("spawn", onSpawn);
+      child.off("error", onError);
+    };
+
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
+}
+
+export async function startBackgroundCreate(
+  request: WtCreateRequest,
+  options: BackgroundCreateOptions = {}
+): Promise<void> {
+  const pluginRoot =
+    options.pluginRoot ?? requiredEnv("HERDR_PLUGIN_ROOT");
+  const child = spawnDetached(pluginBinary("wt-herdr", pluginRoot), ["create"], {
+    cwd: request.cwd,
+    env: {
+      ...process.env,
+      ...options.env,
+      [CREATE_REQUEST_ENV]: encodeCreateRequest(request),
+    },
+    detached: true,
+    stdio: "ignore",
+  });
+
+  await waitForChildSpawn(child);
+  child.unref();
+}
+
 async function launch(mode: WtMode): Promise<void> {
   const context = parsePluginContext(
     requiredEnv("HERDR_PLUGIN_CONTEXT_JSON"),
@@ -1142,6 +1242,53 @@ async function openPullRequest(): Promise<void> {
   );
 }
 
+async function createWorktree(): Promise<void> {
+  let request: WtCreateRequest | undefined;
+
+  try {
+    request = decodeCreateRequest(requiredEnv(CREATE_REQUEST_ENV));
+    void showNotification(`Creating ${request.target} worktree`);
+
+    const output = await capture(
+      buildWorktreeCreateArgs(request, pluginBinary("wt")),
+      request.cwd
+    );
+    const result = parseWtJsonOutput(output);
+    const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
+
+    try {
+      await capture(
+        [
+          herdr,
+          "worktree",
+          "open",
+          "--workspace",
+          request.workspaceId,
+          "--path",
+          result.path,
+          "--label",
+          result.id,
+          "--focus",
+          "--json",
+        ],
+        request.cwd
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await showNotification(
+        `Created ${request.target} at ${result.path}, but could not open it in Herdr: ${message}`
+      );
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await showNotification(
+      `Failed to create ${request?.target ?? "worktree"}: ${message}`
+    );
+    process.exitCode = 1;
+  }
+}
+
 async function runUi(): Promise<void> {
   const context = decodeLaunchContext(requiredEnv("WT_HERDR_CONTEXT"));
 
@@ -1154,37 +1301,27 @@ async function runUi(): Promise<void> {
           : await pickPullRequest(context.cwd);
     if (!target) return;
 
-    const pluginWt = `${requiredEnv("HERDR_PLUGIN_ROOT")}/.herdr-plugin/bin/wt`;
-    const wtArgs = [pluginWt, context.mode, target];
-
+    let request: WtCreateRequest;
     if (context.mode === "new") {
       const base = await pickBaseBranch(context.cwd);
       if (!base) return;
-      wtArgs.push("--base", base);
+      request = {
+        mode: "new",
+        workspaceId: context.workspaceId,
+        cwd: context.cwd,
+        target,
+        base,
+      };
+    } else {
+      request = {
+        mode: context.mode,
+        workspaceId: context.workspaceId,
+        cwd: context.cwd,
+        target,
+      };
     }
 
-    wtArgs.push("--json");
-    const output = await run(wtArgs, {
-      cwd: context.cwd,
-      capture: true,
-      streamCapturedOutput: true,
-    });
-    const result = parseWtJsonOutput(output);
-    const herdr = process.env.HERDR_BIN_PATH ?? "herdr";
-
-    await run([
-      herdr,
-      "worktree",
-      "open",
-      "--workspace",
-      context.workspaceId,
-      "--path",
-      result.path,
-      "--label",
-      result.id,
-      "--focus",
-      "--json",
-    ]);
+    await startBackgroundCreate(request);
   } catch (error) {
     console.error(`\n${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
@@ -1200,6 +1337,10 @@ async function main(): Promise<void> {
   }
   if (command === "ui") {
     await runUi();
+    return;
+  }
+  if (command === "create") {
+    await createWorktree();
     return;
   }
   if (command === "open-all") {
@@ -1224,7 +1365,7 @@ async function main(): Promise<void> {
   }
 
   throw new Error(
-    "Usage: wt-herdr launch <new|checkout|pr> | ui | open-all | watch-event | watch-context | refresh-focused | open-pr"
+    "Usage: wt-herdr launch <new|checkout|pr> | ui | create | open-all | watch-event | watch-context | refresh-focused | open-pr"
   );
 }
 

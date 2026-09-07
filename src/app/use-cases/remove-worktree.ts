@@ -24,9 +24,9 @@ import {
   type DetachedTaskOptions,
 } from "../../infra/scripts/runner.js";
 import {
-  ensureRemoveTaskArtifactsIgnored,
   loadSettings,
 } from "../../infra/storage/settings-store.js";
+import { ensureRemoveTaskArtifactsExcluded } from "../../infra/git/exclude.js";
 import {
   closeHerdrWorkspace,
   findHerdrWorkspaceForWorktree,
@@ -125,9 +125,9 @@ export interface WorktreeRemovalDependencies {
   };
   settings: {
     load: (repoRoot: string) => Promise<WtSettings>;
-    ensureTaskArtifactsIgnored: (repoRoot: string) => Promise<void>;
   };
   git: {
+    ensureTaskArtifactsExcluded: (repoRoot: string) => Promise<void>;
     remove: (repoRoot: string, worktreePath: string) => Promise<void>;
     deleteBranch: (repoRoot: string, branch: string) => Promise<void>;
   };
@@ -371,11 +371,11 @@ const defaultDependencies: WorktreeRemovalDependencies = {
   },
   settings: {
     load: loadSettings,
-    ensureTaskArtifactsIgnored: async (repoRoot) => {
-      await ensureRemoveTaskArtifactsIgnored(repoRoot);
-    },
   },
   git: {
+    ensureTaskArtifactsExcluded: async (repoRoot) => {
+      await ensureRemoveTaskArtifactsExcluded(repoRoot);
+    },
     remove: removeGitWorktree,
     deleteBranch,
   },
@@ -532,7 +532,7 @@ export function createWorktreeRemoval(
       settings,
       plan.worktree.path
     );
-    await dependencies.settings.ensureTaskArtifactsIgnored(
+    await dependencies.git.ensureTaskArtifactsExcluded(
       plan.removalRoot.relocatedToPath
     );
     const { statusFilePath, logFilePath } = buildRemovalTaskPaths(

@@ -68,9 +68,9 @@ function createDependencies(): {
       },
       settings: {
         load: async () => DEFAULT_WT_SETTINGS,
-        ensureTaskArtifactsIgnored: async () => undefined,
       },
       git: {
+        ensureTaskArtifactsExcluded: async () => undefined,
         remove: async (_repoRoot, worktreePath) => {
           removedPaths.push(worktreePath);
         },

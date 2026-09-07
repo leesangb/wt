@@ -1,15 +1,15 @@
 import { DEFAULT_WT_SETTINGS } from "../../domain/settings.js";
 import { requireRepositoryContext } from "../repository-context.js";
 import {
-  ensureLocalSettingsIgnored,
   getSettingsPath,
   saveSettings,
   settingsExist,
 } from "../../infra/storage/settings-store.js";
+import { ensureWtLocalFilesExcluded } from "../../infra/git/exclude.js";
 
 export interface InitSettingsResult {
   created: boolean;
-  gitignoreUpdated: boolean;
+  localExcludeUpdated: boolean;
   settingsPath: string;
 }
 
@@ -21,21 +21,25 @@ export async function initSettings(
   const settingsPath = await getSettingsPath(context.repoRoot);
 
   if (existing) {
-    const gitignoreUpdated = await ensureLocalSettingsIgnored(context.repoRoot);
+    const localExcludeUpdated = await ensureWtLocalFilesExcluded(
+      context.repoRoot
+    );
 
     return {
       created: false,
-      gitignoreUpdated,
+      localExcludeUpdated,
       settingsPath,
     };
   }
 
   await saveSettings(context.repoRoot, DEFAULT_WT_SETTINGS);
-  const gitignoreUpdated = await ensureLocalSettingsIgnored(context.repoRoot);
+  const localExcludeUpdated = await ensureWtLocalFilesExcluded(
+    context.repoRoot
+  );
 
   return {
     created: true,
-    gitignoreUpdated,
+    localExcludeUpdated,
     settingsPath,
   };
 }

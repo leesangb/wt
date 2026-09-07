@@ -1,12 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import {
   decodeLaunchContext,
   buildBaseBranchChoices,
   buildPullRequestChoices,
   buildPullRequestHeader,
   ciStatusToken,
   closedLinkedWorktrees,
+  buildWorktreeCreateArgs,
   encodeLaunchContext,
+  encodeCreateRequest,
+  decodeCreateRequest,
   gitDiffRefreshIntervalMs,
   gitDiffStatusToken,
   parsePullRequestDetails,
@@ -19,6 +31,7 @@ import {
   refreshMetadataTtlMs,
   resolveBaseBranchSelection,
   streamAndCaptureOutput,
+  startBackgroundCreate,
 } from "./index.js";
 
 describe("wt Herdr plugin", () => {
@@ -148,6 +161,149 @@ describe("wt Herdr plugin", () => {
         "checkout"
       )
     ).toEqual({ mode: "checkout", workspaceId: "w1", cwd: "/repo" });
+  });
+
+  test("serializes the selected worktree creation request for the background process", () => {
+    const request = {
+      mode: "new" as const,
+      workspaceId: "w3",
+      cwd: "/repo/packages/app",
+      target: "feature/background-create",
+      base: "origin/main",
+    };
+
+    expect(decodeCreateRequest(encodeCreateRequest(request))).toEqual(request);
+  });
+
+  test("keeps mode-specific wt arguments when creation runs in the background", () => {
+    expect(
+      buildWorktreeCreateArgs(
+        {
+          mode: "new",
+          workspaceId: "w1",
+          cwd: "/repo",
+          target: "feature/new",
+          base: "main",
+        },
+        "/plugin/.herdr-plugin/bin/wt"
+      )
+    ).toEqual([
+      "/plugin/.herdr-plugin/bin/wt",
+      "new",
+      "feature/new",
+      "--base",
+      "main",
+      "--json",
+    ]);
+    expect(
+      buildWorktreeCreateArgs(
+        {
+          mode: "pr",
+          workspaceId: "w1",
+          cwd: "/repo",
+          target: "142",
+        },
+        "/plugin/.herdr-plugin/bin/wt"
+      )
+    ).toEqual([
+      "/plugin/.herdr-plugin/bin/wt",
+      "pr",
+      "142",
+      "--json",
+    ]);
+    expect(
+      buildWorktreeCreateArgs(
+        {
+          mode: "checkout",
+          workspaceId: "w1",
+          cwd: "/repo",
+          target: "feature/existing",
+        },
+        "/plugin/.herdr-plugin/bin/wt"
+      )
+    ).toEqual([
+      "/plugin/.herdr-plugin/bin/wt",
+      "checkout",
+      "feature/existing",
+      "--json",
+    ]);
+  });
+
+  test("returns after the detached child starts while the child continues independently", async () => {
+    const pluginRoot = mkdtempSync(join(tmpdir(), "wt-herdr-background-"));
+    const binDir = join(pluginRoot, ".herdr-plugin", "bin");
+    const startPath = join(pluginRoot, "started");
+    const releasePath = join(pluginRoot, "release");
+    const donePath = join(pluginRoot, "done");
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      join(binDir, "wt-herdr"),
+      [
+        "#!/bin/sh",
+        'printf started > "$WT_HERDR_TEST_START"',
+        'while [ ! -f "$WT_HERDR_TEST_RELEASE" ]; do sleep 0.01; done',
+        'printf done > "$WT_HERDR_TEST_DONE"',
+        "",
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+
+    try {
+      await startBackgroundCreate(
+        {
+          mode: "checkout",
+          workspaceId: "w1",
+          cwd: pluginRoot,
+          target: "feature/background",
+        },
+        {
+          pluginRoot,
+          env: {
+            WT_HERDR_TEST_START: startPath,
+            WT_HERDR_TEST_RELEASE: releasePath,
+            WT_HERDR_TEST_DONE: donePath,
+          },
+        }
+      );
+
+      for (let attempt = 0; attempt < 100 && !existsSync(startPath); attempt++) {
+        await Bun.sleep(10);
+      }
+      expect(existsSync(startPath)).toBeTrue();
+      expect(existsSync(donePath)).toBeFalse();
+
+      writeFileSync(releasePath, "release\n");
+      for (let attempt = 0; attempt < 100 && !existsSync(donePath); attempt++) {
+        await Bun.sleep(10);
+      }
+      expect(existsSync(donePath)).toBeTrue();
+    } finally {
+      if (!existsSync(releasePath)) writeFileSync(releasePath, "release\n");
+      for (let attempt = 0; attempt < 100 && !existsSync(donePath); attempt++) {
+        await Bun.sleep(10);
+      }
+      rmSync(pluginRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("surfaces a detached launch error before returning from the handoff", async () => {
+    const pluginRoot = mkdtempSync(join(tmpdir(), "wt-herdr-missing-"));
+
+    try {
+      await expect(
+        startBackgroundCreate(
+          {
+            mode: "checkout",
+            workspaceId: "w1",
+            cwd: pluginRoot,
+            target: "feature/missing",
+          },
+          { pluginRoot }
+        )
+      ).rejects.toThrow();
+    } finally {
+      rmSync(pluginRoot, { recursive: true, force: true });
+    }
   });
 
   test("reads the final structured wt result after git progress output", () => {
