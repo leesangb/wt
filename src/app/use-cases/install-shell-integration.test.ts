@@ -22,6 +22,22 @@ describe("resolveDefaultShellCommand", () => {
     ).toEqual(["/Users/test/.bun/bin/bun", "/tmp/wt.ts"]);
   });
 
+  test("keeps the script path when the Bun executable is named bun.exe", () => {
+    expect(
+      resolveDefaultShellCommand({
+        argv0: "/Users/test/.bun/install/global/node_modules/bun/bin/bun.exe",
+        argv: [
+          "/Users/test/.bun/install/global/node_modules/bun/bin/bun.exe",
+          "/tmp/wt.ts",
+        ],
+        execPath: "/Users/test/.bun/install/global/node_modules/bun/bin/bun.exe",
+      })
+    ).toEqual([
+      "/Users/test/.bun/install/global/node_modules/bun/bin/bun.exe",
+      "/tmp/wt.ts",
+    ]);
+  });
+
   test("falls back to execPath when argv0 is only a PATH-resolved command name", () => {
     expect(
       resolveDefaultShellCommand({

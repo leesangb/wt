@@ -7,7 +7,7 @@ import {
   type InstallShellWrapperResult,
 } from "../../infra/shell/installer.js";
 
-const RUNTIME_LAUNCHERS = new Set(["bun", "node"]);
+const RUNTIME_LAUNCHERS = new Set(["bun", "bun.exe", "node"]);
 
 export interface ShellCommandContext {
   argv0: string;
