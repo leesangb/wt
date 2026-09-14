@@ -26,13 +26,17 @@ async function readSettingsInput(
   return JSON.parse(await Bun.file(settingsPath).text()) as WtSettingsInput;
 }
 
-export async function loadSettings(repoRoot: string): Promise<WtSettings> {
+export async function loadSettingsInput(repoRoot: string) {
   const settingsPath = await getSettingsPath(repoRoot);
   const localSettingsPath = join(repoRoot, ".wt", "settings.local.json");
   const sharedSettings = await readSettingsInput(settingsPath);
   const localSettings = await readSettingsInput(localSettingsPath);
 
-  return normalizeSettings(mergeSettingsInputs(sharedSettings, localSettings));
+  return mergeSettingsInputs(sharedSettings, localSettings);
+}
+
+export async function loadSettings(repoRoot: string): Promise<WtSettings> {
+  return normalizeSettings(await loadSettingsInput(repoRoot));
 }
 
 export async function saveSettings(

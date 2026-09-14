@@ -422,6 +422,20 @@ wt clean -m -d --keep-branch
 
 `copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. 앞에 `./`를 붙여도 되고, `./apps`와 `apps`는 같은 의미입니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 source 저장소에서 git에 트래킹되지 않은 파일만 복사하고, 새로 만든 worktree 쪽에서 이미 tracked인 파일은 덮어쓰지 않습니다. 또한 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
 
+두 설정 파일 모두 `copy`를 정의하지 않으면 source 저장소 루트의 `.worktreeinclude`를 사용합니다:
+
+```gitignore
+# 각 worktree에 필요한 로컬 파일
+.env
+.env.*
+!.env.example
+config/secrets/
+```
+
+`.worktreeinclude`는 주석, `!` 제외 규칙, 루트 기준 경로, 디렉토리 패턴 등 Git의 `.gitignore` 문법을 사용합니다. 패턴에 일치하면서 Git이 무시하는 파일만 복사하며, ignored 디렉토리 내부의 파일도 포함됩니다. source나 target에서 tracked인 파일은 보호하고, `.git`, `node_modules`, 연결된 worktree, 예약된 `.wt` 파일은 계속 건너뜁니다. `.worktreeinclude` 자체는 커밋하거나 untracked 또는 ignored 상태로 둘 수 있습니다.
+
+명시적인 `copy` 설정이 `.worktreeinclude`보다 우선하며, 두 규칙을 합치지 않습니다. 기존처럼 local 설정은 shared 설정 위에 적용됩니다. `"copy": { "include": [] }`, `"copy": {}`, 이전 배열 형식인 `"copy": []`처럼 비어 있어도 fallback을 사용하지 않습니다. `scripts`, `baseBranch` 등 다른 설정만 있으면 fallback을 사용합니다. `.worktreeinclude`가 없거나 일치하는 파일이 없으면 복사하지 않습니다.
+
 `issue`를 설정하면 `wt list` / `wt ls`가 각 브랜치 이름에 `issue.pattern`을 매칭합니다. 정규식에 캡처 그룹이 있으면 첫 번째 그룹을 이슈 키로 쓰고, 없으면 전체 매치를 사용합니다. 지원되는 터미널에서는 출력된 URL을 바로 클릭할 수 있습니다:
 
 ```json

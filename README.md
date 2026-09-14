@@ -436,6 +436,20 @@ You can also add an optional `.wt/settings.local.json` for user- or machine-loca
 
 `copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
+If neither settings file defines `copy`, `wt` uses `.worktreeinclude` at the source repository root:
+
+```gitignore
+# Local files needed by each worktree
+.env
+.env.*
+!.env.example
+config/secrets/
+```
+
+`.worktreeinclude` uses Git's `.gitignore` syntax, including comments, negation, root-anchored paths, and directory patterns. Only matching files that Git ignores are copied, including files inside ignored directories. Tracked files in either source or target are protected, and `.git`, `node_modules`, linked worktrees, and reserved `.wt` files are still skipped. The pattern file itself may be committed, untracked, or ignored.
+
+Explicit `copy` settings take precedence over `.worktreeinclude`; the two sources are not combined. Existing local overrides still apply over shared settings. Even `"copy": { "include": [] }`, `"copy": {}`, or the legacy `"copy": []` disables the fallback. Other settings, such as `scripts` or `baseBranch`, do not disable it. If `.worktreeinclude` is absent or has no matching files, nothing is copied.
+
 When `issue` is configured, `wt list` / `wt ls` matches `issue.pattern` against each branch name. If the pattern has a capture group, the first group becomes the issue key; otherwise the full match is used. The URL is printed as a clickable terminal link where supported:
 
 ```json

@@ -3,6 +3,8 @@ import { cpSync, mkdirSync, readdirSync, realpathSync } from "fs";
 import { dirname, isAbsolute, join, relative } from "path";
 import type { WtSettings } from "../domain/settings.js";
 import { listGitWorktreePaths } from "../infra/git/worktree-repository.js";
+import { listWorktreeIncludePaths } from "../infra/git/worktree-include.js";
+import { loadSettingsInput } from "../infra/storage/settings-store.js";
 
 const DEFAULT_EXCLUDE_GLOBS = [
   ".git",
@@ -197,17 +199,26 @@ export async function copyConfiguredPaths(
   repoRoot: string,
   worktreePath: string
 ): Promise<void> {
-  if (settings.copy.include.length === 0) {
+  const worktreeIncludePaths =
+    settings.copy.include.length === 0 &&
+    settings.copy.exclude.length === 0 &&
+    (await loadSettingsInput(repoRoot))?.copy == null
+      ? await listWorktreeIncludePaths(repoRoot)
+      : undefined;
+
+  if (settings.copy.include.length === 0 && !worktreeIncludePaths?.size) {
     return;
   }
 
   const includeGlobs = compileGlobs(settings.copy.include);
-  const rawIncludePrefixes = settings.copy.include.map(getStaticPrefix);
+  const rawIncludePrefixes = worktreeIncludePaths
+    ? [...worktreeIncludePaths]
+    : settings.copy.include.map(getStaticPrefix);
   const includePrefixes = rawIncludePrefixes.some((prefix) => prefix === "")
     ? [""]
     : dedupe(rawIncludePrefixes);
   const normalizedRepoRoot = normalizeExistingPath(repoRoot);
-  const trackedFilePathspecs = includePrefixes.includes("")
+  const trackedFilePathspecs = worktreeIncludePaths || includePrefixes.includes("")
     ? undefined
     : includePrefixes;
   const [
@@ -216,7 +227,7 @@ export async function copyConfiguredPaths(
     sourceTrackedFilePaths,
     targetTrackedFilePaths,
   ] = await Promise.all([
-    getGitIgnoredDirectoryGlobs(repoRoot),
+    worktreeIncludePaths ? [] : getGitIgnoredDirectoryGlobs(repoRoot),
     getRepoLocalWorktreeGlobs(repoRoot, normalizedRepoRoot),
     getGitTrackedFilePaths(repoRoot, trackedFilePathspecs),
     getGitTrackedFilePaths(worktreePath, trackedFilePathspecs),
@@ -265,7 +276,9 @@ export async function copyConfiguredPaths(
         relativePath,
         entry.isDirectory()
       );
-      const included = inheritedIncluded || explicitlyIncluded;
+      const included = worktreeIncludePaths
+        ? worktreeIncludePaths.has(relativePath)
+        : inheritedIncluded || explicitlyIncluded;
 
       if (entry.isDirectory()) {
         if (!included && !shouldTraverseDirectory(relativePath, includePrefixes)) {
