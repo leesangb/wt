@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.12.0
+
+### Minor Changes
+
+- 33f9577: Support `.worktreeinclude` at the repository root as a fallback for copying local files into new worktrees. Patterns use Git's `.gitignore` syntax and select only gitignored files. Explicit `copy` settings in `.wt/settings.json` or `.wt/settings.local.json` take precedence, including empty settings.
+
 ## 0.11.4
 
 ### Patch Changes
