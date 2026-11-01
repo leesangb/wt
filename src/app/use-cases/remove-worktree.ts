@@ -14,9 +14,8 @@ import {
 } from "../../infra/git/worktree-repository.js";
 import {
   getWorktreeRemovalStatusSummary,
-  getWorktreeStatusEntries,
   type WorktreeRemovalStatusSummary,
-  type WorktreeStatusEntriesResult,
+  type WorktreeRemovalStatusOptions,
 } from "../../infra/git/status.js";
 import {
   executeDetachedTask,
@@ -116,12 +115,9 @@ export interface WorktreeRemovalDependencies {
       repoRoot: string,
       worktreePath: string,
       branch?: string,
-      baseBranch?: string
+      baseBranch?: string,
+      options?: WorktreeRemovalStatusOptions
     ) => Promise<WorktreeRemovalStatusSummary>;
-    inspectStatusEntries: (
-      worktreePath: string,
-      limit?: number
-    ) => Promise<WorktreeStatusEntriesResult>;
   };
   settings: {
     load: (repoRoot: string) => Promise<WtSettings>;
@@ -367,7 +363,6 @@ const defaultDependencies: WorktreeRemovalDependencies = {
     loadWorktrees: loadWorktreeInfos,
     listPaths: listGitWorktreePaths,
     inspectStatus: getWorktreeRemovalStatusSummary,
-    inspectStatusEntries: getWorktreeStatusEntries,
   },
   settings: {
     load: loadSettings,
@@ -417,21 +412,17 @@ export function createWorktreeRemoval(
       cwd
     );
     const statusEntryLimit = options.statusEntryLimit ?? 8;
-    const [status, statusEntries, removalRoot] = await Promise.all([
+    const [status, removalRoot] = await Promise.all([
       dependencies.repository.inspectStatus(
         context.repoRoot,
         worktree.path,
         worktree.branch,
-        worktree.baseBranch
+        worktree.baseBranch,
+        { includeStatusEntries: options.includeStatusEntries, statusEntryLimit }
       ),
-      options.includeStatusEntries
-        ? dependencies.repository.inspectStatusEntries(
-            worktree.path,
-            statusEntryLimit
-          )
-        : undefined,
       findSafeRemovalRoot(dependencies, context, worktree),
     ]);
+    const { statusEntries, ...summary } = status;
     const isCurrent = isPathInside(worktree.path, context.cwd);
 
     return {
@@ -439,7 +430,7 @@ export function createWorktreeRemoval(
       context,
       worktree,
       isCurrent,
-      ...status,
+      ...summary,
       ...(statusEntries
         ? {
             statusEntries: statusEntries.entries,

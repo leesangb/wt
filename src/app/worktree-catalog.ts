@@ -10,9 +10,8 @@ import {
 import { isPathInside } from "../domain/path.js";
 import { listGitWorktrees } from "../infra/git/worktree-repository.js";
 import {
-  getDefaultRemoteBranch,
+  createBranchMergeChecker,
   getWorktreeStatusSummary,
-  isBranchMergedToRemote,
 } from "../infra/git/status.js";
 import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
 
@@ -65,15 +64,16 @@ export async function loadWorktreeInfos(
 }
 
 export async function loadWorktreeStates(
-  context: RepositoryContext
+  context: RepositoryContext,
+  worktrees?: WorktreeInfo[]
 ): Promise<WorktreeState[]> {
-  const worktrees = await loadWorktreeInfos(context);
-  const defaultRemoteBaseBranch = await getDefaultRemoteBranch(context.repoRoot);
+  const infos = worktrees ?? await loadWorktreeInfos(context);
+  const isBranchMerged = createBranchMergeChecker(context.repoRoot);
 
   const worktreeStates = await Promise.all(
-    worktrees.map(async (worktree) => {
+    infos.map(async (worktree) => {
       const [mergeStatus, { unpushedCount, modifiedCount }] = await Promise.all([
-        resolveWorktreeMergeStatus(context.repoRoot, worktree, defaultRemoteBaseBranch),
+        resolveWorktreeMergeStatus(worktree, isBranchMerged),
         getWorktreeStatusSummary(worktree.path, worktree.branch),
       ]);
 
@@ -103,33 +103,29 @@ export async function loadWorktreeRemovalInfos(
   context: RepositoryContext
 ): Promise<WorktreeRemovalInfo[]> {
   const worktrees = await loadWorktreeInfos(context);
-  const defaultRemoteBaseBranch = await getDefaultRemoteBranch(context.repoRoot);
+  const isBranchMerged = createBranchMergeChecker(context.repoRoot);
 
   return Promise.all(
     worktrees.map(async (worktree) => ({
       ...worktree,
       mergeStatus: await resolveWorktreeMergeStatus(
-        context.repoRoot,
         worktree,
-        defaultRemoteBaseBranch
+        isBranchMerged
       ),
     }))
   );
 }
 
 async function resolveWorktreeMergeStatus(
-  repoRoot: string,
   worktree: WorktreeInfo,
-  defaultRemoteBaseBranch?: string
+  isBranchMerged: ReturnType<typeof createBranchMergeChecker>
 ): Promise<WorktreeMergeStatus> {
   if (worktree.isDetached || !worktree.branch) {
     return "unknown";
   }
 
-  const baseBranch = worktree.baseBranch ?? defaultRemoteBaseBranch;
-
   try {
-    const isMerged = await isBranchMergedToRemote(repoRoot, worktree.branch, baseBranch);
+    const isMerged = await isBranchMerged(worktree.branch, worktree.baseBranch);
     return isMerged ? "merged" : "not_merged";
   } catch {
     return "unknown";

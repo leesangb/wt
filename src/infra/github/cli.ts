@@ -1,4 +1,4 @@
-import { spawnSync } from "child_process";
+import { spawn } from "child_process";
 import { AppError } from "../../app/errors.js";
 
 interface GithubCommandResult {
@@ -37,21 +37,29 @@ interface PullRequestListEntry {
   url: string;
 }
 
-function runGithubCommand(
+async function runGithubCommand(
   args: string[],
   cwd: string
-): GithubCommandResult {
-  const result = spawnSync("gh", args, {
-    cwd,
-    encoding: "utf-8",
-  });
+): Promise<GithubCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn("gh", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let error: Error | undefined;
 
-  return {
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    error: result.error instanceof Error ? result.error : undefined,
-  };
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (spawnError) => {
+      error = spawnError;
+    });
+    child.on("close", (status) => resolve({ status, stdout, stderr, error }));
+  });
 }
 
 function isGithubCliUnavailable(result: GithubCommandResult): boolean {
@@ -69,7 +77,7 @@ function getGithubErrorMessage(result: GithubCommandResult): string {
 }
 
 export async function ensureGithubCliReady(cwd: string): Promise<void> {
-  const versionResult = runGithubCommand(["--version"], cwd);
+  const versionResult = await runGithubCommand(["--version"], cwd);
 
   if (isGithubCliUnavailable(versionResult)) {
     throw new AppError("GitHub CLI (`gh`) is not installed");
@@ -81,7 +89,7 @@ export async function ensureGithubCliReady(cwd: string): Promise<void> {
     );
   }
 
-  const authResult = runGithubCommand(["auth", "status"], cwd);
+  const authResult = await runGithubCommand(["auth", "status"], cwd);
 
   if (authResult.status !== 0) {
     throw new AppError("GitHub CLI is not authenticated. Run `gh auth login`.");
@@ -92,7 +100,7 @@ export async function getPullRequestInfo(
   repoRoot: string,
   pullRequestNumber: string
 ): Promise<PullRequestInfo> {
-  const result = runGithubCommand(
+  const result = await runGithubCommand(
     [
       "pr",
       "view",
@@ -150,7 +158,7 @@ export async function getPullRequestInfo(
 export async function listPullRequestLinks(
   repoRoot: string
 ): Promise<Map<string, PullRequestLink>> {
-  const result = runGithubCommand(
+  const result = await runGithubCommand(
     [
       "pr",
       "list",
@@ -212,7 +220,7 @@ export async function listPullRequestLinks(
 export async function listOpenPullRequests(
   repoRoot: string
 ): Promise<OpenPullRequestSummary[]> {
-  const result = runGithubCommand(
+  const result = await runGithubCommand(
     [
       "pr",
       "list",
@@ -273,7 +281,7 @@ export async function checkoutPullRequest(
   worktreePath: string,
   pullRequestNumber: string
 ): Promise<void> {
-  const result = runGithubCommand(["pr", "checkout", pullRequestNumber], worktreePath);
+  const result = await runGithubCommand(["pr", "checkout", pullRequestNumber], worktreePath);
 
   if (result.status !== 0) {
     throw new AppError(

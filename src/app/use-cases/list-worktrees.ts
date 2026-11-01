@@ -6,7 +6,7 @@ import type {
 import { requireRepositoryContext } from "../repository-context.js";
 import { AppError } from "../errors.js";
 import { buildIssueLinkFromPattern } from "../../domain/issue-link.js";
-import { listPullRequestLinks } from "../../infra/github/cli.js";
+import { listPullRequestLinks, type PullRequestLink } from "../../infra/github/cli.js";
 import { loadSettings } from "../../infra/storage/settings-store.js";
 import {
   loadWorktreeInfos,
@@ -34,20 +34,10 @@ export interface ListRemoveCompletionWorktreesResult {
   worktrees: WorktreeRemovalInfo[];
 }
 
-async function enrichWorktreesWithPullRequests<T extends WorktreeInfo>(
-  repoRoot: string,
-  worktrees: T[]
-): Promise<T[]> {
-  const shouldResolvePullRequests = worktrees.some(
-    (worktree) => !worktree.prUrl && worktree.branch && !worktree.isDetached
-  );
-
-  if (!shouldResolvePullRequests) {
-    return worktrees;
-  }
-
-  const pullRequestsByBranch = await listPullRequestLinks(repoRoot);
-
+function enrichWorktreesWithPullRequests<T extends WorktreeInfo>(
+  worktrees: T[],
+  pullRequestsByBranch: Map<string, PullRequestLink>
+): T[] {
   return worktrees.map((worktree) => {
     if (worktree.prUrl || !worktree.branch || worktree.isDetached) {
       return worktree;
@@ -126,13 +116,22 @@ export async function listWorktrees(
 ): Promise<ListWorktreesResult> {
   const context = await requireRepositoryContext(cwd);
   const settings = await loadSettings(context.repoRoot);
-  const worktreesWithIssueLinks = enrichWorktreesWithIssueLinks(
+  const infos = enrichWorktreesWithIssueLinks(
     settings.issue,
-    await loadWorktreeStates(context)
+    await loadWorktreeInfos(context)
   );
-  const worktrees = await enrichWorktreesWithPullRequests(
-    context.repoRoot,
-    worktreesWithIssueLinks
+  const shouldResolvePullRequests = infos.some(
+    (worktree) => !worktree.prUrl && worktree.branch && !worktree.isDetached
+  );
+  const [states, pullRequestsByBranch] = await Promise.all([
+    loadWorktreeStates(context, infos),
+    shouldResolvePullRequests
+      ? listPullRequestLinks(context.repoRoot)
+      : new Map<string, PullRequestLink>(),
+  ]);
+  const worktrees = enrichWorktreesWithPullRequests(
+    states,
+    pullRequestsByBranch
   );
 
   return {

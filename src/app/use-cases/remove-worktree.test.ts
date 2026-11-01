@@ -60,10 +60,16 @@ function createDependencies(): {
           { path: "/repo", isMain: true },
           { path: worktree.path, isMain: false },
         ],
-        inspectStatus: async () => ({ ...status }),
-        inspectStatusEntries: async (_worktreePath, limit) => {
-          statusEntryInspectionLimits.push(limit);
-          return { entries: [], totalCount: 0 };
+        inspectStatus: async (_repoRoot, _worktreePath, _branch, _base, options) => {
+          if (options?.includeStatusEntries) {
+            statusEntryInspectionLimits.push(options.statusEntryLimit);
+          }
+          return {
+            ...status,
+            ...(options?.includeStatusEntries
+              ? { statusEntries: { entries: [], totalCount: status.localChangeCount } }
+              : {}),
+          };
         },
       },
       settings: {

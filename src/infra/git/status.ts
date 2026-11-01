@@ -4,6 +4,12 @@ export interface WorktreeRemovalStatusSummary {
   localCommitCount: number;
   localChangeCount: number;
   hasUnknownLocalCommits: boolean;
+  statusEntries?: WorktreeStatusEntriesResult;
+}
+
+export interface WorktreeRemovalStatusOptions {
+  includeStatusEntries?: boolean;
+  statusEntryLimit?: number;
 }
 
 export interface WorktreeStatusEntriesResult {
@@ -126,20 +132,36 @@ export async function isBranchMergedToRemote(
   branch: string,
   baseBranch?: string
 ): Promise<boolean> {
-  const mergeBaseBranch = baseBranch ?? (await getDefaultRemoteBranch(repoRoot));
+  return createBranchMergeChecker(repoRoot)(branch, baseBranch);
+}
 
-  if (!mergeBaseBranch) {
-    throw new Error("Cannot determine merge status: no base branch specified and no default remote branch found");
-  }
+// Share ref discovery only within one catalog operation, never across commands.
+export function createBranchMergeChecker(repoRoot: string) {
+  let defaultBranch: Promise<string | undefined> | undefined;
+  const baseCommits = new Map<string, Promise<string>>();
 
-  const baseRef = `origin/${mergeBaseBranch}`;
-  const baseExists = await getCommitHash(repoRoot, baseRef);
+  return async (branch: string, baseBranch?: string): Promise<boolean> => {
+    const mergeBaseBranch = baseBranch ??
+      await (defaultBranch ??= getDefaultRemoteBranch(repoRoot));
 
-  if (!baseExists) {
-    throw new Error(`Cannot determine merge status: ${baseRef} does not exist`);
-  }
+    if (!mergeBaseBranch) {
+      throw new Error("Cannot determine merge status: no base branch specified and no default remote branch found");
+    }
 
-  return isRefAncestor(repoRoot, branch, baseRef);
+    const baseRef = `origin/${mergeBaseBranch}`;
+    let baseCommit = baseCommits.get(baseRef);
+    if (!baseCommit) {
+      baseCommit = getCommitHash(repoRoot, baseRef);
+      baseCommits.set(baseRef, baseCommit);
+    }
+    const baseExists = await baseCommit;
+
+    if (!baseExists) {
+      throw new Error(`Cannot determine merge status: ${baseRef} does not exist`);
+    }
+
+    return isRefAncestor(repoRoot, branch, baseRef);
+  };
 }
 
 export async function getWorktreeStatusSummary(
@@ -175,7 +197,7 @@ export async function getWorktreeStatusEntries(
   limit: number = 8
 ): Promise<WorktreeStatusEntriesResult> {
   try {
-    const status = await $`git -C ${worktreePath} status --short`.text();
+    const status = await $`git -C ${worktreePath} status --porcelain`.text();
     const entries = status
       .trim()
       .split("\n")
@@ -191,19 +213,6 @@ export async function getWorktreeStatusEntries(
       entries: [],
       totalCount: 0,
     };
-  }
-}
-
-async function countStatusEntries(worktreePath: string): Promise<number> {
-  try {
-    const status = await $`git -C ${worktreePath} status --porcelain`.text();
-
-    return status
-      .trim()
-      .split("\n")
-      .filter((line) => line.length > 0).length;
-  } catch {
-    return 0;
   }
 }
 
@@ -237,14 +246,22 @@ export async function getWorktreeRemovalStatusSummary(
   repoRoot: string,
   worktreePath: string,
   branch?: string,
-  baseBranch?: string
+  baseBranch?: string,
+  options: WorktreeRemovalStatusOptions = {}
 ): Promise<WorktreeRemovalStatusSummary> {
-  const localChangeCount = await countStatusEntries(worktreePath);
+  const statusEntries = await getWorktreeStatusEntries(
+    worktreePath,
+    options.includeStatusEntries ? options.statusEntryLimit ?? 8 : 0
+  );
+  const changes = {
+    localChangeCount: statusEntries.totalCount,
+    ...(options.includeStatusEntries ? { statusEntries } : {}),
+  };
 
   if (!branch) {
     return {
       localCommitCount: 0,
-      localChangeCount,
+      ...changes,
       hasUnknownLocalCommits: true,
     };
   }
@@ -260,7 +277,7 @@ export async function getWorktreeRemovalStatusSummary(
 
     return {
       localCommitCount: localCommitCount ?? 0,
-      localChangeCount,
+      ...changes,
       hasUnknownLocalCommits: localCommitCount === undefined,
     };
   }
@@ -293,7 +310,7 @@ export async function getWorktreeRemovalStatusSummary(
       if (localCommitCount !== undefined) {
         return {
           localCommitCount,
-          localChangeCount,
+          ...changes,
           hasUnknownLocalCommits: false,
         };
       }
@@ -302,7 +319,7 @@ export async function getWorktreeRemovalStatusSummary(
 
   return {
     localCommitCount: 0,
-    localChangeCount,
+    ...changes,
     hasUnknownLocalCommits: true,
   };
 }
