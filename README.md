@@ -162,6 +162,9 @@ The built-in `rex` plugin is enabled by default. Inside a Rex terminal,
 `wt new`, `wt pr`, and `wt checkout` open the resulting worktree in a new tab
 in the session identified by `REX_SESSION`, then focus that tab. The original
 shell stays in its current directory. The `rex` CLI must be available on `PATH`.
+Tab selection uses `REX_CLIENT` when set; otherwise Rex selects the only
+connected app. With multiple connected apps, set `REX_CLIENT` to the intended
+client's ID or label from `rex client ls`.
 
 ```bash
 wt new feature/login
@@ -171,8 +174,8 @@ wt pr 123 --no-cd   # Open a background tab without moving focus
 
 Use `--no-open` to skip opening a tab for one command, or set
 `"plugins": { "rex": false }` to disable the integration. Outside Rex, it does
-nothing. If Rex cannot open the tab, `wt` prints a warning and falls back to
-normal shell navigation.
+nothing. If Rex cannot open or select the tab, `wt` prints a warning and falls
+back to normal shell navigation. A tab already opened stays open if selection fails.
 
 Each invocation opens a fresh tab, including when the worktree already exists.
 This plugin does not create Rex sessions or reuse tabs. PR tabs use the PR

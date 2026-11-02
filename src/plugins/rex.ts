@@ -37,7 +37,7 @@ const rex: Plugin = ({ env, $, repoRoot }) => {
       const windowLabel = Array.from(label.replace(/\p{Cc}/gu, " ").trim())
         .slice(0, 128)
         .join("");
-      await callRex("session.new_window", {
+      const created = await callRex("session.new_window", {
         window_label: windowLabel,
         focus,
         layout: {
@@ -47,6 +47,23 @@ const rex: Plugin = ({ env, $, repoRoot }) => {
           },
         },
       });
+      if (focus) {
+        const response: unknown = created.json();
+        if (
+          !response || typeof response !== "object" ||
+          !("window_id" in response) || typeof response.window_id !== "string" ||
+          !response.window_id.startsWith("window:")
+        ) {
+          throw new Error("Rex opened the tab but did not return its ID for selection");
+        }
+        // Server focus does not select the tab in the connected app.
+        const args = JSON.stringify({ session_id: session, window_id: response.window_id });
+        const selected = await $`rex --autostart=false do session.select --args ${args}`.nothrow();
+        if (selected.exitCode !== 0) {
+          const detail = selected.stderr.toString().trim() || `rex exited with code ${selected.exitCode}`;
+          throw new Error(`Rex opened the tab but could not select it: ${detail}`);
+        }
+      }
       return "handled" as const;
     },
     "worktree.remove.before": async ({ path }) => {

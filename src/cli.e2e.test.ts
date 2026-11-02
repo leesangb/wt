@@ -117,6 +117,10 @@ if (process.env.WT_TEST_REX_ERROR) {
   console.error(process.env.WT_TEST_REX_ERROR);
   process.exit(1);
 }
+if (args.includes("session.select") && process.env.WT_TEST_REX_SELECT_ERROR) {
+  console.error(process.env.WT_TEST_REX_SELECT_ERROR);
+  process.exit(1);
+}
 if (args.includes("session.describe_block")) {
   const moved = process.env.WT_TEST_REX_MOVED && previous.some((call) => call.includes("session.describe_block"));
   console.log(JSON.stringify({ block: { block_id: "block:source", window_id: moved ? "window:moved" : "window:source" } }));
@@ -1216,7 +1220,7 @@ describe("cli e2e", () => {
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(calls[0]).toContain("session:source");
     expect(calls[0]).toContain("session.new_window");
     expect(JSON.parse(calls[0].at(-1))).toEqual({
@@ -1229,28 +1233,52 @@ describe("cli e2e", () => {
         },
       },
     });
+    expect(calls[1]).toContain("session.select");
+    expect(JSON.parse(calls[1].at(-1))).toEqual({
+      session_id: "session:source",
+      window_id: "window:new",
+    });
     expect(existsSync(shellCdPath)).toBeFalse();
     expect(readJsonResult(result.stdout).branch).toBe("feature/rex");
   });
 
-  test("opens a Rex PR tab with its display label and preserves focus with --no-cd", async () => {
+  test.each([true, false])("opens a Rex PR tab with its display label and focus=%s", async (focus) => {
     const repo = await createTestRepo();
     const rex = createFakeRex();
     const github = createFakeGithubEnv({ headBranch: "feature/rex-pr", prTitle: "feat: Improve login" });
 
-    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+    const result = runCliCapture(["pr", "123", ...(focus ? [] : ["--no-cd"])], repo.repoRoot, {
       env: { ...github, ...rex.env, PATH: `${rex.binDir}:${github.PATH}` },
     });
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
     const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(focus ? 2 : 1);
     expect(JSON.parse(calls[0].at(-1))).toMatchObject({
       window_label: "Sangbin Lee: Improve login",
-      focus: false,
+      focus,
       layout: { block: { options: { cwd: getWorktreePath(repo, "pr-123") } } },
     });
+    if (focus) {
+      expect(calls[1]).toContain("session.select");
+      expect(JSON.parse(calls[1].at(-1))).toEqual({ session_id: "session:source", window_id: "window:new" });
+    }
     expect(result.stdout).toContain("Opened with rex");
+  });
+
+  test("warns and falls back to shell navigation if Rex opens the tab but cannot select it", async () => {
+    const repo = await createTestRepo();
+    const rex = createFakeRex();
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+
+    const result = runCliCapture(["new", "feature/rex-select-failed", "--no-push"], repo.repoRoot, {
+      env: { ...rex.env, WT_TEST_REX_SELECT_ERROR: "More than one app is connected", WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stderr).toContain("Rex opened the tab but could not select it");
+    expect(result.stderr).toContain("More than one app is connected");
+    expect(readFileSync(shellCdPath, "utf8").trim()).toBe(getWorktreePath(repo, "feature/rex-select-failed"));
   });
 
   test.each(["disabled", "no-open"])("does not open a Rex tab when %s", async (mode) => {
