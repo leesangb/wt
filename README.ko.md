@@ -151,6 +151,27 @@ herdr server reload-config
 설치된 `wt` 바이너리에 의존하지 않습니다. 플러그인 설치 시 Herdr `>= 0.7.4`과
 Bun이 필요합니다.
 
+### Rex 연동
+
+내장 `rex` 플러그인은 기본 활성화되어 있습니다. Rex 터미널에서 `wt new`, `wt pr`,
+`wt checkout`을 실행하면 결과 worktree 경로로 새 탭을 열고 이동합니다.
+대상은 `REX_SESSION`이 가리키는 세션이며, 원래 shell의 디렉토리는 바뀌지 않습니다.
+`rex` CLI가 `PATH`에 있어야 합니다.
+
+```bash
+wt new feature/login
+wt pr 123
+wt pr 123 --no-cd   # focus를 유지하며 백그라운드 탭으로 열기
+```
+
+한 번만 탭 열기를 생략하려면 `--no-open`, 연동을 끄려면 설정에
+`"plugins": { "rex": false }`를 넣으세요. Rex 밖에서는 실행하지 않습니다.
+탭을 열지 못하면 경고를 출력하고 기존 shell 이동으로 돌아갑니다.
+
+기존 worktree를 재사용하더라도 호출할 때마다 새 탭을 엽니다.
+Rex 세션 생성, 탭 재사용, worktree 제거 시 탭 닫기는 하지 않습니다.
+PR 탭에는 PR 표시 이름을 사용하며 Rex의 128자 제한에 맞춰 자릅니다.
+
 ### 수동 Shell 통합 (선택사항)
 
 수동 설정을 선호하거나 특정 바이너리 경로 기준으로 shell 통합을 다시 만들고 싶다면, `wt shell install <shell>`을 실행한 뒤 `~/.wt/shell/`에 생성된 wrapper를 source하면 됩니다:
@@ -445,6 +466,7 @@ worktree 재사용 모두 훅을 호출합니다. `"handled"`를 반환하면 sh
 같은 ID는 먼저 발견한 파일을 사용하므로 저장소의 `editor.ts`가 전역 `editor.js`를
 대체하고, `herdr.ts`로 내장 Herdr를 대체할 수도 있습니다. 열기 훅은 처음
 `"handled"`를 반환한 플러그인에서 멈춥니다.
+두 환경이 함께 감지되면 내장 플러그인은 `herdr`, `rex` 순서로 실행합니다.
 
 각 파일은 훅 객체를 반환하는 함수(sync 또는 async)를 default export합니다.
 함수에 전달되는 컨텍스트는 다음과 같습니다:
@@ -512,7 +534,7 @@ Git worktree 제거 또는 백그라운드 작업 시작에 실패하면 콜백�
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 - **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
-- **plugins**: 플러그인 ID별 `true`/`false`. 지정하지 않은 플러그인과 내장 `herdr`는 기본 활성화
+- **plugins**: 플러그인 ID별 `true`/`false`. 지정하지 않은 플러그인과 내장 `herdr`, `rex`는 기본 활성화
 - **herdr.closeWorkspaceOnRemove**: `wt rm` 후 연결된 Herdr workspace 닫기 (기본값: `true`)
 - **issue.pattern**: 브랜치 이름에서 이슈 키를 추출할 선택적 JavaScript 정규식
 - **issue.url**: 선택적 이슈 트래커 URL 템플릿. 추출한 키가 들어갈 위치에 `$issue`를 사용합니다
