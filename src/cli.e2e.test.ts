@@ -108,19 +108,28 @@ function createFakeRex() {
   const binDir = makeTempDir("wt-fake-rex-");
   const logPath = join(binDir, "calls.jsonl");
   writeFileSync(join(binDir, "rex"), `#!${process.execPath}
-import { appendFileSync } from "node:fs";
-appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+const logPath = ${JSON.stringify(logPath)};
+const previous = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split("\\n").map(JSON.parse) : [];
+const args = process.argv.slice(2);
+appendFileSync(logPath, JSON.stringify(args) + "\\n");
 if (process.env.WT_TEST_REX_ERROR) {
   console.error(process.env.WT_TEST_REX_ERROR);
   process.exit(1);
 }
-console.log(JSON.stringify({ window_id: "window:new", block_ids: ["block:new"] }));
+if (args.includes("session.describe_block")) {
+  const moved = process.env.WT_TEST_REX_MOVED && previous.some((call) => call.includes("session.describe_block"));
+  console.log(JSON.stringify({ block: { block_id: "block:source", window_id: moved ? "window:moved" : "window:source" } }));
+} else {
+  console.log(JSON.stringify({ window_id: "window:new", block_ids: ["block:new"] }));
+}
 `, { mode: 0o755 });
   return {
     binDir,
     logPath,
     env: {
       REX_SESSION: "session:source",
+      REX_BLOCK: "block:source",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
     },
   };
@@ -2698,6 +2707,119 @@ describe("cli e2e", () => {
     expect(readFileSync(herdr.logPath, "utf-8")).toContain(
       "workspace close w9"
     );
+  });
+
+  test.each(["foreground", "background"])("closes the invoking Rex tab after %s removal of the current worktree", async (mode) => {
+    const repo = await createTestRepo();
+    const id = "rex-remove-current";
+    runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    const worktreePath = getWorktreePath(repo, id);
+    const nestedPath = join(worktreePath, "nested");
+    mkdirSync(nestedPath);
+    const rex = createFakeRex();
+    const removalObserved = join(repo.repoRoot, "removal-observed");
+    if (mode === "background") {
+      const pluginDir = join(worktreePath, ".wt", "plugins");
+      mkdirSync(pluginDir, { recursive: true });
+      writeFileSync(join(pluginDir, "wait-for-removal.ts"), `
+        import { existsSync } from "node:fs";
+        export default () => ({
+          "worktree.remove.before": ({ path }) => async () => {
+            const deadline = Date.now() + 3000;
+            while (existsSync(path) && Date.now() < deadline) await Bun.sleep(10);
+            if (existsSync(path)) throw new Error("Background removal did not finish");
+            await Bun.write(${JSON.stringify(removalObserved)}, "removed");
+          },
+        });
+      `);
+    }
+
+    const result = runCliCapture([
+      "rm", ".", "--force", "--keep-branch",
+      ...(mode === "foreground" ? ["--foreground"] : []),
+    ], nestedPath, { env: rex.env });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    if (mode === "background") {
+      expect(readFileSync(removalObserved, "utf8")).toBe("removed");
+    }
+    expect(result.stderr).not.toContain('Plugin "rex"');
+    const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
+    const closes = calls.filter((call) => call.includes("session.close_window"));
+    expect(closes).toHaveLength(1);
+    expect(closes[0]).toContain("session:source");
+    expect(JSON.parse(closes[0].at(-1))).toEqual({ window_id: "window:source" });
+    if (mode === "background") {
+      expect(result.stdout).toContain("Started background removal");
+      await waitForRemoveTaskStatus(repo.repoRoot, id, "done");
+    }
+    expect(existsSync(worktreePath)).toBeFalse();
+  });
+
+  test("keeps the Rex tab open when removing a different worktree", async () => {
+    const repo = await createTestRepo();
+    const id = "rex-remove-other";
+    runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    const rex = createFakeRex();
+
+    const result = runCliCapture(["rm", id, "--keep-branch"], repo.repoRoot, { env: rex.env });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(rex.logPath)).toBeFalse();
+    expect(existsSync(getWorktreePath(repo, id))).toBeFalse();
+  });
+
+  test("keeps the Rex tab open when Git cannot remove the current worktree", async () => {
+    const repo = await createTestRepo();
+    const id = "rex-remove-locked";
+    runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    const worktreePath = getWorktreePath(repo, id);
+    await $`git -C ${repo.repoRoot} worktree lock ${worktreePath}`.quiet();
+    const rex = createFakeRex();
+
+    const result = runCliCapture(["rm", ".", "--foreground", "--force", "--keep-branch"], worktreePath, { env: rex.env });
+
+    expect(result.status).toBe(1);
+    expect(existsSync(worktreePath)).toBeTrue();
+    const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
+    expect(calls.some((call) => call.includes("session.close_window"))).toBeFalse();
+  });
+
+  test.each(["missing-block", "disabled"])("keeps the Rex tab open when %s during removal", async (mode) => {
+    const repo = await createTestRepo();
+    const id = "rex-remove-disabled";
+    runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    const worktreePath = getWorktreePath(repo, id);
+    const rex = createFakeRex();
+    if (mode === "disabled") {
+      writeFileSync(join(worktreePath, ".wt", "settings.local.json"), JSON.stringify({ plugins: { rex: false } }));
+    }
+
+    const result = runCliCapture(["rm", ".", "--foreground", "--keep-branch"], worktreePath, {
+      env: { ...rex.env, ...(mode === "missing-block" ? { REX_BLOCK: undefined } : {}) },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(worktreePath)).toBeFalse();
+    expect(existsSync(rex.logPath)).toBeFalse();
+  });
+
+  test("does not close a Rex tab if the invoking pane moved during removal", async () => {
+    const repo = await createTestRepo();
+    const id = "rex-remove-moved";
+    runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    const worktreePath = getWorktreePath(repo, id);
+    const rex = createFakeRex();
+
+    const result = runCliCapture(["rm", ".", "--foreground", "--keep-branch"], worktreePath, {
+      env: { ...rex.env, WT_TEST_REX_MOVED: "1" },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
+    expect(calls.some((call) => call.includes("session.close_window"))).toBeFalse();
+    expect(result.stderr).toContain("Rex pane moved");
+    expect(existsSync(worktreePath)).toBeFalse();
   });
 
   test("runs the removal callback after deleting its plugin file using a surviving cwd", async () => {

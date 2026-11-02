@@ -186,6 +186,11 @@ describe("worktree removal", () => {
   test("starts background removal for the current non-main worktree", async () => {
     const fixture = createDependencies();
     const outcomes: unknown[] = [];
+    const startTask = fixture.dependencies.tasks.start;
+    fixture.dependencies.tasks.start = (options) => {
+      expect(fixture.changedDirectories).toEqual(["/repo"]);
+      return startTask(options);
+    };
     fixture.dependencies.plugins = async () => ({
       open: async () => ({ openedBy: undefined, warnings: [] }),
       prepareRemoval: async () => async (outcome) => {
@@ -214,7 +219,7 @@ describe("worktree removal", () => {
     });
     expect(fixture.startedTasks).toHaveLength(1);
     expect(fixture.removedPaths).toEqual([]);
-    expect(fixture.changedDirectories).toEqual([]);
+    expect(fixture.changedDirectories).toEqual(["/repo"]);
     expect(outcomes).toEqual([{ status: "background_started", pid: 42 }]);
   });
 
