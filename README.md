@@ -785,6 +785,9 @@ wt/
 
 ## Development
 
+Use Bun 1.4.4, declared in `package.json` under `packageManager`, for local
+development and builds. CI and release workflows read the same version.
+
 ```bash
 # Install dependencies
 bun install
