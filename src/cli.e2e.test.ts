@@ -104,6 +104,28 @@ function createFakeHerdr(worktreePath: string): {
   };
 }
 
+function createFakeRex() {
+  const binDir = makeTempDir("wt-fake-rex-");
+  const logPath = join(binDir, "calls.jsonl");
+  writeFileSync(join(binDir, "rex"), `#!${process.execPath}
+import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+if (process.env.WT_TEST_REX_ERROR) {
+  console.error(process.env.WT_TEST_REX_ERROR);
+  process.exit(1);
+}
+console.log(JSON.stringify({ window_id: "window:new", block_ids: ["block:new"] }));
+`, { mode: 0o755 });
+  return {
+    binDir,
+    logPath,
+    env: {
+      REX_SESSION: "session:source",
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+    },
+  };
+}
+
 function readOutputValue(stdout: string, key: string): string {
   const line = stdout.split(/\r?\n/).find(entry => entry.startsWith(`${key}=`));
 
@@ -154,6 +176,8 @@ function runCliCapture(
       HERDR_BIN_PATH: undefined,
       HERDR_ENV: undefined,
       HERDR_WORKSPACE_ID: undefined,
+      REX_SESSION: undefined,
+      REX_BLOCK: undefined,
       XDG_CONFIG_HOME: makeTempDir("wt-test-config-"),
       ...options.env,
     },
@@ -423,6 +447,8 @@ function runWrappedBashSession(
     encoding: "utf-8",
     env: {
       ...process.env,
+      REX_SESSION: undefined,
+      REX_BLOCK: undefined,
       XDG_CONFIG_HOME: makeTempDir("wt-test-config-"),
       ...envOverrides,
       REPO_ROOT: repoRoot,
@@ -1170,6 +1196,86 @@ describe("cli e2e", () => {
     expect(readFileSync(logPath, "utf8")).toContain("--focus");
   });
 
+  test("opens and focuses a new Rex tab without changing the source shell directory", async () => {
+    const repo = await createTestRepo();
+    const rex = createFakeRex();
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+
+    const result = runCliCapture(["new", "feature/rex", "--no-push", "--json"], repo.repoRoot, {
+      env: { ...rex.env, WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("session:source");
+    expect(calls[0]).toContain("session.new_window");
+    expect(JSON.parse(calls[0].at(-1))).toEqual({
+      window_label: "feature/rex",
+      focus: true,
+      layout: {
+        block: {
+          flavor: "com.superlogical.terminal.shell",
+          options: { cwd: getWorktreePath(repo, "feature/rex") },
+        },
+      },
+    });
+    expect(existsSync(shellCdPath)).toBeFalse();
+    expect(readJsonResult(result.stdout).branch).toBe("feature/rex");
+  });
+
+  test("opens a Rex PR tab with its display label and preserves focus with --no-cd", async () => {
+    const repo = await createTestRepo();
+    const rex = createFakeRex();
+    const github = createFakeGithubEnv({ headBranch: "feature/rex-pr", prTitle: "feat: Improve login" });
+
+    const result = runCliCapture(["pr", "123", "--no-cd"], repo.repoRoot, {
+      env: { ...github, ...rex.env, PATH: `${rex.binDir}:${github.PATH}` },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].at(-1))).toMatchObject({
+      window_label: "Sangbin Lee: Improve login",
+      focus: false,
+      layout: { block: { options: { cwd: getWorktreePath(repo, "pr-123") } } },
+    });
+    expect(result.stdout).toContain("Opened with rex");
+  });
+
+  test.each(["disabled", "no-open"])("does not open a Rex tab when %s", async (mode) => {
+    const repo = await createTestRepo();
+    const rex = createFakeRex();
+    if (mode === "disabled") {
+      updateSettings(repo.repoRoot, (settings) => { settings.plugins = { rex: false }; });
+    }
+
+    const result = runCliCapture([
+      "new", "feature/rex-disabled", "--no-push", "--json",
+      ...(mode === "no-open" ? ["--no-open"] : []),
+    ], repo.repoRoot, { env: rex.env });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(rex.logPath)).toBeFalse();
+    expect(readJsonResult(result.stdout).branch).toBe("feature/rex-disabled");
+  });
+
+  test("falls back to shell navigation if Rex cannot open the tab", async () => {
+    const repo = await createTestRepo();
+    const rex = createFakeRex();
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+
+    const result = runCliCapture(["new", "feature/rex-failed", "--no-push"], repo.repoRoot, {
+      env: { ...rex.env, WT_TEST_REX_ERROR: "Session not found", WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stderr).toContain('Plugin "rex" worktree.open failed');
+    expect(result.stderr).toContain("Session not found");
+    expect(readFileSync(shellCdPath, "utf8").trim()).toBe(getWorktreePath(repo, "feature/rex-failed"));
+  });
+
   test("loads a TypeScript open plugin for both new and reused checkouts", async () => {
     const repo = await createTestRepo();
     const branch = "feature/local-plugin";
@@ -1325,7 +1431,7 @@ describe("cli e2e", () => {
     const result = spawnSync(binary, ["new", "feature/compiled-plugin", "--no-push", "--json"], {
       cwd: repo.repoRoot,
       encoding: "utf8",
-      env: { ...process.env, HERDR_ENV: undefined, XDG_CONFIG_HOME: buildDir },
+      env: { ...process.env, HERDR_ENV: undefined, REX_SESSION: undefined, XDG_CONFIG_HOME: buildDir },
     });
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);

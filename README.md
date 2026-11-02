@@ -156,6 +156,28 @@ The installed plugin builds and uses the `wt` source from the same revision, so
 it does not depend on a separately installed `wt` binary. It requires Herdr
 `>= 0.7.4` and Bun during plugin installation.
 
+### Rex integration
+
+The built-in `rex` plugin is enabled by default. Inside a Rex terminal,
+`wt new`, `wt pr`, and `wt checkout` open the resulting worktree in a new tab
+in the session identified by `REX_SESSION`, then focus that tab. The original
+shell stays in its current directory. The `rex` CLI must be available on `PATH`.
+
+```bash
+wt new feature/login
+wt pr 123
+wt pr 123 --no-cd   # Open a background tab without moving focus
+```
+
+Use `--no-open` to skip opening a tab for one command, or set
+`"plugins": { "rex": false }` to disable the integration. Outside Rex, it does
+nothing. If Rex cannot open the tab, `wt` prints a warning and falls back to
+normal shell navigation.
+
+Each invocation opens a fresh tab, including when the worktree already exists.
+This plugin does not create Rex sessions, reuse tabs, or close them on removal.
+PR tabs use the PR display label, trimmed to Rex's 128-character label limit.
+
 ### Manual Shell Integration (Optional)
 
 If you prefer manual setup or want to regenerate shell integration for a specific binary path, run `wt shell install <shell>` and source the generated wrapper from `~/.wt/shell/`:
@@ -455,6 +477,7 @@ it is imported**. Project plugins run first, then global plugins, then builtins.
 Files within a directory run in filename order. The first file for each id wins,
 so a project `editor.ts` replaces a global `editor.js`, and `herdr.ts` can replace
 the builtin. The first open hook that returns `"handled"` stops the open chain.
+Builtins run in `herdr`, then `rex` order if both environments are present.
 
 Each file default-exports a factory (sync or async) returning a hooks object.
 Its context contains `repoRoot`, `cwd`, `env`, `settings`, and `$`:
@@ -525,7 +548,7 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
-- **plugins**: Plugin ids mapped to `true` or `false`; unspecified plugins, including built-in `herdr`, are enabled
+- **plugins**: Plugin ids mapped to `true` or `false`; unspecified plugins, including built-in `herdr` and `rex`, are enabled
 - **herdr.closeWorkspaceOnRemove**: Close the associated Herdr workspace after `wt rm` (default: `true`)
 - **herdr.refresh.focusedSeconds**: Git diff refresh interval for a focused Herdr Space (default: `30`, minimum: `5`)
 - **herdr.refresh.backgroundSeconds**: Git diff refresh interval for a background Herdr Space (default: `300`, minimum: `30`)

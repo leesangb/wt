@@ -14,6 +14,7 @@ import {
 } from "../infra/plugins/loader.js";
 import { buildScriptEnv } from "../infra/scripts/runner.js";
 import herdr from "../plugins/herdr.js";
+import rex from "../plugins/rex.js";
 
 export type { PluginWarning } from "../infra/plugins/loader.js";
 
@@ -32,7 +33,7 @@ export async function loadWorktreePlugins(options: {
     env,
     $: (...args) => $(...args).cwd(cwd).env(env).quiet(),
   };
-  const loaded = await loadPluginHooks(context, { herdr });
+  const loaded = await loadPluginHooks(context, { herdr, rex });
 
   return {
     async open(input: WorktreeOpenInput) {
