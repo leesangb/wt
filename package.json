@@ -3,6 +3,7 @@
   "version": "0.15.0",
   "description": "Git worktree manager CLI",
   "type": "module",
+  "packageManager": "bun@1.4.4",
   "exports": {
     "./plugin": "./src/plugin.ts"
   },

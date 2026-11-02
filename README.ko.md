@@ -766,6 +766,9 @@ wt/
 
 ## 개발
 
+로컬 개발과 빌드에는 `package.json`의 `packageManager`에 지정된 Bun 1.4.4를
+사용하세요. CI와 릴리스 workflow도 같은 버전을 읽습니다.
+
 ```bash
 # 의존성 설치
 bun install

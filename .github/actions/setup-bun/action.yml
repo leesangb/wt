@@ -4,16 +4,19 @@ runs:
   using: "composite"
   steps:
     - name: Setup Bun
+      id: bun
       uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: package.json
 
-    - name: Cache ~/.bun
+    - name: Cache Bun packages
       id: cache-bun
       uses: actions/cache@v4
       with:
-        path: ~/.bun
-        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lockb', 'bun.lock') }}
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lockb', 'bun.lock') }}
         restore-keys: |
-          ${{ runner.os }}-bun-
+          ${{ runner.os }}-bun-${{ steps.bun.outputs.bun-version }}-
 
     - name: Install dependencies
       run: bun install --frozen-lockfile
