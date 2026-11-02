@@ -175,8 +175,18 @@ nothing. If Rex cannot open the tab, `wt` prints a warning and falls back to
 normal shell navigation.
 
 Each invocation opens a fresh tab, including when the worktree already exists.
-This plugin does not create Rex sessions, reuse tabs, or close them on removal.
-PR tabs use the PR display label, trimmed to Rex's 128-character label limit.
+This plugin does not create Rex sessions or reuse tabs. PR tabs use the PR
+display label, trimmed to Rex's 128-character label limit.
+
+Removing the invoking worktree with `wt rm .` (or its ID) also closes the tab
+containing `REX_BLOCK`, including its panes. Foreground removal closes it after
+the worktree is removed; background removal closes it as soon as the removal
+task starts, even if that task later fails. The tab stays open if foreground
+worktree removal or background task startup fails. Removing another worktree
+does not close the invoking tab. Closing requires a valid `REX_BLOCK`. Before
+closing, the plugin rechecks which tab contains that pane and skips closing if
+the lookup fails or reports a different tab. Disable the `rex` plugin to turn
+off both automatic opening and closing.
 
 ### Manual Shell Integration (Optional)
 

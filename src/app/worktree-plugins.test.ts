@@ -25,7 +25,7 @@ describe("worktree plugins", () => {
 
       const plugins = await loadWorktreePlugins({
         repoRoot,
-        settings: normalizeSettings({ plugins: { herdr: false } }),
+        settings: normalizeSettings({ plugins: { herdr: false, rex: false } }),
         env: { XDG_CONFIG_HOME: join(root, "config") },
       });
       const input = { id: "feature", branch: "feature", label: "Feature", focus: true };
@@ -49,7 +49,7 @@ describe("worktree plugins", () => {
 
       const plugins = await loadWorktreePlugins({
         repoRoot: root,
-        settings: normalizeSettings({ plugins: { herdr: false } }),
+        settings: normalizeSettings({ plugins: { herdr: false, rex: false } }),
         env: { XDG_CONFIG_HOME: join(root, "config") },
       });
       const result = await plugins.open({ id: "id", path: root, branch: "feature", label: "Feature", focus: false });
@@ -83,7 +83,7 @@ describe("worktree plugins", () => {
       `);
       const plugins = await loadWorktreePlugins({
         repoRoot: root,
-        settings: normalizeSettings({ plugins: { herdr: false } }),
+        settings: normalizeSettings({ plugins: { herdr: false, rex: false } }),
         env: { XDG_CONFIG_HOME: join(root, "config"), TRACE: logPath },
       });
       const finishFirst = await plugins.prepareRemoval({ id: "first", path: "/first" });
