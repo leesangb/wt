@@ -2717,6 +2717,22 @@ describe("cli e2e", () => {
     const nestedPath = join(worktreePath, "nested");
     mkdirSync(nestedPath);
     const rex = createFakeRex();
+    const removalObserved = join(repo.repoRoot, "removal-observed");
+    if (mode === "background") {
+      const pluginDir = join(worktreePath, ".wt", "plugins");
+      mkdirSync(pluginDir, { recursive: true });
+      writeFileSync(join(pluginDir, "wait-for-removal.ts"), `
+        import { existsSync } from "node:fs";
+        export default () => ({
+          "worktree.remove.before": ({ path }) => async () => {
+            const deadline = Date.now() + 3000;
+            while (existsSync(path) && Date.now() < deadline) await Bun.sleep(10);
+            if (existsSync(path)) throw new Error("Background removal did not finish");
+            await Bun.write(${JSON.stringify(removalObserved)}, "removed");
+          },
+        });
+      `);
+    }
 
     const result = runCliCapture([
       "rm", ".", "--force", "--keep-branch",
@@ -2724,6 +2740,10 @@ describe("cli e2e", () => {
     ], nestedPath, { env: rex.env });
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
+    if (mode === "background") {
+      expect(readFileSync(removalObserved, "utf8")).toBe("removed");
+    }
+    expect(result.stderr).not.toContain('Plugin "rex"');
     const calls = readLines(rex.logPath).map((line) => JSON.parse(line));
     const closes = calls.filter((call) => call.includes("session.close_window"));
     expect(closes).toHaveLength(1);

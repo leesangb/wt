@@ -502,6 +502,7 @@ export function createWorktreeRemoval(
       plan.removalRoot.relocatedToPath,
       plan.worktree
     );
+    dependencies.runtime.changeDirectory(plan.removalRoot.relocatedToPath);
     const pid = dependencies.tasks.start({
       scripts: buildRemovalTaskScripts(
         plan.removalRoot.gitRoot,
