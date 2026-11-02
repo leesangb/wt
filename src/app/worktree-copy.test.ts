@@ -63,7 +63,7 @@ describe("copyConfiguredPaths", () => {
     await $`git -C ${repoRoot} init -q`;
     await $`git -C ${repoRoot} add -f tracked.txt`.quiet();
 
-    await copyConfiguredPaths(await loadSettings(repoRoot), repoRoot, worktreePath);
+    await copyConfiguredPaths(await loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") }), repoRoot, worktreePath);
 
     for (const path of [
       ".env.local",
@@ -108,7 +108,7 @@ describe("copyConfiguredPaths", () => {
     writeFileSync(join(repoRoot, "json.txt"), "json\n");
     await $`git -C ${repoRoot} init -q`;
 
-    await copyConfiguredPaths(await loadSettings(repoRoot), repoRoot, worktreePath);
+    await copyConfiguredPaths(await loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") }), repoRoot, worktreePath);
 
     expect(existsSync(join(worktreePath, ".env"))).toBeFalse();
     expect(existsSync(join(worktreePath, "json.txt"))).toBe(copiesJson);
@@ -134,7 +134,7 @@ describe("copyConfiguredPaths", () => {
     writeFileSync(join(repoRoot, "local.txt"), "local\n");
     await $`git -C ${repoRoot} init -q`;
 
-    await copyConfiguredPaths(await loadSettings(repoRoot), repoRoot, worktreePath);
+    await copyConfiguredPaths(await loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") }), repoRoot, worktreePath);
 
     expect(readFileSync(join(worktreePath, "local.txt"), "utf-8")).toBe("local\n");
     expect(existsSync(join(worktreePath, "shared.txt"))).toBeFalse();
@@ -164,7 +164,7 @@ describe("copyConfiguredPaths", () => {
     writeFileSync(join(siblingWorktreePath, ".env"), "sibling\n");
     writeFileSync(join(worktreePath, "local-only.txt"), "target\n");
 
-    await copyConfiguredPaths(await loadSettings(repoRoot), repoRoot, worktreePath);
+    await copyConfiguredPaths(await loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") }), repoRoot, worktreePath);
 
     expect(readFileSync(join(worktreePath, ".env"), "utf-8")).toBe("env\n");
     expect(existsSync(join(worktreePath, ".wt/settings.local.json"))).toBeTrue();

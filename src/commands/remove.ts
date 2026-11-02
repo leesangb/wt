@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { runCommand } from "../cli/command-runtime.js";
+import { orderRemovalTargets } from "../app/use-cases/remove-worktree.js";
 import {
   createRemovalPrompter,
   type RemoveCommandOptions,
@@ -20,8 +21,9 @@ export async function removeCommand(
       }
 
       let hadSkippedOrFailedTargets = false;
+      const targets = await orderRemovalTargets(ids);
 
-      for (const [index, id] of ids.entries()) {
+      for (const [index, id] of targets.entries()) {
         if (index > 0) {
           console.log("");
         }

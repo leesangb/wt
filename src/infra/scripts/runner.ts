@@ -141,7 +141,7 @@ ${failureCommands}
 }
 
 export function buildScriptEnv(
-  env?: Record<string, string>
+  env?: Record<string, string | undefined>
 ): Record<string, string | undefined> {
   const scriptEnv: Record<string, string | undefined> = {
     ...process.env,

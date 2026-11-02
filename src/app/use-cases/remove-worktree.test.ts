@@ -90,10 +90,10 @@ function createDependencies(): {
           return 42;
         },
       },
-      herdr: {
-        find: async () => ({ attempted: false }),
-        close: async () => ({ attempted: false, closed: false }),
-      },
+      plugins: async () => ({
+        open: async () => ({ openedBy: undefined, warnings: [] }),
+        prepareRemoval: async () => async () => [],
+      }),
       runtime: {
         changeDirectory: (path) => {
           changedDirectories.push(path);
@@ -112,6 +112,20 @@ function createDependencies(): {
 }
 
 describe("worktree removal", () => {
+  test("resolves batch selectors once and removes the current checkout last", async () => {
+    const fixture = createDependencies();
+    fixture.dependencies.repository.requireContext = async () => ({ ...context, cwd: "/worktrees/feature-a" });
+    fixture.dependencies.repository.loadWorktrees = async () => [
+      createWorktree(),
+      { ...createWorktree(), id: "other", path: "/worktrees/other", fullId: "project-other" },
+    ];
+    const removal = createWorktreeRemoval(fixture.dependencies);
+
+    expect(await removal.orderTargets([".", "other", "feature-a", "missing"])).toEqual([
+      "missing", "/worktrees/other", "/worktrees/feature-a",
+    ]);
+  });
+
   test("does not inspect status entries when removal details are not requested", async () => {
     const fixture = createDependencies();
     const removal = createWorktreeRemoval(fixture.dependencies);
@@ -171,6 +185,15 @@ describe("worktree removal", () => {
 
   test("starts background removal for the current non-main worktree", async () => {
     const fixture = createDependencies();
+    const outcomes: unknown[] = [];
+    fixture.dependencies.plugins = async () => ({
+      open: async () => ({ openedBy: undefined, warnings: [] }),
+      prepareRemoval: async () => async (outcome) => {
+        expect(fixture.startedTasks).toHaveLength(1);
+        outcomes.push(outcome);
+        return [];
+      },
+    });
     fixture.dependencies.repository.requireContext = async () => ({
       ...context,
       cwd: "/worktrees/feature-a/nested",
@@ -192,6 +215,27 @@ describe("worktree removal", () => {
     expect(fixture.startedTasks).toHaveLength(1);
     expect(fixture.removedPaths).toEqual([]);
     expect(fixture.changedDirectories).toEqual([]);
+    expect(outcomes).toEqual([{ status: "background_started", pid: 42 }]);
+  });
+
+  test("does not run removal callbacks when git removal fails", async () => {
+    const fixture = createDependencies();
+    const outcomes: unknown[] = [];
+    fixture.dependencies.plugins = async () => ({
+      open: async () => ({ openedBy: undefined, warnings: [] }),
+      prepareRemoval: async () => async (outcome) => {
+        outcomes.push(outcome);
+        return [];
+      },
+    });
+    fixture.dependencies.git.remove = async () => { throw new Error("worktree is locked"); };
+    const removal = createWorktreeRemoval(fixture.dependencies);
+    const plan = await removal.inspect("feature-a", context.cwd);
+
+    await expect(removal.execute(plan, { execution: "foreground" })).rejects.toThrow("worktree is locked");
+
+    expect(outcomes).toEqual([]);
+    expect(fixture.deletedBranches).toEqual([]);
   });
 
   test("relocates the removal process before foreground removal of the current worktree", async () => {
@@ -218,19 +262,20 @@ describe("worktree removal", () => {
     expect(fixture.removedPaths).toEqual(["/worktrees/feature-a"]);
   });
 
-  test("returns partial failure and Herdr warnings after removing the worktree", async () => {
+  test("returns partial failure and plugin warnings after removing the worktree", async () => {
     const fixture = createDependencies();
     fixture.dependencies.git.deleteBranch = async () => {
       throw new Error("branch is checked out elsewhere");
     };
-    fixture.dependencies.herdr.find = async () => ({
-      attempted: true,
-      workspaceId: "workspace-1",
-    });
-    fixture.dependencies.herdr.close = async () => ({
-      attempted: true,
-      closed: false,
-      error: "Herdr unavailable",
+    fixture.dependencies.plugins = async () => ({
+      open: async () => ({ openedBy: undefined, warnings: [] }),
+      prepareRemoval: async () => async (outcome) => {
+        expect(outcome).toEqual({
+          status: "worktree_removed_branch_failed",
+          error: "branch is checked out elsewhere",
+        });
+        return [{ plugin: "editor", message: "Editor unavailable" }];
+      },
     });
     const removal = createWorktreeRemoval(fixture.dependencies);
     const plan = await removal.inspect("feature-a", context.cwd);
@@ -246,8 +291,8 @@ describe("worktree removal", () => {
       error: "branch is checked out elsewhere",
       warnings: [
         {
-          kind: "herdr_close_failed",
-          message: "Could not close Herdr workspace: Herdr unavailable",
+          plugin: "editor",
+          message: "Editor unavailable",
         },
       ],
     });

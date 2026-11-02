@@ -3,11 +3,12 @@ import { createBranchWorktree } from "../app/use-cases/create-branch-worktree.js
 import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
 import { printWorktreeCommandResult } from "../cli/worktree-result.js";
-import { openCreatedWorktreeInHerdr } from "../app/use-cases/open-worktree-in-herdr.js";
+import { openCreatedWorktree } from "../app/use-cases/open-worktree.js";
 
 interface CheckoutCommandOptions {
   cd?: boolean;
   json?: boolean;
+  open?: boolean;
 }
 
 export async function checkoutCommand(
@@ -16,12 +17,13 @@ export async function checkoutCommand(
 ): Promise<void> {
   await runCommand(async () => {
     const result = await createBranchWorktree(branchName);
-    const herdr = await openCreatedWorktreeInHerdr(result, {
+    const opened = await openCreatedWorktree(result, {
       focus: options.cd !== false,
+      open: options.open,
     });
 
-    if (herdr.error) {
-      console.error(chalk.yellow(`Warning: Could not open in Herdr: ${herdr.error}`));
+    for (const warning of opened.warnings) {
+      console.error(chalk.yellow(`Warning: ${warning.message}`));
     }
 
     if (options.json) {
@@ -59,8 +61,8 @@ export async function checkoutCommand(
     console.log(chalk.dim(`  WT_PATH: ${result.worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${result.branchName}`));
 
-    if (herdr.opened) {
-      console.log(chalk.green("  Opened in Herdr"));
+    if (opened.openedBy) {
+      console.log(chalk.green(`  Opened with ${opened.openedBy}`));
       return;
     }
 

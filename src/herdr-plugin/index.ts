@@ -156,7 +156,7 @@ export function buildWorktreeCreateArgs(
 ): string[] {
   const args = [pluginWt, request.mode, request.target];
   if (request.mode === "new") args.push("--base", request.base);
-  args.push("--json");
+  args.push("--json", "--no-open");
   return args;
 }
 

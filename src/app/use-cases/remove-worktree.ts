@@ -26,12 +26,7 @@ import {
   loadSettings,
 } from "../../infra/storage/settings-store.js";
 import { ensureRemoveTaskArtifactsExcluded } from "../../infra/git/exclude.js";
-import {
-  closeHerdrWorkspace,
-  findHerdrWorkspaceForWorktree,
-  type CloseHerdrWorkspaceResult,
-  type FindHerdrWorkspaceResult,
-} from "../../infra/herdr/client.js";
+import { loadWorktreePlugins, type PluginWarning } from "../worktree-plugins.js";
 
 export interface InspectRemovalOptions {
   includeStatusEntries?: boolean;
@@ -60,17 +55,12 @@ export interface ExecuteRemovalOptions {
   execution: "auto" | "foreground";
 }
 
-export interface RemovalWarning {
-  kind: "herdr_find_failed" | "herdr_close_failed";
-  message: string;
-}
-
 export interface RemovedWorktreeResult {
   status: "removed";
   worktree: WorktreeInfo;
   branchDeleted: boolean;
   relocatedToPath?: string;
-  warnings: RemovalWarning[];
+  warnings: PluginWarning[];
 }
 
 export interface BackgroundRemovalResult {
@@ -81,7 +71,7 @@ export interface BackgroundRemovalResult {
   pid: number;
   statusFilePath: string;
   logFilePath: string;
-  warnings: RemovalWarning[];
+  warnings: PluginWarning[];
 }
 
 export interface BranchRemovalFailedResult {
@@ -89,7 +79,7 @@ export interface BranchRemovalFailedResult {
   worktree: WorktreeInfo;
   relocatedToPath?: string;
   error: string;
-  warnings: RemovalWarning[];
+  warnings: PluginWarning[];
 }
 
 export interface StaleRemovalPlanResult {
@@ -130,20 +120,12 @@ export interface WorktreeRemovalDependencies {
   tasks: {
     start: (options: DetachedTaskOptions) => number;
   };
-  herdr: {
-    find: (worktreePath: string) => Promise<FindHerdrWorkspaceResult>;
-    close: (workspaceId: string | undefined) => Promise<CloseHerdrWorkspaceResult>;
-  };
+  plugins: typeof loadWorktreePlugins;
   runtime: {
     changeDirectory: (path: string) => void;
     now: () => Date;
     platform: NodeJS.Platform;
   };
-}
-
-interface HerdrRemovalContext {
-  workspaceId?: string;
-  warnings: RemovalWarning[];
 }
 
 function getErrorMessage(error: unknown): string {
@@ -312,49 +294,21 @@ function buildRemovalCompletionNotification(worktree: WorktreeInfo) {
   };
 }
 
-async function inspectHerdrForRemoval(
+async function prepareRemovalPlugins(
   dependencies: WorktreeRemovalDependencies,
-  settings: WtSettings,
-  worktreePath: string
-): Promise<HerdrRemovalContext> {
-  if (!settings.herdr.closeWorkspaceOnRemove) {
-    return { warnings: [] };
-  }
-
-  const result = await dependencies.herdr.find(worktreePath);
-
-  if (result.error) {
-    return {
-      warnings: [
-        {
-          kind: "herdr_find_failed",
-          message: `Could not find Herdr workspace: ${result.error}`,
-        },
-      ],
-    };
-  }
-
-  return { workspaceId: result.workspaceId, warnings: [] };
-}
-
-async function closeHerdrAfterRemoval(
-  dependencies: WorktreeRemovalDependencies,
-  context: HerdrRemovalContext
-): Promise<RemovalWarning[]> {
-  if (context.warnings.length > 0) {
-    return context.warnings;
-  }
-
-  const result = await dependencies.herdr.close(context.workspaceId);
-
-  return result.error
-    ? [
-        {
-          kind: "herdr_close_failed" as const,
-          message: `Could not close Herdr workspace: ${result.error}`,
-        },
-      ]
-    : [];
+  plan: RemovalPlan
+) {
+  const settings = await dependencies.settings.load(plan.context.repoRoot);
+  const plugins = await dependencies.plugins({
+    repoRoot: plan.context.repoRoot,
+    cwd: plan.removalRoot.gitRoot,
+    settings,
+  });
+  return plugins.prepareRemoval({
+    id: plan.worktree.id,
+    path: plan.worktree.path,
+    branch: plan.worktree.branch,
+  });
 }
 
 const defaultDependencies: WorktreeRemovalDependencies = {
@@ -377,10 +331,7 @@ const defaultDependencies: WorktreeRemovalDependencies = {
   tasks: {
     start: executeDetachedTask,
   },
-  herdr: {
-    find: findHerdrWorkspaceForWorktree,
-    close: closeHerdrWorkspace,
-  },
+  plugins: loadWorktreePlugins,
   runtime: {
     changeDirectory: (path) => process.chdir(path),
     now: () => new Date(),
@@ -391,6 +342,7 @@ const defaultDependencies: WorktreeRemovalDependencies = {
 export function createWorktreeRemoval(
   dependencies: WorktreeRemovalDependencies
 ): {
+  orderTargets: (targets: string[], cwd?: string) => Promise<string[]>;
   inspect: (
     target: string,
     cwd?: string,
@@ -401,6 +353,31 @@ export function createWorktreeRemoval(
     options: ExecuteRemovalOptions
   ) => Promise<RemovalResult>;
 } {
+  const orderTargets = async (targets: string[], cwd = process.cwd()) => {
+    const context = await dependencies.repository.requireContext(cwd);
+    const worktrees = await dependencies.repository.loadWorktrees(context);
+    const current = findCurrentWorktree(worktrees, context.cwd);
+    const resolved = targets.map((target) => {
+      const worktree = target === "."
+        ? current
+        : resolveWorktreeTarget(worktrees, target, { allowPartialPath: true }).worktree;
+      return {
+        target: worktree?.path ?? target,
+        resolved: worktree !== undefined,
+        isCurrent: worktree !== undefined && worktree.path === current?.path,
+      };
+    });
+    // Keep the invoking checkout's settings and plugins alive for the whole batch.
+    // Report unresolved selectors before deletions can turn an ambiguous match into
+    // a different target. Resolve "." now and execute each known worktree once.
+    return [...new Set(resolved
+      .sort((left, right) =>
+        Number(left.resolved) - Number(right.resolved) ||
+        Number(left.isCurrent) - Number(right.isCurrent)
+      )
+      .map(({ target }) => target))];
+  };
+
   const inspect = async (
     target: string,
     cwd: string = process.cwd(),
@@ -455,12 +432,7 @@ export function createWorktreeRemoval(
     plan: RemovalPlan,
     options: ExecuteRemovalOptions
   ): Promise<RemovedWorktreeResult | BranchRemovalFailedResult> => {
-    const settings = await dependencies.settings.load(plan.context.repoRoot);
-    const herdr = await inspectHerdrForRemoval(
-      dependencies,
-      settings,
-      plan.worktree.path
-    );
+    const afterRemoval = await prepareRemovalPlugins(dependencies, plan);
 
     if (plan.removalRoot.relocatedToPath) {
       dependencies.runtime.changeDirectory(plan.removalRoot.relocatedToPath);
@@ -486,7 +458,11 @@ export function createWorktreeRemoval(
       }
     }
 
-    const warnings = await closeHerdrAfterRemoval(dependencies, herdr);
+    const warnings = await afterRemoval(
+      branchError
+        ? { status: "worktree_removed_branch_failed", error: branchError }
+        : { status: "removed", branchDeleted }
+    );
 
     if (branchError) {
       return {
@@ -517,12 +493,7 @@ export function createWorktreeRemoval(
       );
     }
 
-    const settings = await dependencies.settings.load(plan.context.repoRoot);
-    const herdr = await inspectHerdrForRemoval(
-      dependencies,
-      settings,
-      plan.worktree.path
-    );
+    const afterRemoval = await prepareRemovalPlugins(dependencies, plan);
     await dependencies.git.ensureTaskArtifactsExcluded(
       plan.removalRoot.relocatedToPath
     );
@@ -562,7 +533,7 @@ export function createWorktreeRemoval(
           ? buildRemovalCompletionNotification(plan.worktree)
           : undefined,
     });
-    const warnings = await closeHerdrAfterRemoval(dependencies, herdr);
+    const warnings = await afterRemoval({ status: "background_started", pid });
 
     return {
       status: "background_started",
@@ -614,10 +585,11 @@ export function createWorktreeRemoval(
       : executeForeground(latestPlan, options);
   };
 
-  return { inspect, execute };
+  return { orderTargets, inspect, execute };
 }
 
 const defaultRemoval = createWorktreeRemoval(defaultDependencies);
 
 export const inspectRemoval = defaultRemoval.inspect;
 export const executeRemoval = defaultRemoval.execute;
+export const orderRemovalTargets = defaultRemoval.orderTargets;

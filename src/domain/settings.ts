@@ -33,6 +33,8 @@ export interface WtSettings {
   pushRemote: boolean;
   copy: WtCopySettings;
   scripts: WtScriptsSettings;
+  /** Plugin ids map to enabled/disabled. Unspecified plugins are enabled. */
+  plugins: Record<string, boolean>;
   herdr: WtHerdrSettings;
   issue?: WtIssueSettings;
 }
@@ -66,6 +68,7 @@ export const DEFAULT_WT_SETTINGS: WtSettings = {
     post: [],
     postMode: "async",
   },
+  plugins: {},
   herdr: {
     closeWorkspaceOnRemove: true,
     refresh: {
@@ -115,6 +118,19 @@ function normalizeRefreshSeconds(
     : fallback;
 }
 
+function normalizePluginSettings(value: unknown): Record<string, boolean> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("plugins must map plugin names to true or false");
+  }
+  return Object.fromEntries(Object.entries(value).map(([name, enabled]) => {
+    if (typeof enabled !== "boolean") {
+      throw new Error(`plugins.${name} must be true or false`);
+    }
+    return [name, enabled];
+  }));
+}
+
 export function mergeSettingsInputs(
   base?: WtSettingsInput | null,
   override?: WtSettingsInput | null
@@ -161,12 +177,20 @@ export function mergeSettingsInputs(
           ...(mergedHerdrRefresh ? { refresh: mergedHerdrRefresh } : {}),
         }
       : undefined;
+  const mergedPlugins =
+    base?.plugins !== undefined || override?.plugins !== undefined
+      ? {
+          ...normalizePluginSettings(base?.plugins),
+          ...normalizePluginSettings(override?.plugins),
+        }
+      : undefined;
 
   return {
     ...base,
     ...override,
     ...(mergedCopy ? { copy: mergedCopy } : {}),
     ...(mergedScripts ? { scripts: mergedScripts } : {}),
+    ...(mergedPlugins ? { plugins: mergedPlugins } : {}),
     ...(mergedHerdr ? { herdr: mergedHerdr } : {}),
     ...(mergedIssue ? { issue: mergedIssue } : {}),
   };
@@ -177,6 +201,7 @@ export function normalizeSettings(
 ): WtSettings {
   const copyInput = normalizeCopyInput(input?.copy);
   const issueInput = normalizeIssueInput(input?.issue);
+  const plugins = normalizePluginSettings(input?.plugins);
 
   return {
     worktreeDir: input?.worktreeDir ?? DEFAULT_WT_SETTINGS.worktreeDir,
@@ -192,6 +217,7 @@ export function normalizeSettings(
       postMode:
         input?.scripts?.postMode ?? DEFAULT_WT_SETTINGS.scripts.postMode,
     },
+    plugins: { ...plugins },
     herdr: {
       closeWorkspaceOnRemove:
         input?.herdr?.closeWorkspaceOnRemove ??

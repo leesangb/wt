@@ -125,6 +125,12 @@ Herdr worktree workspace로 즉시 열고 focus합니다. `--no-cd`를 사용하
 열되 focus는 이동하지 않습니다. Herdr 밖에서는 기존 shell 자동 `cd` 동작이 그대로
 유지됩니다.
 
+이 동작은 기본 활성화된 내장 `herdr` 플러그인이 제공합니다.
+`"plugins": { "herdr": false }`로 자동 열기·닫기를 끄거나, `new`, `checkout`,
+`pr`에 `--no-open`을 붙여 해당 명령의 자동 열기만 건너뛸 수 있습니다.
+위의 Herdr UI 플러그인은 별도로 설치하며, 직접 workspace를 열기 때문에 내부에서
+`wt --no-open`을 호출해 중복 실행을 막습니다.
+
 예를 들어 Herdr의 기본 새 worktree 단축키를 `wt` 흐름으로 교체할 수 있습니다:
 
 ```toml
@@ -402,6 +408,98 @@ wt clean -m -d --keep-branch
 
 실제 삭제 전에 항상 선택된 대상의 미리보기를 출력하고 한 번 더 확인합니다. 미리보기만 보고 싶으면 `--dry`, 미리보기 확인과 변경사항 프롬프트까지 모두 건너뛰려면 `-f`, `--force`를 사용하세요. 선택이 항상 picker에서 이뤄지므로 `wt clean`은 interactive terminal이 필요합니다. `--remote-deleted`는 upstream이 `[gone]` 상태인 브랜치만 대상으로 삼으므로, 아직 push하지 않은 로컬 브랜치를 원격 삭제로 오인하지 않습니다.
 
+## 커스텀 플러그인
+
+저장소에 적용하려면 `.wt/plugins/`, 모든 저장소에 적용하려면
+`~/.config/wt/plugins/`에 JavaScript 또는 TypeScript 파일을 두세요.
+`XDG_CONFIG_HOME`이 설정되어 있으면 전역 경로는 `$XDG_CONFIG_HOME/wt/plugins/`입니다.
+별도 등록이나 런타임 설치 없이 단일 `wt` 실행 파일에서도 로딩됩니다.
+플러그인은 pre/post 스크립트처럼 사용자 권한으로 실행되므로 신뢰하는 파일만 추가하세요.
+
+예를 들어 `.wt/plugins/editor.ts`로 에디터 연동을 추가할 수 있습니다:
+
+```ts
+export default ({ env, $ }) => {
+  if (env.WT_EDITOR !== "code") return {};
+
+  return {
+    "worktree.open": async ({ path, focus }) => {
+      if (!focus) return;
+      await $`code --new-window ${path}`;
+      return "handled";
+    },
+  };
+};
+```
+
+`WT_EDITOR=code wt checkout feature/login`으로 실행합니다. 새 worktree 생성과 기존
+worktree 재사용 모두 훅을 호출합니다. `"handled"`를 반환하면 shell 자동 `cd`를
+생략합니다. `"skipped"` 또는 아무것도 반환하지 않으면 다음 플러그인을 시도하고,
+아무도 처리하지 않으면 기존 shell 이동을 수행합니다. `--no-cd`는 `focus: false`를
+전달하고 shell 이동도 끕니다. `--no-open`은 열기 플러그인 로딩을 건너뜁니다.
+`--json`은 출력 형식만 바꾸며 훅은 계속 실행합니다.
+
+플러그인 ID는 확장자를 뺀 파일 이름입니다. 위 예시의 `editor`를 끄려면 설정에
+`"plugins": { "editor": false }`를 넣으세요. 비활성화된 파일은 import하지 않습니다.
+실행 순서는 **저장소 → 전역 → 내장**이고, 같은 디렉토리에서는 파일명 순서입니다.
+같은 ID는 먼저 발견한 파일을 사용하므로 저장소의 `editor.ts`가 전역 `editor.js`를
+대체하고, `herdr.ts`로 내장 Herdr를 대체할 수도 있습니다. 열기 훅은 처음
+`"handled"`를 반환한 플러그인에서 멈춥니다.
+
+각 파일은 훅 객체를 반환하는 함수(sync 또는 async)를 default export합니다.
+함수에 전달되는 컨텍스트는 다음과 같습니다:
+
+- `repoRoot`: `wt`를 실행한 checkout의 루트입니다. 이곳에서 저장소 플러그인을 찾습니다.
+- `cwd`: shell 명령의 작업 디렉토리입니다. 제거할 때는 삭제 후에도 남는 checkout을
+  사용하므로 콜백에서 명령을 계속 실행할 수 있습니다.
+- `env`: 부모의 환경변수입니다. shell wrapper용 `WT_SHELL_CD_FILE`은 제외합니다.
+- `settings`: 기존 `herdr.*` 옵션을 포함한 병합된 설정입니다.
+- `$`: 해당 cwd와 환경에서 실행하는 Bun shell입니다. 기본적으로 출력을 캡처하며
+  `.text()`나 `.json()`으로 읽을 수 있습니다. `--json` 출력을 보존하려면 플러그인 로그는
+  `console.error` 등으로 stderr에 출력하세요.
+
+지원하는 훅:
+
+| 훅 | 입력 | 반환값 |
+| --- | --- | --- |
+| `worktree.open` | `{ id, path, branch, label, focus }` | `"handled"`, `"skipped"` 또는 반환 생략 |
+| `worktree.remove.before` | `{ id, path, branch? }` | 제거 결과를 받는 콜백 또는 반환 생략 |
+
+훅과 제거 콜백 모두 async 함수로 작성할 수 있습니다. 제거 전에 조회한 값은
+콜백의 클로저에 보관하면 됩니다:
+
+```ts
+export default ({ $ }) => ({
+  "worktree.remove.before": async ({ path }) => {
+    const label = (await $`git -C ${path} branch --show-current`.text()).trim();
+
+    return ({ status }) => {
+      console.error(`${label}: ${status}`);
+    };
+  },
+});
+```
+
+제거 훅은 사용자 확인과 제거 계획 재검증 뒤에 실행하며 `wt clean`에도 적용됩니다.
+배치 삭제에서는 현재 checkout을 마지막에 지워 모든 대상에 같은 로컬 플러그인과
+설정이 적용되게 합니다.
+반환한 콜백은 다음 중 한 결과를 받습니다:
+
+- `{ status: "removed", branchDeleted }`: foreground worktree 제거 성공.
+- `{ status: "worktree_removed_branch_failed", error }`: worktree는 제거했지만 브랜치 삭제 실패.
+- `{ status: "background_started", pid }`: 백그라운드 작업 시작. **삭제 완료 알림은 아닙니다.**
+
+Git worktree 제거 또는 백그라운드 작업 시작에 실패하면 콜백을 호출하지 않습니다.
+플러그인 로딩·훅·콜백 오류는 경고로 표시하고 다른 플러그인과 worktree 작업을 계속합니다.
+이 훅은 외부 연동을 위한 것으로 Git 작업을 거부하는 용도가 아닙니다.
+기존 `scripts.pre` / `scripts.post`는 생성 시 환경 설정용이며 재사용에는 실행되지 않습니다.
+
+타입 검사가 필요하고 프로젝트에서 `@leesangb/wt` 패키지를 참조할 수 있다면
+`import type { Plugin } from "@leesangb/wt/plugin"`과
+`const plugin: Plugin = (context) => ({ ... })`를 사용할 수 있습니다.
+전체 타입은 [src/plugin.ts](src/plugin.ts)에 있습니다. Bun/Node 내장 모듈과 로컬에
+설치된 의존성을 사용할 수 있으며, `wt`가 npm 패키지를 자동으로 설치하지는 않습니다.
+
 ## 설정
 
 저장소의 `.wt/settings.json`을 편집하세요:
@@ -414,15 +512,25 @@ wt clean -m -d --keep-branch
 - **scripts.pre**: worktree 생성 전에 실행할 명령어 배열 (저장소 루트에서 실행)
 - **scripts.post**: worktree 생성 후에 실행할 명령어 배열 (새 worktree 디렉토리에서 실행)
 - **scripts.postMode**: `async`(기본값) 또는 `sync`(포그라운드 실행)
+- **plugins**: 플러그인 ID별 `true`/`false`. 지정하지 않은 플러그인과 내장 `herdr`는 기본 활성화
 - **herdr.closeWorkspaceOnRemove**: `wt rm` 후 연결된 Herdr workspace 닫기 (기본값: `true`)
 - **issue.pattern**: 브랜치 이름에서 이슈 키를 추출할 선택적 JavaScript 정규식
 - **issue.url**: 선택적 이슈 트래커 URL 템플릿. 추출한 키가 들어갈 위치에 `$issue`를 사용합니다
 
-사용자별 또는 머신별 override가 필요하면 선택적으로 `.wt/settings.local.json`도 둘 수 있습니다. `wt`는 먼저 `.wt/settings.json`을 읽고, 그 위에 `.wt/settings.local.json`을 덮어씁니다. 중첩된 `copy.*`, `scripts.*`, `herdr.*`, `issue.*` 필드도 병합되므로 `copy.exclude`, `scripts.postMode`, `herdr.closeWorkspaceOnRemove`, `issue.url`만 따로 바꿀 수 있습니다.
+설정은 다음 순서로 읽으며 뒤쪽 값이 우선합니다:
+
+1. **전역 플러그인 활성화 설정**인 `~/.config/wt/settings.json` 또는 `$XDG_CONFIG_HOME/wt/settings.json`.
+2. 명령을 실행한 저장소의 `.wt/settings.json`.
+3. 공유하지 않는 저장소별 override인 `.wt/settings.local.json`.
+
+중첩된 `copy.*`, `scripts.*`, `plugins.*`, `herdr.*`, `issue.*` 필드도 병합하므로
+플러그인 하나나 `herdr.closeWorkspaceOnRemove`만 덮어쓸 수 있습니다.
+전역 파일에서는 `plugins`만 읽으며, 나머지 필드는 기존처럼 저장소에서 설정합니다.
+`wt init`은 기존처럼 저장소 설정만 생성합니다.
 
 `copy.include`와 `copy.exclude`는 저장소 루트를 기준으로 해석됩니다. 앞에 `./`를 붙여도 되고, `./apps`와 `apps`는 같은 의미입니다. `.wt`나 `apps/web`처럼 디렉토리 이름만 적으면 `/**`를 붙인 것처럼 하위 전체에 적용됩니다. `wt`는 source 저장소에서 git에 트래킹되지 않은 파일만 복사하고, 새로 만든 worktree 쪽에서 이미 tracked인 파일은 덮어쓰지 않습니다. 또한 항상 `.git`, `node_modules`, 그리고 현재 `.gitignore`에 의해 무시되는 디렉토리를 건너뜁니다. `.wt/meta.json`, `.wt/.gitignore`, async post-task 상태 파일처럼 `wt`가 내부적으로 쓰는 예약 파일은 계속 `wt`가 관리합니다.
 
-두 설정 파일 모두 `copy`를 정의하지 않으면 source 저장소 루트의 `.worktreeinclude`를 사용합니다:
+어느 설정 파일에도 `copy`가 없으면 source 저장소 루트의 `.worktreeinclude`를 사용합니다:
 
 ```gitignore
 # 각 worktree에 필요한 로컬 파일

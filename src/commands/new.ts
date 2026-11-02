@@ -3,7 +3,7 @@ import { createWorktree } from "../app/use-cases/create-worktree.js";
 import { runCommand } from "../cli/command-runtime.js";
 import { emitShellCd } from "../infra/shell/cd.js";
 import { printWorktreeCommandResult } from "../cli/worktree-result.js";
-import { openCreatedWorktreeInHerdr } from "../app/use-cases/open-worktree-in-herdr.js";
+import { openCreatedWorktree } from "../app/use-cases/open-worktree.js";
 
 interface NewCommandOptions {
   base?: string;
@@ -11,6 +11,7 @@ interface NewCommandOptions {
   cd?: boolean;
   id?: string;
   json?: boolean;
+  open?: boolean;
 }
 
 export async function newCommand(
@@ -22,12 +23,13 @@ export async function newCommand(
       console.log(chalk.blue("Fetching latest changes..."));
     }
     const result = await createWorktree(branchName, options);
-    const herdr = await openCreatedWorktreeInHerdr(result, {
+    const opened = await openCreatedWorktree(result, {
       focus: options.cd !== false,
+      open: options.open,
     });
 
-    if (herdr.error) {
-      console.error(chalk.yellow(`Warning: Could not open in Herdr: ${herdr.error}`));
+    for (const warning of opened.warnings) {
+      console.error(chalk.yellow(`Warning: ${warning.message}`));
     }
 
     if (options.json) {
@@ -51,8 +53,8 @@ export async function newCommand(
     console.log(chalk.dim(`  WT_PATH: ${result.worktreePath}`));
     console.log(chalk.dim(`  WT_BRANCH: ${result.branchName}`));
 
-    if (herdr.opened) {
-      console.log(chalk.green("  Opened in Herdr"));
+    if (opened.openedBy) {
+      console.log(chalk.green(`  Opened with ${opened.openedBy}`));
       return;
     }
 

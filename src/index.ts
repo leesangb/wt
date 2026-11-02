@@ -35,6 +35,7 @@ program
   .option("-b, --base <base-branch>", "Base branch to create from")
   .option("--id <id>", "Custom ID for the worktree (default: branch name)")
   .option("--no-push", "Skip pushing the new branch to remote")
+  .option("--no-open", "Skip plugin worktree opening")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .option("--json", "Output the worktree result as JSON")
   .action(newCommand);
@@ -87,6 +88,7 @@ program
 program
   .command("pr <number>")
   .description("Create or navigate to a pull request worktree")
+  .option("--no-open", "Skip plugin worktree opening")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .option("--json", "Output the worktree result as JSON")
   .action(prCommand);
@@ -99,6 +101,7 @@ program
   .command("checkout <branch-name>")
   .alias("switch")
   .description("Create or navigate to a local branch worktree")
+  .option("--no-open", "Skip plugin worktree opening")
   .option("--no-cd", "Skip changing directory (for direct binary usage)")
   .option("--json", "Output the worktree result as JSON")
   .action(checkoutCommand);

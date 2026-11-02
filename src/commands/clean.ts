@@ -8,6 +8,7 @@ import {
 } from "../app/use-cases/clean-worktrees.js";
 import {
   inspectRemoval,
+  orderRemovalTargets,
   type RemovalPlan,
 } from "../app/use-cases/remove-worktree.js";
 import { promptMultiSelect } from "../cli/multi-select.js";
@@ -424,15 +425,18 @@ export async function cleanCommand(
       }
 
       let hadSkippedOrFailedTargets = false;
+      const targets = await orderRemovalTargets(
+        previewEntries.map((entry) => entry.candidate.worktree.path)
+      );
 
-      for (const [index, entry] of previewEntries.entries()) {
+      for (const [index, target] of targets.entries()) {
         if (index > 0) {
           console.log("");
         }
 
         try {
           const result = await removeSingleWorktree(
-            entry.candidate.worktree.id,
+            target,
             options,
             true,
             prompter
@@ -445,7 +449,7 @@ export async function cleanCommand(
           hadSkippedOrFailedTargets = true;
           const message = error instanceof Error ? error.message : String(error);
           console.error(
-            chalk.red(`Error removing "${entry.candidate.worktree.id}": ${message}`)
+            chalk.red(`Error removing "${target}": ${message}`)
           );
         }
       }
