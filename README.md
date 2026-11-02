@@ -130,6 +130,11 @@ When `wt new`, `wt checkout`, or `wt pr` runs inside a Herdr pane, `wt`
 automatically opens the resulting checkout as a focused Herdr worktree workspace.
 Pass `--no-cd` to open the workspace without moving focus to it.
 Outside Herdr, the existing shell auto-`cd` behavior is unchanged.
+This integration is the built-in `herdr` plugin, enabled by default. Set
+`"plugins": { "herdr": false }` to disable automatic opening and closing, or
+pass `--no-open` to skip opening plugins for one `new`, `checkout`, or `pr` command.
+The Herdr UI plugin above is installed separately; its actions open their own
+workspace and invoke `wt --no-open` to avoid opening it twice.
 
 For example, replace Herdr's default new-worktree binding with the `wt` flow:
 
@@ -413,6 +418,101 @@ wt clean -m -d --keep-branch
 
 Before removing anything, `wt clean` prints a preview of the selected worktrees and asks for confirmation. Use `--dry` to preview only, or `-f`, `--force` to skip the preview confirmation and any pending-change prompts. `wt clean` requires an interactive terminal because selection always happens in the picker. `--remote-deleted` only matches branches with a gone upstream, so local branches that were never pushed are not treated as deleted remotes.
 
+## Custom plugins
+
+Put a JavaScript or TypeScript file in `.wt/plugins/` for the current repository,
+or `~/.config/wt/plugins/` for every repository (`$XDG_CONFIG_HOME/wt/plugins/`
+when set). No registration or separate runtime is needed, including when using
+the standalone `wt` binary. The files execute as your user, just like configured
+pre/post scripts; only add plugins you trust.
+
+For example, `.wt/plugins/editor.ts` can open worktrees in your editor:
+
+```ts
+export default ({ env, $ }) => {
+  if (env.WT_EDITOR !== "code") return {};
+
+  return {
+    "worktree.open": async ({ path, focus }) => {
+      if (!focus) return;
+      await $`code --new-window ${path}`;
+      return "handled";
+    },
+  };
+};
+```
+
+Run `WT_EDITOR=code wt checkout feature/login`. The hook runs for both newly
+created and reused worktrees. Returning `"handled"` suppresses shell auto-`cd`;
+returning `"skipped"` or nothing tries the next plugin, then falls back to shell
+navigation. `--no-cd` passes `focus: false` and disables shell navigation.
+`--no-open` skips opening plugins entirely. `--json` only changes output format;
+it does not skip hooks.
+
+Plugin ids are filenames without their extension, so this file's id is `editor`.
+Set `"plugins": { "editor": false }` in any settings file to disable it **before
+it is imported**. Project plugins run first, then global plugins, then builtins.
+Files within a directory run in filename order. The first file for each id wins,
+so a project `editor.ts` replaces a global `editor.js`, and `herdr.ts` can replace
+the builtin. The first open hook that returns `"handled"` stops the open chain.
+
+Each file default-exports a factory (sync or async) returning a hooks object.
+Its context contains `repoRoot`, `cwd`, `env`, `settings`, and `$`:
+
+- `repoRoot` is the invoking checkout; project plugins are discovered there.
+- `cwd` is the working directory for shell commands. During removal it is a
+  surviving checkout, so callbacks can run after the target directory is gone.
+- `env` is the inherited environment without the shell wrapper's `WT_SHELL_CD_FILE`.
+- `settings` is the merged configuration, including existing `herdr.*` options.
+- `$` runs Bun shell commands with this cwd and environment. Output is captured
+  by default; use `.text()` or `.json()` to read it. Report plugin logs to stderr,
+  for example with `console.error`, to keep `--json` output usable.
+
+Supported hooks:
+
+| Hook | Input | Return |
+| --- | --- | --- |
+| `worktree.open` | `{ id, path, branch, label, focus }` | `"handled"`, `"skipped"`, or nothing |
+| `worktree.remove.before` | `{ id, path, branch? }` | An optional callback receiving the removal outcome |
+
+Both hooks and the removal callback may be async. A removal hook can keep
+provider-specific state in its callback closure:
+
+```ts
+export default ({ $ }) => ({
+  "worktree.remove.before": async ({ path }) => {
+    const label = (await $`git -C ${path} branch --show-current`.text()).trim();
+
+    return ({ status }) => {
+      console.error(`${label}: ${status}`);
+    };
+  },
+});
+```
+
+Removal hooks run after confirmation and plan revalidation, including removals
+through `wt clean`. Batch removal keeps the current checkout until last, so its
+local plugins and settings remain available for every target. Each returned
+callback runs after one of these outcomes:
+
+- `{ status: "removed", branchDeleted }`: foreground worktree removal succeeded.
+- `{ status: "worktree_removed_branch_failed", error }`: the worktree was removed,
+  but deleting its branch failed.
+- `{ status: "background_started", pid }`: the background task started; this is
+  **not** a notification that deletion finished.
+
+Callbacks do not run when Git worktree removal or background task startup fails.
+Plugin loading, hook, and callback errors produce warnings and allow other
+plugins and the worktree operation to continue. These hooks are for integration
+effects, not for vetoing Git operations. Existing `scripts.pre` / `scripts.post`
+remain creation setup scripts and do not run for reused worktrees.
+
+For optional editor type checking, a project with the `@leesangb/wt` package
+available can `import type { Plugin } from "@leesangb/wt/plugin"` and use
+`const plugin: Plugin = (context) => ({ ... })`. Types are in [src/plugin.ts](src/plugin.ts).
+Plugins can use Bun/Node builtins and locally installed dependencies; `wt` does
+not download npm packages or install dependencies automatically.
+
 ## Configuration
 
 Edit `.wt/settings.json` in your repository:
@@ -425,6 +525,7 @@ Edit `.wt/settings.json` in your repository:
 - **scripts.pre**: Array of commands to run before creating worktree (runs in repo root)
 - **scripts.post**: Array of commands to run after creating worktree (runs in new worktree directory)
 - **scripts.postMode**: `async` (default) or `sync` for foreground execution
+- **plugins**: Plugin ids mapped to `true` or `false`; unspecified plugins, including built-in `herdr`, are enabled
 - **herdr.closeWorkspaceOnRemove**: Close the associated Herdr workspace after `wt rm` (default: `true`)
 - **herdr.refresh.focusedSeconds**: Git diff refresh interval for a focused Herdr Space (default: `30`, minimum: `5`)
 - **herdr.refresh.backgroundSeconds**: Git diff refresh interval for a background Herdr Space (default: `300`, minimum: `30`)
@@ -432,11 +533,17 @@ Edit `.wt/settings.json` in your repository:
 - **issue.pattern**: Optional JavaScript regular expression for extracting issue keys from branch names
 - **issue.url**: Optional issue tracker URL template. Use `$issue` where the extracted key should appear
 
-You can also add an optional `.wt/settings.local.json` for user- or machine-local overrides. `wt` loads `.wt/settings.json` first, then applies `.wt/settings.local.json` on top of it. Nested `copy.*`, `scripts.*`, `herdr.*`, and `issue.*` fields are merged, so you can override only `copy.exclude`, `scripts.postMode`, `herdr.closeWorkspaceOnRemove`, or `issue.url` without copying the rest of each object.
+Settings are loaded in this order, with later values taking precedence:
+
+1. `~/.config/wt/settings.json` for global **plugin switches only** (or `$XDG_CONFIG_HOME/wt/settings.json`).
+2. `.wt/settings.json` in the repository from which `wt` is invoked.
+3. `.wt/settings.local.json` for unshared repository overrides.
+
+Repository overrides merge nested `copy.*`, `scripts.*`, `plugins.*`, `herdr.*`, and `issue.*` fields, so you can override one plugin switch or `herdr.closeWorkspaceOnRemove` without copying the remaining settings. The global file reads only `plugins`; other fields remain repository settings. `wt init` still writes only repository settings.
 
 `copy.include` and `copy.exclude` are resolved relative to the repository root. A leading `./` is optional, so `./apps` and `apps` mean the same thing. If a pattern names a directory without `/**` (for example `.wt` or `apps/web`), `wt` treats it as the whole subtree for both include and exclude rules. `wt` only copies files that are untracked in the source repo, and it will not overwrite files already tracked in the newly created worktree. It always skips `.git`, `node_modules`, and directories currently ignored by `.gitignore`. Internal reserved files under `.wt/` such as `meta.json`, `.gitignore`, and async post-task state remain managed by `wt`.
 
-If neither settings file defines `copy`, `wt` uses `.worktreeinclude` at the source repository root:
+If no settings file defines `copy`, `wt` uses `.worktreeinclude` at the source repository root:
 
 ```gitignore
 # Local files needed by each worktree

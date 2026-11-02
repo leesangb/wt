@@ -6,6 +6,20 @@ import {
 } from "./settings.js";
 
 describe("mergeSettingsInputs", () => {
+  test("overrides individual plugin switches without enabling disabled siblings", () => {
+    expect(normalizeSettings(mergeSettingsInputs(
+      { plugins: { herdr: false, editor: true } },
+      { plugins: { editor: false } }
+    )).plugins).toEqual({ herdr: false, editor: false });
+  });
+
+  test("rejects invalid plugin switches before merging them", () => {
+    expect(() => mergeSettingsInputs(JSON.parse('{"plugins": []}'), {}))
+      .toThrow("plugins must map plugin names to true or false");
+    expect(() => normalizeSettings(JSON.parse('{"plugins": {"herdr": "false"}}')))
+      .toThrow("plugins.herdr must be true or false");
+  });
+
   test("returns undefined when both inputs are missing", () => {
     expect(mergeSettingsInputs()).toBeUndefined();
   });
@@ -127,6 +141,7 @@ describe("normalizeSettings", () => {
         post: ["pnpm install"],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -159,6 +174,7 @@ describe("normalizeSettings", () => {
         post: [],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -255,6 +271,7 @@ describe("normalizeSettings", () => {
         post: [],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {

@@ -28,10 +28,34 @@ function writeJson(path: string, content: unknown): void {
 }
 
 describe("settings store", () => {
+  test("merges global plugin switches with repository overrides without changing repository defaults", async () => {
+    const repoRoot = makeTempDir("wt-settings-store-");
+    const configHome = makeTempDir("wt-global-settings-");
+    mkdirSync(join(configHome, "wt"), { recursive: true });
+    mkdirSync(join(repoRoot, ".wt"));
+    writeJson(join(configHome, "wt", "settings.json"), {
+      plugins: { herdr: false, editor: true },
+      copy: { include: ["global-only"] },
+      scripts: { pre: ["global-command"] },
+    });
+    writeJson(join(repoRoot, ".wt", "settings.json"), {
+      plugins: { editor: false, notify: true },
+    });
+    writeJson(join(repoRoot, ".wt", "settings.local.json"), {
+      plugins: { notify: false },
+    });
+
+    const settings = await loadSettings(repoRoot, { XDG_CONFIG_HOME: configHome });
+
+    expect(settings.plugins).toEqual({ herdr: false, editor: false, notify: false });
+    expect(settings.copy).toEqual({ include: [], exclude: [] });
+    expect(settings.scripts.pre).toEqual([]);
+  });
+
   test("returns defaults when no settings files exist", async () => {
     const repoRoot = makeTempDir("wt-settings-store-");
 
-    await expect(loadSettings(repoRoot)).resolves.toEqual({
+    await expect(loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") })).resolves.toEqual({
       worktreeDir: "~/.wt",
       baseBranch: "main",
       pushRemote: true,
@@ -44,6 +68,7 @@ describe("settings store", () => {
         post: [],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -65,7 +90,7 @@ describe("settings store", () => {
       pushRemote: false,
     });
 
-    await expect(loadSettings(repoRoot)).resolves.toEqual({
+    await expect(loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") })).resolves.toEqual({
       worktreeDir: "/tmp/worktrees",
       baseBranch: "main",
       pushRemote: false,
@@ -78,6 +103,7 @@ describe("settings store", () => {
         post: [],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -129,7 +155,7 @@ describe("settings store", () => {
       },
     });
 
-    await expect(loadSettings(repoRoot)).resolves.toEqual({
+    await expect(loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") })).resolves.toEqual({
       worktreeDir: "/tmp/worktrees",
       baseBranch: "develop",
       pushRemote: true,
@@ -142,6 +168,7 @@ describe("settings store", () => {
         post: ["bun install"],
         postMode: "sync",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -165,7 +192,7 @@ describe("settings store", () => {
       },
     });
 
-    await expect(loadSettings(repoRoot)).resolves.toEqual({
+    await expect(loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") })).resolves.toEqual({
       worktreeDir: "~/.wt",
       baseBranch: "main",
       pushRemote: false,
@@ -178,6 +205,7 @@ describe("settings store", () => {
         post: ["pnpm install"],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {
@@ -207,7 +235,7 @@ describe("settings store", () => {
       },
     });
 
-    await expect(loadSettings(repoRoot)).resolves.toEqual({
+    await expect(loadSettings(repoRoot, { XDG_CONFIG_HOME: join(repoRoot, ".test-config") })).resolves.toEqual({
       worktreeDir: "~/.wt",
       baseBranch: "main",
       pushRemote: true,
@@ -220,6 +248,7 @@ describe("settings store", () => {
         post: [],
         postMode: "async",
       },
+      plugins: {},
       herdr: {
         closeWorkspaceOnRemove: true,
         refresh: {

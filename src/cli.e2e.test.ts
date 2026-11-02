@@ -154,6 +154,7 @@ function runCliCapture(
       HERDR_BIN_PATH: undefined,
       HERDR_ENV: undefined,
       HERDR_WORKSPACE_ID: undefined,
+      XDG_CONFIG_HOME: makeTempDir("wt-test-config-"),
       ...options.env,
     },
     input: options.input,
@@ -422,6 +423,7 @@ function runWrappedBashSession(
     encoding: "utf-8",
     env: {
       ...process.env,
+      XDG_CONFIG_HOME: makeTempDir("wt-test-config-"),
       ...envOverrides,
       REPO_ROOT: repoRoot,
       WRAPPER_PATH: wrapperPath,
@@ -1160,12 +1162,174 @@ describe("cli e2e", () => {
     );
 
     assertProcessSuccess(result.status, result.stderr, result.stdout);
-    expect(result.stdout).toContain("Opened in Herdr");
+    expect(result.stdout).toContain("Opened with herdr");
     expect(result.stdout).not.toContain("To navigate to the worktree");
     expect(readFileSync(logPath, "utf8")).toContain(
       `worktree open --workspace w1 --path ${getWorktreePath(repo, branchName)}`
     );
     expect(readFileSync(logPath, "utf8")).toContain("--focus");
+  });
+
+  test("loads a TypeScript open plugin for both new and reused checkouts", async () => {
+    const repo = await createTestRepo();
+    const branch = "feature/local-plugin";
+    await $`git -C ${repo.repoRoot} branch ${branch}`.quiet();
+    const pluginDir = join(repo.repoRoot, ".wt", "plugins");
+    const logPath = join(repo.repoRoot, "plugin-calls.jsonl");
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.ts"), `
+      import { appendFileSync } from "node:fs";
+      export default ({ $ }) => ({
+        "worktree.open": async (input: { path: string; focus: boolean }) => {
+          await $\`echo plugin output\`;
+          appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(input) + "\\n");
+          return "handled";
+        },
+      });
+    `);
+
+    const first = runCliCapture(["checkout", branch], repo.repoRoot, {
+      env: { WT_SHELL_CD_FILE: shellCdPath },
+    });
+    const reused = runCliCapture(["checkout", branch, "--json", "--no-cd"], repo.repoRoot);
+
+    assertProcessSuccess(first.status, first.stderr, first.stdout);
+    assertProcessSuccess(reused.status, reused.stderr, reused.stdout);
+    expect(existsSync(shellCdPath)).toBeFalse();
+    expect(first.stdout).not.toContain("plugin output");
+    expect(readJsonResult(reused.stdout).reusedExisting).toBeTrue();
+    expect(readLines(logPath).map((line) => {
+      const input = JSON.parse(line);
+      return { ...input, path: realpathSync(input.path) };
+    })).toMatchObject([
+      { path: realpathSync(getWorktreePath(repo, branch)), focus: true },
+      { path: realpathSync(getWorktreePath(repo, branch)), focus: false },
+    ]);
+  });
+
+  test("can disable the builtin Herdr plugin and fall back to shell navigation", async () => {
+    const repo = await createTestRepo();
+    const branch = "feature/herdr-disabled";
+    const herdr = createFakeHerdr(getWorktreePath(repo, branch));
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+    updateSettings(repo.repoRoot, (settings) => {
+      settings.plugins = { herdr: false };
+    });
+
+    const result = runCliCapture(["new", branch, "--no-push"], repo.repoRoot, {
+      env: { ...herdr.env, WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(herdr.logPath)).toBeFalse();
+    expect(readFileSync(shellCdPath, "utf8").trim()).toBe(getWorktreePath(repo, branch));
+  });
+
+  test("loads global plugins and lets local settings disable them without importing them", async () => {
+    const repo = await createTestRepo();
+    const configHome = makeTempDir("wt-global-plugin-");
+    const pluginDir = join(configHome, "wt", "plugins");
+    const logPath = join(configHome, "opened");
+    const branch = "feature/global-plugin";
+    const herdr = createFakeHerdr(getWorktreePath(repo, branch));
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(configHome, "wt", "settings.json"), JSON.stringify({ plugins: { herdr: false } }));
+    writeFileSync(join(pluginDir, "editor.js"), `
+      export default () => ({
+        "worktree.open": async ({ path }) => {
+          await Bun.write(${JSON.stringify(logPath)}, path);
+          return "handled";
+        },
+      });
+    `);
+    const env = { ...herdr.env, XDG_CONFIG_HOME: configHome };
+
+    const created = runCliCapture(["new", branch, "--no-push", "--json"], repo.repoRoot, { env });
+
+    assertProcessSuccess(created.status, created.stderr, created.stdout);
+    expect(readFileSync(logPath, "utf8")).toBe(getWorktreePath(repo, branch));
+    expect(existsSync(herdr.logPath)).toBeFalse();
+    expect(readJsonResult(created.stdout).branch).toBe(branch);
+
+    writeFileSync(join(repo.repoRoot, ".wt", "settings.local.json"), JSON.stringify({ plugins: { editor: false } }));
+    writeFileSync(join(pluginDir, "editor.js"), 'throw new Error("Disabled plugins must not be imported");');
+    const shellCdPath = join(configHome, "cd");
+    const reused = runCliCapture(["checkout", branch], repo.repoRoot, {
+      env: { ...env, WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(reused.status, reused.stderr, reused.stdout);
+    expect(reused.stderr).not.toContain("Disabled plugins");
+    expect(existsSync(herdr.logPath)).toBeFalse();
+    expect(realpathSync(readFileSync(shellCdPath, "utf8").trim())).toBe(realpathSync(getWorktreePath(repo, branch)));
+  });
+
+  test("falls back to shell navigation when a plugin throws", async () => {
+    const repo = await createTestRepo();
+    const branch = "feature/plugin-failure";
+    const pluginDir = join(repo.repoRoot, ".wt", "plugins");
+    const shellCdPath = join(repo.repoRoot, "shell-cd");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.ts"), `
+      export default () => ({
+        "worktree.open": () => { throw new Error("Editor unavailable"); },
+      });
+    `);
+
+    const result = runCliCapture(["new", branch, "--no-push"], repo.repoRoot, {
+      env: { WT_SHELL_CD_FILE: shellCdPath },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stderr).toContain('Plugin "editor" worktree.open failed: Editor unavailable');
+    expect(readFileSync(shellCdPath, "utf8").trim()).toBe(getWorktreePath(repo, branch));
+  });
+
+  test("--no-open skips plugin loading while keeping JSON output", async () => {
+    const repo = await createTestRepo();
+    const pluginDir = join(repo.repoRoot, ".wt", "plugins");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.js"), 'throw new Error("Plugin should not be loaded");');
+    const herdr = createFakeHerdr("unused");
+
+    const result = runCliCapture(["new", "feature/no-open", "--no-push", "--json", "--no-open"], repo.repoRoot, { env: herdr.env });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(result.stderr).not.toContain("Plugin should not be loaded");
+    expect(existsSync(herdr.logPath)).toBeFalse();
+    expect(readJsonResult(result.stdout).branch).toBe("feature/no-open");
+  });
+
+  test("a standalone binary loads a TypeScript plugin added after compilation", async () => {
+    const repo = await createTestRepo();
+    const buildDir = makeTempDir("wt-plugin-binary-");
+    const binary = join(buildDir, "wt");
+    const build = spawnSync(process.execPath, ["build", cliEntry, "--compile", "--outfile", binary], {
+      cwd: projectRoot,
+      encoding: "utf8",
+    });
+    assertProcessSuccess(build.status, build.stderr, build.stdout);
+    const pluginDir = join(repo.repoRoot, ".wt", "plugins");
+    const logPath = join(buildDir, "opened");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.ts"), `
+      export default () => ({
+        "worktree.open": async ({ path }: { path: string }) => {
+          await Bun.write(${JSON.stringify(logPath)}, path);
+          return "handled";
+        },
+      });
+    `);
+
+    const result = spawnSync(binary, ["new", "feature/compiled-plugin", "--no-push", "--json"], {
+      cwd: repo.repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, HERDR_ENV: undefined, XDG_CONFIG_HOME: buildDir },
+    });
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(readJsonResult(result.stdout).path).toBe(readFileSync(logPath, "utf8"));
   });
 
   test("opens a new Herdr workspace without focusing it when --no-cd is set", async () => {
@@ -1307,6 +1471,7 @@ describe("cli e2e", () => {
           }),
           ...herdr.env,
           HERDR_PLUGIN_ROOT: pluginRoot,
+          XDG_CONFIG_HOME: makeTempDir("wt-test-config-"),
           WT_HERDR_CREATE_REQUEST: Buffer.from(JSON.stringify({
             mode: "pr",
             workspaceId: "w1",
@@ -2427,6 +2592,94 @@ describe("cli e2e", () => {
     expect(readFileSync(herdr.logPath, "utf-8")).toContain(
       "workspace close w9"
     );
+  });
+
+  test("runs the removal callback after deleting its plugin file using a surviving cwd", async () => {
+    const repo = await createTestRepo();
+    const branch = "feature/removal-plugin";
+    runCli(["new", branch, "--no-push", "--no-open"], repo.repoRoot);
+    const worktreePath = getWorktreePath(repo, branch);
+    const pluginDir = join(worktreePath, ".wt", "plugins");
+    const logPath = join(repo.repoRoot, "removal-hook.json");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.ts"), `
+      import { existsSync } from "node:fs";
+      export default ({ $ }) => ({
+        "worktree.remove.before": ({ path }) => {
+          const existedBefore = existsSync(path);
+          return async (outcome) => {
+            const cwd = (await $\`pwd\`.text()).trim();
+            await Bun.write(${JSON.stringify(logPath)}, JSON.stringify({
+              existedBefore, existsAfter: existsSync(path), cwd, ...outcome,
+            }));
+          };
+        },
+      });
+    `);
+
+    const result = runCliCapture(["rm", branch, "--foreground", "--force", "--keep-branch"], worktreePath);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    const callback = JSON.parse(readFileSync(logPath, "utf8"));
+    expect(callback).toMatchObject({
+      existedBefore: true, existsAfter: false, status: "removed", branchDeleted: false,
+    });
+    expect(realpathSync(callback.cwd)).toBe(realpathSync(repo.repoRoot));
+  });
+
+  test("keeps the invoking checkout's plugins for every target in a removal batch", async () => {
+    const repo = await createTestRepo();
+    runCli(["new", "feature/batch-a", "--id", "batch-a", "--no-push", "--no-open"], repo.repoRoot);
+    runCli(["new", "feature/batch-b", "--id", "batch-b", "--no-push", "--no-open"], repo.repoRoot);
+    const currentPath = getWorktreePath(repo, "batch-a");
+    const otherPath = getWorktreePath(repo, "batch-b");
+    const pluginDir = join(currentPath, ".wt", "plugins");
+    const logPath = join(repo.repoRoot, "batch-hooks.jsonl");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.ts"), `
+      import { appendFileSync } from "node:fs";
+      export default () => ({
+        "worktree.remove.before": ({ id }) => ({ status }) => {
+          appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ id, status }) + "\\n");
+        },
+      });
+    `);
+
+    const result = runCliCapture(["rm", ".", "batch-b", "--foreground", "--force", "--keep-branch"], currentPath);
+
+    assertProcessSuccess(result.status, result.stderr, result.stdout);
+    expect(existsSync(currentPath)).toBeFalse();
+    expect(existsSync(otherPath)).toBeFalse();
+    expect(readLines(logPath).map((line) => JSON.parse(line))).toEqual([
+      { id: "batch-b", status: "removed" },
+      { id: "batch-a", status: "removed" },
+    ]);
+  });
+
+  test("reports ambiguous batch selectors before deletions can change their meaning", async () => {
+    const repo = await createTestRepo();
+    for (const id of ["feature-a", "feature-b", "other"]) {
+      runCli(["new", id, "--no-push", "--no-open"], repo.repoRoot);
+    }
+    const currentPath = getWorktreePath(repo, "feature-a");
+    const pluginDir = join(currentPath, ".wt", "plugins");
+    const logPath = join(repo.repoRoot, "batch-hooks");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(join(pluginDir, "editor.js"), `
+      import { appendFileSync } from "node:fs";
+      export default () => ({
+        "worktree.remove.before": ({ id }) => () => appendFileSync(${JSON.stringify(logPath)}, id + "\\n"),
+      });
+    `);
+
+    const result = runCliCapture(["rm", "feature-b", "feature-", "other", "--foreground", "--force", "--keep-branch"], currentPath);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Ambiguous worktree ID");
+    expect(existsSync(currentPath)).toBeTrue();
+    expect(existsSync(getWorktreePath(repo, "feature-b"))).toBeFalse();
+    expect(existsSync(getWorktreePath(repo, "other"))).toBeFalse();
+    expect(readLines(logPath)).toEqual(["feature-b", "other"]);
   });
 
   test("keeps the Herdr workspace open when configured", async () => {

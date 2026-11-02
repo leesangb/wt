@@ -194,6 +194,7 @@ describe("wt Herdr plugin", () => {
       "--base",
       "main",
       "--json",
+      "--no-open",
     ]);
     expect(
       buildWorktreeCreateArgs(
@@ -210,6 +211,7 @@ describe("wt Herdr plugin", () => {
       "pr",
       "142",
       "--json",
+      "--no-open",
     ]);
     expect(
       buildWorktreeCreateArgs(
@@ -226,6 +228,7 @@ describe("wt Herdr plugin", () => {
       "checkout",
       "feature/existing",
       "--json",
+      "--no-open",
     ]);
   });
 

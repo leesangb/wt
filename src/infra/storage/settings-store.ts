@@ -1,11 +1,24 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { isAbsolute, join } from "path";
+import { homedir } from "os";
 import {
   mergeSettingsInputs,
   normalizeSettings,
   type WtSettings,
   type WtSettingsInput,
 } from "../../domain/settings.js";
+
+export function getUserConfigDir(
+  env: Readonly<Record<string, string | undefined>> = process.env
+): string {
+  const configHome = env.XDG_CONFIG_HOME;
+  return join(
+    configHome && isAbsolute(configHome)
+      ? configHome
+      : join(env.HOME || homedir(), ".config"),
+    "wt"
+  );
+}
 
 export async function getSettingsPath(repoRoot: string): Promise<string> {
   return join(repoRoot, ".wt", "settings.json");
@@ -35,8 +48,18 @@ export async function loadSettingsInput(repoRoot: string) {
   return mergeSettingsInputs(sharedSettings, localSettings);
 }
 
-export async function loadSettings(repoRoot: string): Promise<WtSettings> {
-  return normalizeSettings(await loadSettingsInput(repoRoot));
+export async function loadSettings(
+  repoRoot: string,
+  env: Readonly<Record<string, string | undefined>> = process.env
+): Promise<WtSettings> {
+  const globalSettings = await readSettingsInput(
+    join(getUserConfigDir(env), "settings.json")
+  );
+  const repositorySettings = await loadSettingsInput(repoRoot);
+  return normalizeSettings(mergeSettingsInputs(
+    globalSettings?.plugins === undefined ? undefined : { plugins: globalSettings.plugins },
+    repositorySettings
+  ));
 }
 
 export async function saveSettings(
