@@ -1,5 +1,11 @@
 # @leesangb/wt
 
+## 0.14.0
+
+### Minor Changes
+
+- 1fc77f0: Add a built-in Rex plugin that opens worktrees from `wt new`, `wt pr`, and `wt checkout` in a new tab in the current Rex session. Focus the new tab by default, preserve focus with `--no-cd`, and support `--no-open` and `plugins.rex: false`. Rex tabs are not reused or closed when a worktree is removed.
+
 ## 0.13.0
 
 ### Minor Changes
