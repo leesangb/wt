@@ -351,6 +351,10 @@ With shell integration installed, press `Tab` after `wt pr ` to complete from
 open GitHub pull requests. Zsh and Fish also show the PR title, author, branch,
 and draft status in the completion menu.
 
+Successful PR suggestions are cached for up to 5 seconds. Completion stops waiting
+for GitHub after 1.5 seconds and returns no suggestions if the request fails or
+times out. Running `wt pr` always queries current PR details.
+
 This command:
 1. Loads the PR's base branch and head branch from GitHub CLI
 2. Checks whether any existing worktree is already on that PR head branch

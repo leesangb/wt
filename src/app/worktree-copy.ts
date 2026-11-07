@@ -117,6 +117,15 @@ async function getGitTrackedFilePaths(
   repoRoot: string,
   pathspecs?: string[]
 ): Promise<Set<string>> {
+  // Broad includes can exceed argv limits, and literal-path mode disables magic.
+  // Keep the original full-index query in either case.
+  const pathspecBytes = pathspecs?.reduce(
+    (total, pathspec) => total + Buffer.byteLength(pathspec, "utf-8") + 1,
+    0
+  ) ?? 0;
+  const queryPathspecs = pathspecBytes <= 32_768 && !process.env.GIT_LITERAL_PATHSPECS
+    ? pathspecs
+    : undefined;
   const args = [
     "git",
     "-C",
@@ -124,7 +133,7 @@ async function getGitTrackedFilePaths(
     "ls-files",
     "--cached",
     "-z",
-    ...(pathspecs && pathspecs.length > 0 ? ["--", ...pathspecs] : []),
+    ...(queryPathspecs && queryPathspecs.length > 0 ? ["--", ...queryPathspecs] : []),
   ];
   const proc = spawn(args, {
     stdout: "pipe",
@@ -218,9 +227,9 @@ export async function copyConfiguredPaths(
     ? [""]
     : dedupe(rawIncludePrefixes);
   const normalizedRepoRoot = normalizeExistingPath(repoRoot);
-  const trackedFilePathspecs = worktreeIncludePaths || includePrefixes.includes("")
-    ? undefined
-    : includePrefixes;
+  const trackedFilePathspecs = worktreeIncludePaths
+    ? [...worktreeIncludePaths].map((path) => `:(literal)${path}`)
+    : includePrefixes.includes("") ? undefined : includePrefixes;
   const [
     gitIgnoredDirectoryGlobs,
     repoLocalWorktreeGlobs,

@@ -37,6 +37,7 @@ export async function createBranchWorktree(
       baseBranch: existingWorktree.baseBranch ?? "",
       baseCommit: existingWorktree.baseCommit ?? "",
       reusedExisting: true,
+      repoRoot: context.repoRoot,
     };
   }
 
@@ -46,10 +47,11 @@ export async function createBranchWorktree(
     );
   }
 
-  return createPreparedWorktree({
+  const worktree = await createPreparedWorktree({
     kind: "existing-branch",
     context,
     branchName: normalizedBranchName,
     existingIds: worktrees.map((worktree) => worktree.id),
   });
+  return { ...worktree, repoRoot: context.repoRoot };
 }

@@ -1,8 +1,9 @@
 import { AppError } from "../errors.js";
 import { requireRepositoryContext } from "../repository-context.js";
-import { loadWorktreeRemovalInfos } from "../worktree-catalog.js";
+import { loadWorktreeInfos, loadWorktreeRemovalInfos } from "../worktree-catalog.js";
 import { getGoneUpstreamBranchesResult } from "../../infra/git/status.js";
 import type { WorktreeRemovalInfo } from "../../domain/worktree.js";
+import { createRemovalPreviewInspector, type RemovalPreviewInspector } from "./remove-worktree.js";
 
 export interface CleanWorktreeFilters {
   merged?: boolean;
@@ -19,6 +20,7 @@ export interface CleanWorktreeCandidate {
 export interface CleanWorktreePlan {
   repoName: string;
   candidates: CleanWorktreeCandidate[];
+  inspectPreview: RemovalPreviewInspector;
 }
 
 export interface PlanWorktreeCleanupOptions {
@@ -66,17 +68,18 @@ export async function planWorktreeCleanup(
   }
 
   const context = await requireRepositoryContext(cwd);
-  const worktrees = (await loadWorktreeRemovalInfos(context)).filter(
-    (worktree) => !worktree.isMain
-  );
-  const goneUpstreamResult = await getGoneUpstreamBranchesResult(
-    context.repoRoot
-  );
-  const goneUpstreamBranches = goneUpstreamResult.known
-    ? goneUpstreamResult.branches
+  const worktrees: WorktreeRemovalInfo[] = filters.merged
+    ? await loadWorktreeRemovalInfos(context)
+    : (await loadWorktreeInfos(context)).map(worktree => ({ ...worktree, mergeStatus: "unknown" }));
+  const visibleWorktrees = worktrees.filter(worktree => !worktree.isMain);
+  const goneUpstreamBranches = filters.remoteDeleted
+    ? (await getGoneUpstreamBranchesResult(
+        context.repoRoot,
+        visibleWorktrees.flatMap(worktree => worktree.branch ? [worktree.branch] : [])
+      )).branches
     : new Set<string>();
 
-  const candidates = worktrees
+  const candidates = visibleWorktrees
     .map((worktree) => ({
       worktree,
       reasons: resolveCandidateReasons(
@@ -90,5 +93,6 @@ export async function planWorktreeCleanup(
   return {
     repoName: context.repoName,
     candidates,
+    inspectPreview: createRemovalPreviewInspector(context, worktrees),
   };
 }

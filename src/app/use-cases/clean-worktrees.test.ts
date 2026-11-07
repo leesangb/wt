@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { basename, join } from "path";
 import { $ } from "bun";
@@ -20,6 +20,41 @@ afterEach(() => {
 });
 
 describe("planWorktreeCleanup", () => {
+  test("unfiltered cleanup does not query merged or gone branch state", async () => {
+    const repoRoot = makeTempDir("wt-clean-filter-");
+    const worktreeRoot = makeTempDir("wt-clean-target-");
+    const worktreePath = join(worktreeRoot, "feature");
+    const tracePath = join(worktreeRoot, "trace.jsonl");
+    await $`git init -b main ${repoRoot}`.quiet();
+    await $`git -C ${repoRoot} config user.email test@example.com`.quiet();
+    await $`git -C ${repoRoot} config user.name tester`.quiet();
+    await $`git -C ${repoRoot} -c commit.gpgsign=false commit --allow-empty -m base`.quiet();
+    await $`git -C ${repoRoot} remote add origin https://example.invalid/project.git`.quiet();
+    await $`git -C ${repoRoot} worktree add -b feature ${worktreePath}`.quiet();
+    const child = Bun.spawn([process.execPath, "--eval", `
+      import { planWorktreeCleanup } from ${JSON.stringify(new URL("./clean-worktrees.ts", import.meta.url).href)};
+      const plan = await planWorktreeCleanup({}, ${JSON.stringify(repoRoot)}, { includeAllCandidates: true });
+      console.log(JSON.stringify(plan.candidates.map(candidate => candidate.worktree.mergeStatus)));
+    `], {
+      env: { ...process.env, GIT_TRACE2_EVENT: tracePath },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, status] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+
+    expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
+    expect(JSON.parse(stdout)).toEqual(["unknown"]);
+    const commands = readFileSync(tracePath, "utf-8").trim().split("\n")
+      .map(line => JSON.parse(line)).filter(event => event.event === "cmd_name")
+      .map(event => event.name);
+    expect(commands).not.toContain("for-each-ref");
+    expect(commands).not.toContain("merge-base");
+  });
+
   test("can include all non-main worktrees without filters for interactive cleanup", async () => {
     const originDir = makeTempDir("wt-origin-");
     const repoRoot = makeTempDir("wt-repo-");

@@ -165,6 +165,38 @@ describe("worktree removal", () => {
     expect(fixture.removedPaths).toEqual([]);
   });
 
+  test("previews reuse known targets while execution rechecks the catalog and state", async () => {
+    const fixture = createDependencies();
+    const worktree = createWorktree();
+    let contextReads = 0;
+    let catalogReads = 0;
+    fixture.dependencies.repository.requireContext = async () => {
+      contextReads++;
+      return context;
+    };
+    fixture.dependencies.repository.loadWorktrees = async () => {
+      catalogReads++;
+      return [worktree];
+    };
+    const removal = createWorktreeRemoval(fixture.dependencies);
+    const inspectPreview = removal.createPreviewInspector(context, [worktree]);
+
+    const plan = await inspectPreview(worktree.path);
+    fixture.status.localChangeCount = 1;
+    const updatedPreview = await inspectPreview(worktree.path);
+
+    expect(plan.localChangeCount).toBe(0);
+    expect(updatedPreview.localChangeCount).toBe(1);
+    expect({ contextReads, catalogReads }).toEqual({ contextReads: 0, catalogReads: 0 });
+    await expect(inspectPreview("/worktrees/not-in-plan")).rejects.toThrow("not in the cleanup plan");
+
+    const result = await removal.execute(plan, { execution: "foreground" });
+
+    expect(result.status).toBe("plan_stale");
+    expect({ contextReads, catalogReads }).toEqual({ contextReads: 1, catalogReads: 1 });
+    expect(fixture.removedPaths).toEqual([]);
+  });
+
   test("removes a foreground worktree and its branch", async () => {
     const fixture = createDependencies();
     const removal = createWorktreeRemoval(fixture.dependencies);

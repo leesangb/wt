@@ -39,13 +39,19 @@ interface PullRequestListEntry {
 
 async function runGithubCommand(
   args: string[],
-  cwd: string
+  cwd: string,
+  options: { timeoutMs?: number } = {}
 ): Promise<GithubCommandResult> {
   return new Promise((resolve) => {
     const child = spawn("gh", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let error: Error | undefined;
+    const timer = options.timeoutMs === undefined ? undefined : setTimeout(() => {
+      child.kill("SIGKILL");
+      child.stdout.destroy();
+      child.stderr.destroy();
+    }, options.timeoutMs);
 
     child.stdout.setEncoding("utf-8");
     child.stderr.setEncoding("utf-8");
@@ -58,7 +64,10 @@ async function runGithubCommand(
     child.on("error", (spawnError) => {
       error = spawnError;
     });
-    child.on("close", (status) => resolve({ status, stdout, stderr, error }));
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr, error });
+    });
   });
 }
 
@@ -155,6 +164,20 @@ export async function getPullRequestInfo(
   };
 }
 
+// A successful request establishes the access needed for this PR. Probe setup
+// only after failure so installation/authentication guidance remains actionable.
+export async function getReadyPullRequestInfo(
+  repoRoot: string,
+  pullRequestNumber: string
+): Promise<PullRequestInfo> {
+  try {
+    return await getPullRequestInfo(repoRoot, pullRequestNumber);
+  } catch (error) {
+    await ensureGithubCliReady(repoRoot);
+    throw error;
+  }
+}
+
 export async function listPullRequestLinks(
   repoRoot: string
 ): Promise<Map<string, PullRequestLink>> {
@@ -220,6 +243,15 @@ export async function listPullRequestLinks(
 export async function listOpenPullRequests(
   repoRoot: string
 ): Promise<OpenPullRequestSummary[]> {
+  return (await queryOpenPullRequests(repoRoot)) ?? [];
+}
+
+// Keep successful empty results distinct from unavailable/invalid responses for
+// callers that cache suggestions. Ordinary list callers retain their [] fallback.
+export async function queryOpenPullRequests(
+  repoRoot: string,
+  options: { timeoutMs?: number } = {}
+): Promise<OpenPullRequestSummary[] | undefined> {
   const result = await runGithubCommand(
     [
       "pr",
@@ -231,49 +263,44 @@ export async function listOpenPullRequests(
       "--json",
       "number,title,author,headRefName,isDraft",
     ],
-    repoRoot
+    repoRoot,
+    options
   );
 
   if (result.status !== 0) {
-    return [];
+    return undefined;
   }
 
-  let entries: Array<{
-    author?: { login?: string };
-    headRefName?: string;
-    isDraft?: boolean;
-    number?: number;
-    title?: string;
-  }>;
-
+  let entries: unknown;
   try {
-    entries = JSON.parse(result.stdout) as typeof entries;
+    entries = JSON.parse(result.stdout);
   } catch {
-    return [];
+    return undefined;
   }
-
   if (!Array.isArray(entries)) {
-    return [];
+    return undefined;
   }
 
-  return entries.flatMap((entry) => {
+  return entries.flatMap((entry: unknown) => {
     if (
-      typeof entry.number !== "number" ||
-      !entry.title ||
-      !entry.headRefName
+      !entry || typeof entry !== "object" ||
+      !("number" in entry) || typeof entry.number !== "number" ||
+      !("title" in entry) || typeof entry.title !== "string" || !entry.title ||
+      !("headRefName" in entry) || typeof entry.headRefName !== "string" || !entry.headRefName
     ) {
       return [];
     }
-
-    return [
-      {
-        author: entry.author?.login ?? "unknown",
-        headRefName: entry.headRefName,
-        isDraft: entry.isDraft === true,
-        number: String(entry.number),
-        title: entry.title,
-      },
-    ];
+    const author = "author" in entry && entry.author && typeof entry.author === "object" &&
+      "login" in entry.author && typeof entry.author.login === "string"
+      ? entry.author.login
+      : "unknown";
+    return [{
+      author,
+      headRefName: entry.headRefName,
+      isDraft: "isDraft" in entry && entry.isDraft === true,
+      number: String(entry.number),
+      title: entry.title,
+    }];
   });
 }
 

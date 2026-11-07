@@ -1,9 +1,9 @@
-import { listOpenPullRequests } from "../../infra/github/cli.js";
-import { requireRepositoryContext } from "../repository-context.js";
+import { listCachedOpenPullRequests } from "../../infra/github/completion-cache.js";
+import { requireRepositoryRoot } from "../repository-context.js";
 
 export async function listOpenPullRequestsForCompletion(
   cwd: string = process.cwd()
 ) {
-  const context = await requireRepositoryContext(cwd);
-  return listOpenPullRequests(context.repoRoot);
+  const repoRoot = await requireRepositoryRoot(cwd);
+  return listCachedOpenPullRequests(repoRoot);
 }
