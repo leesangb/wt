@@ -7,7 +7,7 @@ import {
   planWorktreeCleanup,
 } from "../app/use-cases/clean-worktrees.js";
 import {
-  inspectRemoval,
+  type RemovalPreviewInspector,
   orderRemovalTargets,
   type RemovalPlan,
 } from "../app/use-cases/remove-worktree.js";
@@ -250,6 +250,7 @@ function canUseCachedPreview(
 async function loadCachedPreview(
   entry: CleanupPickerEntry,
   previewCache: Map<string, RemovalPlan>,
+  inspectPreview: RemovalPreviewInspector,
   options: {
     includeStatusEntries?: boolean;
   } = {}
@@ -261,7 +262,7 @@ async function loadCachedPreview(
     return cachedPreview;
   }
 
-  const preview = await inspectRemoval(entry.candidate.worktree.id, process.cwd(), {
+  const preview = await inspectPreview(entry.candidate.worktree.path, {
     includeStatusEntries,
   });
   previewCache.set(entry.candidate.worktree.id, preview);
@@ -270,12 +271,13 @@ async function loadCachedPreview(
 
 async function attachCleanupPreviews(
   entries: CleanupPickerEntry[],
-  previewCache: Map<string, RemovalPlan>
+  previewCache: Map<string, RemovalPlan>,
+  inspectPreview: RemovalPreviewInspector
 ): Promise<CleanupPreviewEntry[]> {
   return Promise.all(
     entries.map(async (entry) => ({
       ...entry,
-      preview: await loadCachedPreview(entry, previewCache),
+      preview: await loadCachedPreview(entry, previewCache, inspectPreview),
     }))
   );
 }
@@ -328,7 +330,8 @@ function renderCleanupPreview(
 async function selectCleanupEntries(
   repoName: string,
   entries: CleanupPickerEntry[],
-  previewCache: Map<string, RemovalPlan>
+  previewCache: Map<string, RemovalPlan>,
+  inspectPreview: RemovalPreviewInspector
 ): Promise<CleanupPickerEntry[] | undefined> {
   const result = await promptMultiSelect(
     entries.map((entry) => ({
@@ -344,7 +347,7 @@ async function selectCleanupEntries(
       loadDetails: async (item) =>
         buildPickerDetails(
           item.value,
-          await loadCachedPreview(item.value, previewCache, {
+          await loadCachedPreview(item.value, previewCache, inspectPreview, {
             includeStatusEntries:
               (process.stdout.columns ?? 0) >= WIDE_LAYOUT_MIN_COLUMNS,
           })
@@ -386,7 +389,8 @@ export async function cleanCommand(
     const selectedEntries = await selectCleanupEntries(
       plan.repoName,
       pickerEntries,
-      previewCache
+      previewCache,
+      plan.inspectPreview
     );
 
     if (!selectedEntries) {
@@ -401,7 +405,8 @@ export async function cleanCommand(
 
     const previewEntries = await attachCleanupPreviews(
       selectedEntries,
-      previewCache
+      previewCache,
+      plan.inspectPreview
     );
 
     renderCleanupPreview(plan.repoName, previewEntries);

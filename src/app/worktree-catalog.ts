@@ -2,6 +2,7 @@ import { statSync } from "fs";
 import type { RepositoryContext } from "./repository-context.js";
 import {
   buildWorktreeIdentifiers,
+  type GitWorktreeRef,
   type WorktreeInfo,
   type WorktreeMergeStatus,
   type WorktreeRemovalInfo,
@@ -11,7 +12,7 @@ import { isPathInside } from "../domain/path.js";
 import { listGitWorktrees } from "../infra/git/worktree-repository.js";
 import {
   createBranchMergeChecker,
-  getWorktreeStatusSummary,
+  createWorktreeStatusReader,
 } from "../infra/git/status.js";
 import { readWorktreeMeta } from "../infra/storage/worktree-meta-store.js";
 
@@ -30,37 +31,39 @@ function resolveCreatedAt(
   }
 }
 
+async function loadWorktreeInfo(
+  context: RepositoryContext,
+  worktree: GitWorktreeRef
+): Promise<WorktreeInfo> {
+  const meta = await readWorktreeMeta(worktree.path);
+  const { id, fullId } = buildWorktreeIdentifiers(context.repoName, worktree.path, meta);
+  return {
+    id, fullId,
+    path: worktree.path,
+    branch: worktree.branch,
+    isMain: worktree.isMain,
+    isDetached: worktree.isDetached,
+    head: worktree.head,
+    repoName: context.repoName,
+    createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
+    baseBranch: meta?.baseBranch,
+    baseCommit: meta?.baseCommit,
+    prNumber: meta?.prNumber,
+    prUrl: meta?.prUrl,
+  };
+}
+
 export async function loadWorktreeInfos(
   context: RepositoryContext
 ): Promise<WorktreeInfo[]> {
-  const gitWorktrees = await listGitWorktrees(context.repoRoot);
+  const worktrees = await listGitWorktrees(context.repoRoot);
+  return Promise.all(worktrees.map(worktree => loadWorktreeInfo(context, worktree)));
+}
 
-  return Promise.all(
-    gitWorktrees.map(async (worktree) => {
-      const meta = await readWorktreeMeta(worktree.path);
-      const { id, fullId } = buildWorktreeIdentifiers(
-        context.repoName,
-        worktree.path,
-        meta
-      );
-
-      return {
-        id,
-        fullId,
-        path: worktree.path,
-        branch: worktree.branch,
-        isMain: worktree.isMain,
-        isDetached: worktree.isDetached,
-        head: worktree.head,
-        repoName: context.repoName,
-        createdAt: resolveCreatedAt(worktree.path, meta?.createdAt),
-        baseBranch: meta?.baseBranch,
-        baseCommit: meta?.baseCommit,
-        prNumber: meta?.prNumber,
-        prUrl: meta?.prUrl,
-      };
-    })
-  );
+export async function* iterateWorktreeInfos(context: RepositoryContext) {
+  for (const worktree of await listGitWorktrees(context.repoRoot)) {
+    yield await loadWorktreeInfo(context, worktree);
+  }
 }
 
 export async function loadWorktreeStates(
@@ -68,13 +71,17 @@ export async function loadWorktreeStates(
   worktrees?: WorktreeInfo[]
 ): Promise<WorktreeState[]> {
   const infos = worktrees ?? await loadWorktreeInfos(context);
-  const isBranchMerged = createBranchMergeChecker(context.repoRoot);
+  const activeBranches = infos.flatMap((worktree) =>
+    worktree.branch && !worktree.isDetached ? [worktree.branch] : []
+  );
+  const isBranchMerged = createBranchMergeChecker(context.repoRoot, activeBranches);
+  const readWorktreeStatus = createWorktreeStatusReader(context.repoRoot, activeBranches);
 
   const worktreeStates = await Promise.all(
     infos.map(async (worktree) => {
       const [mergeStatus, { unpushedCount, modifiedCount }] = await Promise.all([
         resolveWorktreeMergeStatus(worktree, isBranchMerged),
-        getWorktreeStatusSummary(worktree.path, worktree.branch),
+        readWorktreeStatus(worktree.path, worktree.branch),
       ]);
 
       return {
@@ -103,7 +110,10 @@ export async function loadWorktreeRemovalInfos(
   context: RepositoryContext
 ): Promise<WorktreeRemovalInfo[]> {
   const worktrees = await loadWorktreeInfos(context);
-  const isBranchMerged = createBranchMergeChecker(context.repoRoot);
+  const activeBranches = worktrees.flatMap((worktree) =>
+    worktree.branch && !worktree.isDetached ? [worktree.branch] : []
+  );
+  const isBranchMerged = createBranchMergeChecker(context.repoRoot, activeBranches);
 
   return Promise.all(
     worktrees.map(async (worktree) => ({

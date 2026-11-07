@@ -14,6 +14,7 @@ import {
 } from "../../infra/git/worktree-repository.js";
 import {
   getWorktreeRemovalStatusSummary,
+  createWorktreeRemovalStatusReader,
   type WorktreeRemovalStatusSummary,
   type WorktreeRemovalStatusOptions,
 } from "../../infra/git/status.js";
@@ -32,6 +33,11 @@ export interface InspectRemovalOptions {
   includeStatusEntries?: boolean;
   statusEntryLimit?: number;
 }
+
+export type RemovalPreviewInspector = (
+  worktreePath: string,
+  options?: InspectRemovalOptions
+) => Promise<RemovalPlan>;
 
 export interface RemovalPlan {
   target: string;
@@ -101,6 +107,7 @@ export interface WorktreeRemovalDependencies {
     listPaths: (
       repoRoot: string
     ) => Promise<Array<{ path: string; isMain: boolean }>>;
+    createStatusReader?: typeof createWorktreeRemovalStatusReader;
     inspectStatus: (
       repoRoot: string,
       worktreePath: string,
@@ -176,13 +183,14 @@ async function resolveRemovalTarget(
 async function findSafeRemovalRoot(
   dependencies: WorktreeRemovalDependencies,
   context: RepositoryContext,
-  worktree: WorktreeInfo
+  worktree: WorktreeInfo,
+  knownPaths?: Array<{ path: string; isMain: boolean }>
 ): Promise<RemovalPlan["removalRoot"]> {
   if (!isPathInside(worktree.path, context.cwd)) {
     return { gitRoot: context.repoRoot };
   }
 
-  const worktrees = await dependencies.repository.listPaths(context.repoRoot);
+  const worktrees = knownPaths ?? await dependencies.repository.listPaths(context.repoRoot);
   const safeWorktree =
     worktrees.find(
       (candidate) => candidate.isMain && candidate.path !== worktree.path
@@ -317,6 +325,7 @@ const defaultDependencies: WorktreeRemovalDependencies = {
     loadWorktrees: loadWorktreeInfos,
     listPaths: listGitWorktreePaths,
     inspectStatus: getWorktreeRemovalStatusSummary,
+    createStatusReader: createWorktreeRemovalStatusReader,
   },
   settings: {
     load: loadSettings,
@@ -343,6 +352,10 @@ export function createWorktreeRemoval(
   dependencies: WorktreeRemovalDependencies
 ): {
   orderTargets: (targets: string[], cwd?: string) => Promise<string[]>;
+  createPreviewInspector: (
+    context: RepositoryContext,
+    worktrees: WorktreeInfo[]
+  ) => RemovalPreviewInspector;
   inspect: (
     target: string,
     cwd?: string,
@@ -378,26 +391,23 @@ export function createWorktreeRemoval(
       .map(({ target }) => target))];
   };
 
-  const inspect = async (
-    target: string,
-    cwd: string = process.cwd(),
-    options: InspectRemovalOptions = {}
+  const inspectResolved = async (
+    context: RepositoryContext,
+    worktree: WorktreeInfo,
+    options: InspectRemovalOptions,
+    inspectStatus = dependencies.repository.inspectStatus,
+    knownPaths?: Array<{ path: string; isMain: boolean }>
   ): Promise<RemovalPlan> => {
-    const { context, worktree } = await resolveRemovalTarget(
-      dependencies,
-      target,
-      cwd
-    );
     const statusEntryLimit = options.statusEntryLimit ?? 8;
     const [status, removalRoot] = await Promise.all([
-      dependencies.repository.inspectStatus(
+      inspectStatus(
         context.repoRoot,
         worktree.path,
         worktree.branch,
         worktree.baseBranch,
         { includeStatusEntries: options.includeStatusEntries, statusEntryLimit }
       ),
-      findSafeRemovalRoot(dependencies, context, worktree),
+      findSafeRemovalRoot(dependencies, context, worktree, knownPaths),
     ]);
     const { statusEntries, ...summary } = status;
     const isCurrent = isPathInside(worktree.path, context.cwd);
@@ -425,6 +435,36 @@ export function createWorktreeRemoval(
         statusEntries: statusEntries?.entries ?? [],
         removalRoot,
       }),
+    };
+  };
+
+  const inspect = async (
+    target: string,
+    cwd: string = process.cwd(),
+    options: InspectRemovalOptions = {}
+  ): Promise<RemovalPlan> => {
+    const { context, worktree } = await resolveRemovalTarget(dependencies, target, cwd);
+    return inspectResolved(context, worktree, options);
+  };
+
+  const createPreviewInspector = (
+    context: RepositoryContext,
+    worktrees: WorktreeInfo[]
+  ): RemovalPreviewInspector => {
+    const byPath = new Map(worktrees.map(worktree => [worktree.path, worktree]));
+    const paths = worktrees.map(({ path, isMain }) => ({ path, isMain: isMain === true }));
+    const readStatus = dependencies.repository.createStatusReader?.(
+      context.repoRoot,
+      worktrees.flatMap(worktree => worktree.branch && !worktree.isDetached ? [worktree.branch] : [])
+    );
+    const inspectStatus: WorktreeRemovalDependencies["repository"]["inspectStatus"] = readStatus
+      ? (_repoRoot, path, branch, baseBranch, options) => readStatus(path, branch, baseBranch, options)
+      : dependencies.repository.inspectStatus;
+
+    return async (worktreePath, options = {}) => {
+      const worktree = byPath.get(worktreePath);
+      if (!worktree) throw new AppError(`Worktree path "${worktreePath}" is not in the cleanup plan`);
+      return inspectResolved(context, worktree, options, inspectStatus, paths);
     };
   };
 
@@ -586,7 +626,7 @@ export function createWorktreeRemoval(
       : executeForeground(latestPlan, options);
   };
 
-  return { orderTargets, inspect, execute };
+  return { orderTargets, inspect, createPreviewInspector, execute };
 }
 
 const defaultRemoval = createWorktreeRemoval(defaultDependencies);
@@ -594,3 +634,5 @@ const defaultRemoval = createWorktreeRemoval(defaultDependencies);
 export const inspectRemoval = defaultRemoval.inspect;
 export const executeRemoval = defaultRemoval.execute;
 export const orderRemovalTargets = defaultRemoval.orderTargets;
+
+export const createRemovalPreviewInspector = defaultRemoval.createPreviewInspector;

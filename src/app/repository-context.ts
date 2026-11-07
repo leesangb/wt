@@ -11,19 +11,24 @@ export interface RepositoryContext {
   repoName: string;
 }
 
+export async function requireRepositoryRoot(
+  cwd: string = process.cwd()
+): Promise<string> {
+  try {
+    return await getGitRoot(cwd);
+  } catch (error) {
+    if (!(await isGitRepository(cwd))) {
+      throw new AppError("Not a git repository");
+    }
+    throw error;
+  }
+}
+
 export async function requireRepositoryContext(
   cwd: string = process.cwd()
 ): Promise<RepositoryContext> {
-  if (!(await isGitRepository(cwd))) {
-    throw new AppError("Not a git repository");
-  }
-
-  const repoRoot = await getGitRoot(cwd);
+  const repoRoot = await requireRepositoryRoot(cwd);
   const repoName = await getRepoName(repoRoot);
 
-  return {
-    cwd,
-    repoRoot,
-    repoName,
-  };
+  return { cwd, repoRoot, repoName };
 }

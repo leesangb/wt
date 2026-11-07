@@ -367,6 +367,9 @@ function createFakeGithubEnv(
         'if [ "$1" = "auth" ] && [ "${2:-}" = "status" ]; then',
         ...authScript.map((line) => `  ${line}`),
         "fi",
+        ...(options.authenticated === false
+          ? ['if [ "$1" = "pr" ]; then', '  echo "not logged in" >&2', "  exit 4", "fi"]
+          : []),
         'if [ "$1" = "pr" ] && [ "${2:-}" = "view" ]; then',
         "  selector=$3",
         `  if [ "$selector" = "${headBranch}" ]; then`,

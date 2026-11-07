@@ -5,8 +5,7 @@ import {
 import { requireRepositoryContext } from "../repository-context.js";
 import { loadWorktreeInfos } from "../worktree-catalog.js";
 import {
-  ensureGithubCliReady,
-  getPullRequestInfo,
+  getReadyPullRequestInfo,
   type PullRequestInfo,
 } from "../../infra/github/cli.js";
 import { loadSettings } from "../../infra/storage/settings-store.js";
@@ -34,9 +33,8 @@ export async function createPrWorktree(
 ): Promise<CreatePrWorktreeResult> {
   const prNumber = normalizePullRequestNumber(pullRequestNumber);
   const context = await requireRepositoryContext(cwd);
-  await ensureGithubCliReady(context.repoRoot);
   const [pullRequest, settings, worktrees] = await Promise.all([
-    getPullRequestInfo(context.repoRoot, prNumber),
+    getReadyPullRequestInfo(context.repoRoot, prNumber),
     loadSettings(context.repoRoot),
     loadWorktreeInfos(context),
   ]);
@@ -60,6 +58,7 @@ export async function createPrWorktree(
       baseBranch: existingWorktree.baseBranch ?? "",
       baseCommit: existingWorktree.baseCommit ?? "",
       reusedExisting: true,
+      repoRoot: context.repoRoot,
       pullRequest: pullRequestSummary,
     };
   }
@@ -71,5 +70,5 @@ export async function createPrWorktree(
     existingIds: worktrees.map((worktree) => worktree.id),
   });
 
-  return { ...worktree, pullRequest: pullRequestSummary };
+  return { ...worktree, repoRoot: context.repoRoot, pullRequest: pullRequestSummary };
 }

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { $ } from "bun";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { fileURLToPath } from "url";
@@ -189,4 +189,138 @@ test("missing GitHub CLI preserves optional-list fallback and readiness error", 
     console.log(JSON.stringify({size: links.size, message}));
   `, { PATH: fixture.bin });
   expect(result).toEqual({ size: 0, message: "GitHub CLI (`gh`) is not installed" });
+});
+
+test("list batches merge checks and skips revision counts for equal origin refs", async () => {
+  const fixture = await createFixture();
+  writeFileSync(join(fixture.worktree, "local-change"), "pending");
+
+  const result = await fixture.run(`
+    import { listWorktrees } from ${modulePath("app/use-cases/list-worktrees.ts")};
+    console.log(JSON.stringify(await listWorktrees(${JSON.stringify(fixture.repo)})));
+  `);
+
+  expect(result.worktrees).toHaveLength(2);
+  expect(result.worktrees.every((worktree: { isMerged: boolean; unpushedCount: number }) =>
+    worktree.isMerged && worktree.unpushedCount === 0
+  )).toBeTrue();
+  expect(result.worktrees.find((worktree: { branch: string }) => worktree.branch === "feature").modifiedCount).toBe(1);
+  const commands = readFileSync(fixture.env.WT_GIT_LOG, "utf-8").trim().split("\n");
+  expect(commands.filter(command => command.includes(" status "))).toHaveLength(2);
+  expect(commands.some(command => command.includes(" rev-list "))).toBeFalse();
+  expect(commands.some(command => command.includes(" merge-base "))).toBeFalse();
+  const mergeQueries = commands.filter(command => command.includes(" --merged="));
+  expect(mergeQueries).toHaveLength(1);
+  expect(mergeQueries[0]).toContain("refs/heads/main refs/heads/feature");
+});
+
+test("list preserves origin counts with other upstreams and refreshes refs between calls", async () => {
+  const fixture = await createFixture();
+  await $`git -C ${fixture.worktree} -c commit.gpgsign=false commit --allow-empty -m ahead`.quiet();
+  await $`git -C ${fixture.repo} update-ref refs/remotes/origin/main feature`.quiet();
+  await $`git -C ${fixture.worktree} branch --set-upstream-to=origin/main`.quiet();
+  await $`git -C ${fixture.worktree} tag feature main`.quiet();
+  writeFileSync(join(fixture.worktree, "local-change"), "pending");
+
+  const result = await fixture.run(`
+    import { listWorktrees } from ${modulePath("app/use-cases/list-worktrees.ts")};
+    const first = await listWorktrees(${JSON.stringify(fixture.repo)});
+    await Bun.spawn(["git", "-C", ${JSON.stringify(fixture.repo)}, "tag", "-d", "feature"], {stdout: "ignore", stderr: "ignore"}).exited;
+    const second = await listWorktrees(${JSON.stringify(fixture.repo)});
+    await Bun.spawn(["git", "-C", ${JSON.stringify(fixture.worktree)}, "branch", "--set-upstream-to=origin/feature"], {stdout: "ignore", stderr: "ignore"}).exited;
+    const third = await listWorktrees(${JSON.stringify(fixture.repo)});
+    console.log(JSON.stringify([first, second, third]));
+  `);
+
+  const features = result.map((entry: { worktrees: Array<{ branch: string; unpushedCount: number; modifiedCount: number }> }) =>
+    entry.worktrees.find(worktree => worktree.branch === "feature")
+  );
+  // The tag initially shadows the local branch. Its removal must invalidate that fact.
+  expect(features[0]).toMatchObject({ unpushedCount: 0, modifiedCount: 1 });
+  expect(features[1]).toMatchObject({ unpushedCount: 1, modifiedCount: 1 });
+  expect(features[2]).toMatchObject({ unpushedCount: 1, modifiedCount: 1 });
+});
+
+test("list preserves short ref resolution when checking merged branches", async () => {
+  const fixture = await createFixture();
+  await $`git -C ${fixture.worktree} -c commit.gpgsign=false commit --allow-empty -m ahead`.quiet();
+  await $`git -C ${fixture.repo} update-ref refs/feature main`.quiet();
+
+  const result = await fixture.run(`
+    import { listWorktrees } from ${modulePath("app/use-cases/list-worktrees.ts")};
+    const shadowed = await listWorktrees(${JSON.stringify(fixture.repo)});
+    await Bun.spawn(["git", "-C", ${JSON.stringify(fixture.repo)}, "update-ref", "-d", "refs/feature"], {stdout: "ignore", stderr: "ignore"}).exited;
+    const unshadowed = await listWorktrees(${JSON.stringify(fixture.repo)});
+    console.log(JSON.stringify([shadowed, unshadowed]));
+  `);
+
+  expect(result[0].worktrees.find((worktree: { branch: string }) => worktree.branch === "feature").isMerged).toBeTrue();
+  expect(result[1].worktrees.find((worktree: { branch: string }) => worktree.branch === "feature").isMerged).toBeFalse();
+});
+
+test("list falls back to the original status query if porcelain v2 is unavailable", async () => {
+  const fixture = await createFixture();
+  await $`git -C ${fixture.worktree} -c commit.gpgsign=false commit --allow-empty -m ahead`.quiet();
+  await $`git -C ${fixture.worktree} branch --set-upstream-to=origin/feature`.quiet();
+  writeFileSync(join(fixture.worktree, "local-change"), "pending");
+  const gitWrapper = join(fixture.bin, "git");
+  writeFileSync(gitWrapper, readFileSync(gitWrapper, "utf-8").replace(
+    'exec "$WT_REAL_GIT" "$@"',
+    `case "$*" in
+  *"status --porcelain=v2 --branch"*) exit 129 ;;
+esac
+exec "$WT_REAL_GIT" "$@"`
+  ));
+
+  const result = await fixture.run(`
+    import { listWorktrees } from ${modulePath("app/use-cases/list-worktrees.ts")};
+    console.log(JSON.stringify(await listWorktrees(${JSON.stringify(fixture.repo)})));
+  `);
+
+  expect(result.worktrees.find((worktree: { branch: string }) => worktree.branch === "feature"))
+    .toMatchObject({ unpushedCount: 1, modifiedCount: 1 });
+  expect(readFileSync(fixture.env.WT_GIT_LOG, "utf-8")).toContain("status --porcelain=v2 --branch");
+});
+
+test("cd stops reading metadata on the first row match and lists all rows on a miss", async () => {
+  const fixture = await createFixture();
+  for (const [path, id] of [[fixture.repo, "home"], [fixture.worktree, "main"]]) {
+    mkdirSync(join(path, ".wt"));
+    writeFileSync(join(path, ".wt", "meta.json"), JSON.stringify({ id }));
+  }
+
+  const result = await fixture.run(`
+    import { spyOn } from "bun:test";
+    import * as store from ${modulePath("infra/storage/worktree-meta-store.ts")};
+    const reads = spyOn(store, "readWorktreeMeta");
+    const { resolveWorktreeCd } = await import(${modulePath("app/use-cases/resolve-worktree-cd.ts")});
+    const found = await resolveWorktreeCd("main", ${JSON.stringify(fixture.repo)});
+    const hitReads = reads.mock.calls.length;
+    const missing = await resolveWorktreeCd("missing", ${JSON.stringify(fixture.repo)});
+    console.log(JSON.stringify({ found, missing, hitReads, totalReads: reads.mock.calls.length }));
+  `);
+
+  // An earlier branch match must still beat a later row's custom ID.
+  expect(result.found.worktree.path).toBe(realpathSync(fixture.repo));
+  expect(result.hitReads).toBe(1);
+  expect(result.totalReads).toBe(3);
+  expect(result.missing.availableWorktrees.map((worktree: { id: string }) => worktree.id))
+    .toEqual(["home", "main"]);
+});
+
+test("repository root lookup validates git without loading repository identity", async () => {
+  const fixture = await createFixture();
+  const result = await fixture.run(`
+    import { requireRepositoryRoot } from ${modulePath("app/repository-context.ts")};
+    const root = await requireRepositoryRoot(${JSON.stringify(fixture.repo)});
+    let message;
+    try { await requireRepositoryRoot(${JSON.stringify(fixture.root)}); }
+    catch (error) { message = error.message; }
+    console.log(JSON.stringify({ root, message }));
+  `);
+
+  expect(result).toEqual({ root: realpathSync(fixture.repo), message: "Not a git repository" });
+  const commands = readFileSync(fixture.env.WT_GIT_LOG, "utf-8").trim().split("\n");
+  expect(commands.filter(command => command.includes(`-C ${fixture.repo} `)))
+    .toEqual([`-C ${fixture.repo} rev-parse --show-toplevel`]);
 });

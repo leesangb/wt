@@ -17,10 +17,11 @@ export async function createWorktree(
 ): Promise<CreateWorktreeResult> {
   const context = await requireRepositoryContext(cwd);
 
-  return createPreparedWorktree({
+  const worktree = await createPreparedWorktree({
     kind: "new",
     context,
     branchName,
     options,
   });
+  return { ...worktree, repoRoot: context.repoRoot };
 }

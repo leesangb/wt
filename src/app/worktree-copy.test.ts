@@ -10,6 +10,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { fileURLToPath } from "url";
 import { loadSettings } from "../infra/storage/settings-store.js";
 import { copyConfiguredPaths } from "./worktree-copy.js";
 
@@ -28,6 +29,108 @@ afterEach(() => {
 });
 
 describe("copyConfiguredPaths", () => {
+  test("limits tracked checks to literal worktreeinclude files and protects tracked targets", async () => {
+    const repoRoot = makeTempDir("wt-copy-repo-");
+    const worktreePath = makeTempDir("wt-copy-worktree-");
+    const tracePath = join(makeTempDir("wt-copy-trace-"), "git.jsonl");
+    writeFileSync(join(repoRoot, ".env[local]"), "tracked target\n");
+    writeFileSync(join(repoRoot, "unrelated.txt"), "tracked unrelated\n");
+    await $`git -C ${repoRoot} init -q -b main`.quiet();
+    await $`git -C ${repoRoot} add .`.quiet();
+    await $`git -C ${repoRoot} -c user.email=test@example.com -c user.name=tester -c commit.gpgsign=false commit -m base`.quiet();
+    await $`git -C ${repoRoot} checkout -b source`.quiet();
+    await $`git -C ${repoRoot} rm ${".env[local]"}`.quiet();
+    await $`git -C ${repoRoot} -c user.email=test@example.com -c user.name=tester -c commit.gpgsign=false commit -m remove-env`.quiet();
+    await $`git -C ${repoRoot} worktree add ${worktreePath} main`.quiet();
+    writeFileSync(join(repoRoot, ".gitignore"), ".env*\n");
+    writeFileSync(join(repoRoot, ".worktreeinclude"), ".env*\n");
+    writeFileSync(join(repoRoot, ".env[local]"), "source override\n");
+    writeFileSync(join(repoRoot, ".env[other]"), "copy me\n");
+
+    const modulePath = fileURLToPath(new URL("./worktree-copy.ts", import.meta.url));
+    const copyCommand = [process.execPath, "-e", `
+      import { copyConfiguredPaths } from ${JSON.stringify(modulePath)};
+      await copyConfiguredPaths({copy:{include:[],exclude:[]}}, ${JSON.stringify(repoRoot)}, ${JSON.stringify(worktreePath)});
+    `];
+    const child = Bun.spawn(copyCommand, {
+      env: { ...process.env, GIT_LITERAL_PATHSPECS: undefined, GIT_TRACE2_EVENT: tracePath },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [status, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ]);
+    expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
+    expect(readFileSync(join(worktreePath, ".env[local]"), "utf-8")).toBe("tracked target\n");
+    expect(readFileSync(join(worktreePath, ".env[other]"), "utf-8")).toBe("copy me\n");
+    expect(readFileSync(join(worktreePath, "unrelated.txt"), "utf-8")).toBe("tracked unrelated\n");
+
+    const readCachedQueries = () => readFileSync(tracePath, "utf-8").trim().split("\n").flatMap(line => {
+      const event: unknown = JSON.parse(line);
+      if (!event || typeof event !== "object" || !("event" in event) || event.event !== "start" ||
+        !("argv" in event) || !Array.isArray(event.argv)) return [];
+      const argv = event.argv.filter(arg => typeof arg === "string");
+      return argv.length === event.argv.length && argv.includes("ls-files") && argv.includes("--cached")
+        ? [argv]
+        : [];
+    });
+    const cachedQueries = readCachedQueries();
+    expect(cachedQueries).toHaveLength(2);
+    for (const argv of cachedQueries) {
+      expect(argv).toContain("--");
+      expect(argv.slice(argv.indexOf("--") + 1).sort()).toEqual([
+        ":(literal).env[local]",
+        ":(literal).env[other]",
+      ]);
+    }
+
+    const literalCopy = Bun.spawn(copyCommand, {
+      env: {
+        ...process.env,
+        GIT_LITERAL_PATHSPECS: "1",
+        GIT_GLOB_PATHSPECS: undefined,
+        GIT_NOGLOB_PATHSPECS: undefined,
+        GIT_TRACE2_EVENT: tracePath,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [literalStatus, literalStderr] = await Promise.all([
+      literalCopy.exited,
+      new Response(literalCopy.stderr).text(),
+      new Response(literalCopy.stdout).text(),
+    ]);
+    expect({ status: literalStatus, stderr: literalStderr }).toEqual({ status: 0, stderr: "" });
+    expect(readFileSync(join(worktreePath, ".env[local]"), "utf-8")).toBe("tracked target\n");
+    expect(readFileSync(join(worktreePath, ".env[other]"), "utf-8")).toBe("copy me\n");
+    const literalQueries = readCachedQueries().slice(2);
+    expect(literalQueries).toHaveLength(2);
+    expect(literalQueries.every(argv => !argv.includes("--"))).toBeTrue();
+
+    // A broad include can exceed argv limits before reserved directories are excluded.
+    for (let index = 0; index < 200; index++) {
+      writeFileSync(join(repoRoot, `.env.${index}-${"x".repeat(180)}`), "local\n");
+    }
+    const largeCopy = Bun.spawn(copyCommand, {
+      env: { ...process.env, GIT_LITERAL_PATHSPECS: undefined, GIT_TRACE2_EVENT: tracePath },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [largeStatus, largeStderr] = await Promise.all([
+      largeCopy.exited,
+      new Response(largeCopy.stderr).text(),
+      new Response(largeCopy.stdout).text(),
+    ]);
+    expect({ status: largeStatus, stderr: largeStderr }).toEqual({ status: 0, stderr: "" });
+    expect(readFileSync(join(worktreePath, ".env[local]"), "utf-8")).toBe("tracked target\n");
+    expect(readFileSync(join(worktreePath, `.env.199-${"x".repeat(180)}`), "utf-8")).toBe("local\n");
+    const largeQueries = readCachedQueries().slice(4);
+    expect(largeQueries).toHaveLength(2);
+    expect(largeQueries.every(argv => !argv.includes("--"))).toBeTrue();
+  });
+
   test("falls back to gitignore patterns and copies only matching ignored files", async () => {
     const repoRoot = makeTempDir("wt-copy-repo-");
     const worktreePath = makeTempDir("wt-copy-worktree-");

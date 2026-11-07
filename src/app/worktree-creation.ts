@@ -45,6 +45,7 @@ import type { RepositoryContext } from "./repository-context.js";
 import { copyConfiguredPaths } from "./worktree-copy.js";
 
 export interface CreateWorktreeResult {
+  repoRoot?: string;
   branchName: string;
   id: string;
   fullId: string;
